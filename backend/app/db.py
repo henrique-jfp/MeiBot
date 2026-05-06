@@ -130,6 +130,12 @@ class DBService:
         response = self.supabase.table("eventos").select("*").eq("operacao_id", operation_id).execute()
         return response.data
 
+    def get_weekly_summary(self, user_id: str):
+        import datetime
+        seven_days_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).isoformat()
+        response = self.supabase.table("eventos").select("*, apps(nome)").eq("user_id", user_id).gte("timestamp", seven_days_ago).execute()
+        return response.data
+
     def get_all_time_summary(self, user_id: str):
         import datetime
         thirty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=30)).isoformat()

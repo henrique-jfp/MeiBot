@@ -70,9 +70,9 @@ class LogicService:
         return card
 
     @staticmethod
-    def format_summary(metrics: dict):
+    def format_summary(metrics: dict, title: str = "RESUMO DA OPERAÇÃO"):
         return (
-            f"📊 *RESUMO DA OPERAÇÃO*\n\n"
+            f"📊 *{title.upper()}*\n\n"
             f"💰 Ganho Total: R$ {metrics['total_ganho']:.2f}\n"
             f"⛽ Gastos Essenciais: R$ {metrics['total_gastos_essenciais']:.2f}\n"
             f"🚬 Gastos Não Essenciais: R$ {metrics['total_gastos_nao_essenciais']:.2f}\n"

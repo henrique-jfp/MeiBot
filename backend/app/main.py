@@ -79,9 +79,11 @@ async def process_interpreted_data(user, interpreted):
         if not active_op:
             return "Nenhuma operação ativa encontrada."
         db.end_operation(active_op["id"])
-        events_db = db.get_operation_summary(active_op["id"])
+        
+        # Em vez de apenas hoje, pega os últimos 7 dias para o relatório
+        events_db = db.get_weekly_summary(user_id)
         metrics = LogicService.calculate_metrics(events_db)
-        return LogicService.format_summary(metrics)
+        return LogicService.format_summary(metrics, "RESUMO SEMANAL ACUMULADO")
         
     if intencao == "pergunta":
         events_db = db.get_all_time_summary(user_id)
