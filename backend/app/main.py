@@ -3,6 +3,7 @@ from .ai_service import AIService
 from .db import DBService
 from .logic import LogicService
 import base64
+import datetime
 
 app = FastAPI()
 db = DBService()
@@ -80,10 +81,13 @@ async def process_interpreted_data(user, interpreted):
             return "Nenhuma operação ativa encontrada."
         db.end_operation(active_op["id"])
         
-        # Em vez de apenas hoje, pega os últimos 7 dias para o relatório
-        events_db = db.get_weekly_summary(user_id)
-        metrics = LogicService.calculate_metrics(events_db)
-        return LogicService.format_summary(metrics, "RESUMO SEMANAL ACUMULADO")
+        # Se for sábado (weekday 5), envia o resumão semanal
+        if datetime.date.today().weekday() == 5:
+            events_db = db.get_weekly_summary(user_id)
+            metrics = LogicService.calculate_metrics(events_db)
+            return LogicService.format_summary(metrics, "RESUMO SEMANAL ACUMULADO")
+        else:
+            return "🚀 Operação encerrada com sucesso! Bom descanso, parceiro. No sábado te envio o resumão da semana completa! 👊"
         
     if intencao == "pergunta":
         events_db = db.get_all_time_summary(user_id)
