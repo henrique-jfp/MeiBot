@@ -53,6 +53,7 @@ class AIService:
             "eventos": [
                 {{
                     "tipo": "corrida" | "gasto" | "pausa" | "ajuste",
+                    "categoria": "Essencial" | "Não Essencial" | null,
                     "valor": float,
                     "km": float,
                     "app": "Nome do app" ou null,
@@ -61,6 +62,10 @@ class AIService:
                 }}
             ]
         }}
+        Regras de Categoria para 'gasto':
+        - 'Essencial': Combustível, manutenção, óleo, seguro, taxas do app.
+        - 'Não Essencial': Cigarro, refrigerante, lanches, café, gastos pessoais não ligados ao trabalho.
+        
         Se não houver valor, km ou pacotes, use 0.
 
         Mensagem: "{text}"
