@@ -109,8 +109,9 @@ async function connectToWhatsApp() {
                 payload.type = 'image';
             }
             else if (msg.message.audioMessage) {
+                const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                payload.content = buffer.toString('base64');
                 payload.type = 'audio';
-                payload.content = 'audio_message';
             }
 
             if (payload.content) {

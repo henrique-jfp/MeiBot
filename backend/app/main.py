@@ -35,7 +35,11 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
             response_text = await process_interpreted_data(user, interpreted)
             
         elif message_type == "audio":
-            response_text = "Vou ouvir seu áudio e já te respondo! (Funcionalidade de áudio em implementação)"
+            audio_bytes = base64.b64decode(content)
+            transcription = await ai.transcribe_audio(audio_bytes)
+            interpreted = await ai.interpret_message(transcription)
+            response_text = await process_interpreted_data(user, interpreted)
+            response_text = f"🎙️ *Transcrição:* \"{transcription}\"\n\n{response_text}"
 
         return {"reply": response_text}
     except Exception as e:

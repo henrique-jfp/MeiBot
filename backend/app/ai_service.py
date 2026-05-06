@@ -16,8 +16,22 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 class AIService:
     @staticmethod
-    async def transcribe_audio(audio_content: bytes):
-        pass
+    async def transcribe_audio(audio_bytes: bytes):
+        # Groq Whisper espera um arquivo em disco ou um objeto file-like
+        temp_filename = "temp_audio.ogg"
+        with open(temp_filename, "wb") as f:
+            f.write(audio_bytes)
+        
+        with open(temp_filename, "rb") as file:
+            transcription = groq_client.audio.transcriptions.create(
+                file=(temp_filename, file.read()),
+                model="whisper-large-v3",
+                response_format="text",
+                language="pt"
+            )
+        
+        os.remove(temp_filename)
+        return transcription
 
     @staticmethod
     async def interpret_message(text: str):
