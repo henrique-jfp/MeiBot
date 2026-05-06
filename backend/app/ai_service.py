@@ -59,7 +59,7 @@ class AIService:
                 {"role": "system", "content": "Você é um extrator de dados JSON preciso. Retorne apenas o objeto JSON."},
                 {"role": "user", "content": prompt}
             ],
-            model="llama-3.1-70b-versatile",
+            model="llama-3.3-70b-versatile",
             response_format={ "type": "json_object" }
         )
         
@@ -111,7 +111,7 @@ class AIService:
             messages=[
                 {"role": "user", "content": prompt}
             ],
-            model="llama-3.1-70b-versatile"
+            model="llama-3.3-70b-versatile"
         )
         
         return chat_completion.choices[0].message.content
