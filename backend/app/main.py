@@ -63,7 +63,7 @@ async def process_interpreted_data(user, interpreted):
             db.add_event(user_id, op["id"], ev)
             
         if len(eventos) > 0:
-            return f"✅ Resumo recebido! Salvei {len(eventos)} registros retroativos para o dia {data_ref}."
+            return LogicService.format_events_confirmation(eventos, f"RESUMO RETROATIVO: {data_ref}")
         else:
             return f"Entendi a data {data_ref}, mas não encontrei informações de gastos ou ganhos na mensagem."
 
@@ -94,23 +94,15 @@ async def process_interpreted_data(user, interpreted):
             active_op = db.start_operation(user_id)
             for ev in eventos:
                 db.add_event(user_id, active_op["id"], ev)
-            return f"✅ Registrei os dados e iniciei sua operação de hoje automaticamente! Manda bala!"
+            return LogicService.format_events_confirmation(eventos, "OPERAÇÃO INICIADA")
         else:
             return "Hmm, não entendi. Você quer iniciar uma operação ou registrar algum ganho/gasto?"
     
     for ev in eventos:
         db.add_event(user_id, active_op["id"], ev)
     
-    if len(eventos) == 1:
-        ev = eventos[0]
-        tipo = ev.get("tipo")
-        if tipo == "corrida":
-            return f"✅ Boa! {ev.get('app')}: R$ {ev.get('valor')} registrado."
-        elif tipo == "gasto":
-            return f"⛽ Gasto anotado."
-        return f"✅ Entendido! Salvei seu {tipo}."
-    elif len(eventos) > 1:
-        return f"✅ Entendido! Salvei {len(eventos)} registros na sua operação de hoje."
+    if len(eventos) > 0:
+        return LogicService.format_events_confirmation(eventos, "DADOS REGISTRADOS")
     else:
         return "Hmm, não entendi o que era pra registrar."
 

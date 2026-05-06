@@ -34,6 +34,34 @@ class LogicService:
         }
 
     @staticmethod
+    def format_events_confirmation(events: list, title: str = "DADOS REGISTRADOS"):
+        if not events:
+            return "Nenhum dado encontrado para registrar."
+            
+        card = f"✅ *{title}*\n\n"
+        
+        for i, ev in enumerate(events, 1):
+            tipo = ev.get("tipo", "evento").upper()
+            valor = ev.get("valor", 0)
+            app = ev.get("app")
+            km = ev.get("km", 0)
+            pacotes = ev.get("pacotes", 0)
+            desc = ev.get("descricao")
+            
+            emoji = "💰" if ev.get("tipo") == "corrida" else "⛽" if ev.get("tipo") == "gasto" else "📝"
+            
+            card += f"{emoji} *{i}. {tipo}*\n"
+            if app: card += f"   • App: {app}\n"
+            if valor: card += f"   • Valor: R$ {valor:.2f}\n"
+            if pacotes: card += f"   • Pacotes: {pacotes}\n"
+            if km: card += f"   • KM: {km:.1f}\n"
+            if desc and desc != "Print lido": card += f"   • Obs: {desc}\n"
+            card += "\n"
+            
+        card += "🚀 Tudo salvo no seu histórico!"
+        return card
+
+    @staticmethod
     def format_summary(metrics: dict):
         return (
             f"📊 *RESUMO DA OPERAÇÃO*\n\n"
