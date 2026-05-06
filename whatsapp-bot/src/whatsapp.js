@@ -1,0 +1,126 @@
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    DisconnectReason, 
+    downloadMediaMessage,
+    Browsers,
+    fetchLatestBaileysVersion
+} = require('@whiskeysockets/baileys');
+const { Boom } = require('@hapi/boom');
+const qrcode = require('qrcode-terminal');
+const pino = require('pino');
+const { sendToBackend } = require('./api');
+
+async function connectToWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log('--- MeiBot WhatsApp Starter ---');
+
+    const sock = makeWASocket({
+        version,
+        auth: state,
+        printQRInTerminal: false,
+        logger: pino({ level: 'error' }),
+        browser: ['Ubuntu', 'Chrome', '20.0.04'],
+        syncFullHistory: false,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 15000,
+        markOnlineOnConnect: true,
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr } = update;
+        
+        if (qr) {
+            console.log('\n--- ESCANEIE O QR CODE ---');
+            qrcode.generate(qr, { small: true });
+            console.log('--------------------------\n');
+        }
+
+        if (connection === 'close') {
+            const statusCode = (lastDisconnect.error instanceof Boom) 
+                ? lastDisconnect.error.output.statusCode 
+                : 0;
+            
+            if (statusCode !== DisconnectReason.loggedOut) {
+                setTimeout(() => connectToWhatsApp(), 10000);
+            }
+        } else if (connection === 'open') {
+            console.log('✅ MeiBot conectado com sucesso!');
+        }
+    });
+
+    sock.ev.on('messages.upsert', async (m) => {
+        const msg = m.messages[0];
+        if (!msg.message) return;
+
+        const remoteJid = msg.key.remoteJid;
+        const fromMe = msg.key.fromMe;
+        const myId = sock.user.id.split(':')[0];
+        
+        // --- TRAVA DE SEGURANÇA (SELF-ONLY) ---
+        // O remoteJid na conversa consigo mesmo geralmente é o seu próprio número @s.whatsapp.net
+        const isMe = remoteJid.includes(myId);
+
+        if (!isMe) {
+            console.log(`[IGNORE] Mensagem de ${remoteJid} ignorada: não é a sua conversa pessoal.`);
+            return;
+        }
+
+        // Se a mensagem foi enviada POR VOCÊ (no celular), processamos.
+        // Se a mensagem foi enviada PELO BOT (via código), ignoramos para evitar loop.
+        // O Baileys costuma marcar mensagens enviadas pelo próprio socket como fromMe: true.
+        // Mas mensagens que você digita no celular também podem vir como fromMe: true na conversa consigo mesmo.
+        
+        // Vamos logar para entender o comportamento no seu servidor:
+        console.log(`[MSG] Recebida de ${remoteJid} | fromMe: ${fromMe}`);
+
+        // Se for uma mensagem que o BOT enviou (API), ignore. 
+        // Geralmente mensagens enviadas via sendMessage não disparam o upsert de forma idêntica,
+        // mas é bom ter uma trava baseada no conteúdo ou flag.
+        if (fromMe && msg.message.extendedTextMessage?.text?.includes('✅') || msg.message.conversation?.includes('📊')) {
+            // Provavelmente é o bot respondendo, ignore para não entrar em loop.
+            return;
+        }
+
+        // Se você quer que o bot responda quando você digita algo para si mesmo:
+        // Na conversa consigo mesmo, as mensagens que VOCÊ envia chegam com fromMe: true.
+        // Então NÃO podemos simplesmente ignorar fromMe: true.
+
+        const from = remoteJid.split('@')[0];
+        let payload = { from, type: 'text', content: '' };
+
+        try {
+            if (msg.message.conversation || msg.message.extendedTextMessage) {
+                payload.content = msg.message.conversation || msg.message.extendedTextMessage.text;
+                payload.type = 'text';
+            } 
+            else if (msg.message.imageMessage) {
+                const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                payload.content = buffer.toString('base64');
+                payload.type = 'image';
+            }
+            else if (msg.message.audioMessage) {
+                payload.type = 'audio';
+                payload.content = 'audio_message';
+            }
+
+            if (payload.content) {
+                console.log(`[PROCESS] Enviando para o backend: "${payload.content.substring(0, 20)}..."`);
+                const reply = await sendToBackend(payload);
+                
+                if (reply) {
+                    await sock.sendMessage(remoteJid, { text: reply });
+                }
+            }
+        } catch (err) {
+            console.error('Erro no processamento:', err);
+        }
+    });
+}
+
+module.exports = connectToWhatsApp;

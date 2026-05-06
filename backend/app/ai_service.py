@@ -1,0 +1,117 @@
+import os
+import json
+import datetime
+import google.generativeai as genai
+from groq import Groq
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configure Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+
+# Configure Groq
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+class AIService:
+    @staticmethod
+    async def transcribe_audio(audio_content: bytes):
+        pass
+
+    @staticmethod
+    async def interpret_message(text: str):
+        hoje = datetime.date.today().isoformat()
+        
+        prompt = f"""
+        Você é um assistente de um entregador. Sua tarefa é extrair dados de mensagens sobre o dia de trabalho.
+        Hoje é dia {hoje}. 
+        Se o usuário mencionar uma data passada (ex: "ontem", "segunda"), preencha "data_referencia" com YYYY-MM-DD.
+        Se ele informar horário de trabalho (ex: "de 10h às 15h"), preencha "hora_inicio" e "hora_fim" no formato "HH:MM:SS".
+
+        A mensagem pode conter múltiplas ações (um "resumão"). Converta a mensagem num JSON estruturado EXATAMENTE neste formato:
+        {{
+            "intencao": "iniciar" | "encerrar" | "pergunta" | "registro",
+            "data_referencia": "YYYY-MM-DD" ou null,
+            "hora_inicio": "HH:MM:SS" ou null,
+            "hora_fim": "HH:MM:SS" ou null,
+            "pergunta": "texto da pergunta" ou null,
+            "eventos": [
+                {{
+                    "tipo": "corrida" | "gasto" | "pausa" | "ajuste",
+                    "valor": float,
+                    "km": float,
+                    "app": "Nome do app" ou null,
+                    "pacotes": int,
+                    "descricao": "Detalhe" ou null
+                }}
+            ]
+        }}
+        Se não houver valor, km ou pacotes, use 0.
+
+        Mensagem: "{text}"
+
+        Retorne APENAS o objeto JSON e nada mais.
+        """
+        
+        chat_completion = groq_client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "Você é um extrator de dados JSON preciso. Retorne apenas o objeto JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.1-70b-versatile",
+            response_format={ "type": "json_object" }
+        )
+        
+        return json.loads(chat_completion.choices[0].message.content)
+
+    @staticmethod
+    async def process_image(image_bytes: bytes, mime_type: str):
+        prompt = """
+        Analise este print de um aplicativo de entregas.
+        Extraia:
+        1. Valor total ganho na imagem.
+        2. Aplicativo (ex: iFood, Uber, Rappi).
+        3. Quilometragem (se houver).
+        4. Quantidade de entregas/corridas (se houver).
+
+        Retorne no formato JSON:
+        {
+            "intencao": "registro",
+            "data_referencia": null,
+            "hora_inicio": null,
+            "hora_fim": null,
+            "pergunta": null,
+            "eventos": [
+                {"tipo": "corrida", "valor": 0.0, "app": "", "km": 0.0, "pacotes": 0, "descricao": "Print lido"}
+            ]
+        }
+        """
+        
+        response = gemini_model.generate_content([
+            prompt,
+            {"mime_type": mime_type, "data": image_bytes}
+        ])
+        
+        text = response.text.replace('```json', '').replace('```', '').strip()
+        return json.loads(text)
+
+    @staticmethod
+    async def answer_question(context: str, question: str):
+        prompt = f"""
+        Com base nos dados das entregas abaixo:
+        {context}
+        
+        Responda à pergunta do entregador: "{question}"
+        
+        Seja direto, motivador e use uma linguagem natural de "parceiro de estrada".
+        """
+        
+        chat_completion = groq_client.chat.completions.create(
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.1-70b-versatile"
+        )
+        
+        return chat_completion.choices[0].message.content

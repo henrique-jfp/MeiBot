@@ -1,0 +1,59 @@
+# 🧪 Exemplos de Teste (Entrada e Saída Esperada)
+
+Este documento lista exemplos de como o MeiBot deve reagir a diferentes entradas.
+
+---
+
+## 1. Comandos de Fluxo
+
+### Início de Operação
+*   **Entrada:** "iniciar operação"
+*   **Ação Interna:** Cria registro em `operacoes_dia` com `status='ativa'`.
+*   **Resposta:** "🚀 Operação iniciada! Boa sorte nas entregas, parceiro!"
+
+### Fim de Operação
+*   **Entrada:** "encerrar dia" ou "encerrar operação"
+*   **Ação Interna:** Atualiza `operacoes_dia` para `encerrada` e calcula métricas.
+*   **Resposta:**
+    📊 *RESUMO DA OPERAÇÃO*
+    💰 Ganho Total: R$ 260.00
+    ⛽ Gastos: R$ 50.00
+    💵 Lucro Líquido: R$ 210.00
+    🛣️ KM Rodados: 25.0 km
+    📦 Pacotes: 120
+    ...
+
+---
+
+## 2. Registro de Dados
+
+### Corrida Simples
+*   **Entrada:** "fiz uma de 15 no uber 3km"
+*   **IA Interpreta:** `{"tipo": "corrida", "valor": 15, "app": "Uber", "km": 3}`
+*   **Resposta:** "✅ Boa! Uber: R$ 15.0 registrado."
+
+### Rota com Pacotes
+*   **Entrada:** "rota correios 120 pacotes 240 reais 20km"
+*   **IA Interpreta:** `{"tipo": "corrida", "valor": 240, "app": "Correios", "pacotes": 120, "km": 20}`
+*   **Resposta:** "✅ Boa! Correios: R$ 240.0 registrado."
+
+### Gasto
+*   **Entrada:** "abasteci 50 reais de gasolina"
+*   **IA Interpreta:** `{"tipo": "gasto", "valor": 50}`
+*   **Resposta:** "⛽ Gasto de R$ 50.0 anotado."
+
+---
+
+## 3. Consultas por IA
+
+### Pergunta sobre Ganhos
+*   **Entrada:** "quanto eu já ganhei hoje?"
+*   **IA Ação:** Consulta eventos do dia no banco e gera resposta natural.
+*   **Resposta:** "Até agora você já faturou R$ 260,00, parceiro! O dia tá rendendo bem!"
+
+---
+
+## 4. Imagens (OCR)
+*   **Entrada:** [Envia Print do App iFood com valor R$ 45,50]
+*   **IA Interpreta (Gemini Vision):** `{"tipo": "corrida", "valor": 45.50, "app": "iFood"}`
+*   **Resposta:** "✅ Boa! iFood: R$ 45.5 registrado."

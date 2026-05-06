@@ -1,0 +1,21 @@
+# Secrets
+.env
+backend/.env
+whatsapp-bot/.env
+
+# Node
+node_modules/
+auth_info_baileys/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Logs
+*.log
+logs.json
+C:\Users\henri\.gemini\tmp\meibot\logs.json
