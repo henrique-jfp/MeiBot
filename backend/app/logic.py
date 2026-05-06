@@ -11,7 +11,7 @@ class LogicService:
         total_minutos_espera = 0
         
         for event in events:
-            if event['tipo'] == 'corrida':
+            if event['tipo'] in ['corrida', 'rota']:
                 total_ganho += event.get('valor', 0)
                 total_km += event.get('km', 0)
                 total_pacotes += event.get('pacotes', 0)

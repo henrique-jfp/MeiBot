@@ -52,7 +52,7 @@ class AIService:
             "pergunta": "texto da pergunta" ou null,
             "eventos": [
                 {{
-                    "tipo": "corrida" | "gasto" | "pausa" | "ajuste" | "espera",
+                    "tipo": "rota" | "gasto" | "pausa" | "ajuste" | "espera",
                     "categoria": "Essencial" | "Não Essencial" | null,
                     "tempo_minutos": int,
                     "valor": float,
@@ -73,11 +73,14 @@ class AIService:
 
         Regras para 'espera':
         - Use quando o usuário mencionar atraso no galpão, espera de carga ou tempo parado aguardando.
-        - Exemplo: "Cheguei 13h e peguei a rota 13h40" -> Gerar um evento 'espera' com tempo_minutos: 40.
-        - Preencha 'tempo_minutos' com o valor extraído.
+        - Exemplo: "Cheguei 13h e peguei a rota 13h40" -> GERAR UM EVENTO SEPARADO do tipo 'espera' com tempo_minutos: 40.
 
-        IMPORTANTE: NÃO coloque a duração total do trabalho ou das corridas no campo 'tempo_minutos' dentro de 'corrida'. Esse campo é EXCLUSIVO para o tempo ocioso (espera ou pausa).
-
+        Regras para 'rota':
+        - Representa o tempo real de entregas/trabalho.
+        - Se o usuário der os horários (ex: peguei a rota 13h40 e terminei 18h), calcule a duração apenas desse período e coloque em 'tempo_minutos'.
+        
+        IMPORTANTE: 'rota' e 'espera' DEVEM ser dois itens separados na lista 'eventos'. Nunca misture o tempo de espera dentro do item de rota.
+        
         Se não houver valor, km, pacotes ou tempo_minutos, use 0.
 
         Mensagem: "{text}"
