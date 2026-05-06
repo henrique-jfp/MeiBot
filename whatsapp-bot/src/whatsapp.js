@@ -79,12 +79,16 @@ async function connectToWhatsApp() {
         // Vamos logar para entender o comportamento no seu servidor:
         console.log(`[MSG] Recebida de ${remoteJid} | fromMe: ${fromMe}`);
 
-        // Se for uma mensagem que o BOT enviou (API), ignore. 
-        // Geralmente mensagens enviadas via sendMessage não disparam o upsert de forma idêntica,
-        // mas é bom ter uma trava baseada no conteúdo ou flag.
-        if (fromMe && msg.message.extendedTextMessage?.text?.includes('✅') || msg.message.conversation?.includes('📊')) {
-            // Provavelmente é o bot respondendo, ignore para não entrar em loop.
-            return;
+        // Se for uma mensagem que o BOT enviou (fromMe: true), ignore para evitar loop.
+        // Identificamos mensagens do bot pelos emojis iniciais ou prefixos comuns.
+        if (fromMe) {
+            const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+            const isBotResponse = /^[✅❌📊🚀⛽📈]/.test(text) || text.includes('Vou ouvir seu áudio') || text.includes('Hmm, não entendi');
+            
+            if (isBotResponse) {
+                // console.log(`[LOOP-PREVENT] Ignorando resposta do próprio bot.`);
+                return;
+            }
         }
 
         // Se você quer que o bot responda quando você digita algo para si mesmo:
