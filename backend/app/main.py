@@ -81,8 +81,16 @@ async def process_interpreted_data(user, interpreted):
             return "Nenhuma operação ativa encontrada."
         db.end_operation(active_op["id"])
         
-        # Se for sábado (weekday 5), envia o resumão semanal
-        if datetime.date.today().weekday() == 5:
+        today = datetime.date.today()
+        # Verifica se amanhã muda o mês (último dia do mês)
+        is_last_day_of_month = (today + datetime.timedelta(days=1)).month != today.month
+        is_saturday = today.weekday() == 5
+
+        if is_last_day_of_month:
+            events_db = db.get_monthly_summary(user_id)
+            metrics = LogicService.calculate_metrics(events_db)
+            return LogicService.format_summary(metrics, "RESUMO MENSAL ACUMULADO")
+        elif is_saturday:
             events_db = db.get_weekly_summary(user_id)
             metrics = LogicService.calculate_metrics(events_db)
             return LogicService.format_summary(metrics, "RESUMO SEMANAL ACUMULADO")

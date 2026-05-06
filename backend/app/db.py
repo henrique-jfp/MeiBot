@@ -136,6 +136,12 @@ class DBService:
         response = self.supabase.table("eventos").select("*, apps(nome)").eq("user_id", user_id).gte("timestamp", seven_days_ago).execute()
         return response.data
 
+    def get_monthly_summary(self, user_id: str):
+        import datetime
+        thirty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=30)).isoformat()
+        response = self.supabase.table("eventos").select("*, apps(nome)").eq("user_id", user_id).gte("timestamp", thirty_days_ago).execute()
+        return response.data
+
     def get_all_time_summary(self, user_id: str):
         import datetime
         thirty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=30)).isoformat()
