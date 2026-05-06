@@ -83,7 +83,15 @@ class LogicService:
             cat = ev.get("categoria")
             tempo = ev.get("tempo_minutos", 0)
             
-            emoji = "💰" if ev.get("tipo") == "corrida" else "⛽" if ev.get("tipo") == "gasto" else "⏳" if ev.get("tipo") == "espera" else "📝"
+            # Emojis inteligentes baseados no tipo e categoria
+            if ev.get("tipo") == "corrida":
+                emoji = "💰"
+            elif ev.get("tipo") == "espera":
+                emoji = "⏳"
+            elif ev.get("tipo") == "gasto":
+                emoji = "⛽" if cat == "Essencial" else "🚬"
+            else:
+                emoji = "📝"
             
             card += f"{emoji} *{i}. {tipo}*\n"
             if cat: card += f"   • Categoria: {cat}\n"

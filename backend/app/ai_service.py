@@ -73,8 +73,11 @@ class AIService:
 
         Regras para 'espera':
         - Use quando o usuário mencionar atraso no galpão, espera de carga ou tempo parado aguardando.
+        - Exemplo: "Cheguei 13h e peguei a rota 13h40" -> Gerar um evento 'espera' com tempo_minutos: 40.
         - Preencha 'tempo_minutos' com o valor extraído.
-        
+
+        IMPORTANTE: NÃO coloque a duração total do trabalho ou das corridas no campo 'tempo_minutos' dentro de 'corrida'. Esse campo é EXCLUSIVO para o tempo ocioso (espera ou pausa).
+
         Se não houver valor, km, pacotes ou tempo_minutos, use 0.
 
         Mensagem: "{text}"
