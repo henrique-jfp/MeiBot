@@ -83,7 +83,7 @@ async function connectToWhatsApp() {
         // Identificamos mensagens do bot pelos emojis iniciais ou prefixos comuns.
         if (fromMe) {
             const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-            const isBotResponse = /^[✅❌📊🚀⛽📈]/.test(text) || text.includes('Vou ouvir seu áudio') || text.includes('Hmm, não entendi');
+            const isBotResponse = /^[✅❌📊🚀⛽📈🎙️]/.test(text) || text.includes('Vou ouvir seu áudio') || text.includes('Hmm, não entendi');
             
             if (isBotResponse) {
                 // console.log(`[LOOP-PREVENT] Ignorando resposta do próprio bot.`);
