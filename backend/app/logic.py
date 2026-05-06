@@ -8,6 +8,7 @@ class LogicService:
         total_gastos_nao_essenciais = 0
         total_km = 0
         total_pacotes = 0
+        total_minutos_espera = 0
         
         for event in events:
             if event['tipo'] == 'corrida':
@@ -21,13 +22,15 @@ class LogicService:
                     total_gastos_nao_essenciais += event.get('valor', 0)
             elif event['tipo'] == 'ajuste':
                 total_ganho += event.get('valor', 0)
+            elif event['tipo'] == 'espera':
+                total_minutos_espera += event.get('tempo_minutos', 0)
 
         total_gastos = total_gastos_essenciais + total_gastos_nao_essenciais
         lucro_liquido = total_ganho - total_gastos
         rs_km = total_ganho / total_km if total_km > 0 else 0
         
-        # Cálculo de horas trabalhadas
-        total_horas = 0
+        # Cálculo de horas trabalhadas totais
+        total_horas_brutas = 0
         if operations:
             for op in operations:
                 if op.get("hora_inicio") and op.get("hora_fim"):
@@ -35,11 +38,14 @@ class LogicService:
                         inicio = datetime.datetime.fromisoformat(op["hora_inicio"].replace('Z', '+00:00'))
                         fim = datetime.datetime.fromisoformat(op["hora_fim"].replace('Z', '+00:00'))
                         diff = (fim - inicio).total_seconds() / 3600
-                        if diff > 0: total_horas += diff
+                        if diff > 0: total_horas_brutas += diff
                     except:
                         continue
         
-        rs_hora = total_ganho / total_horas if total_horas > 0 else 0
+        tempo_espera_horas = total_minutos_espera / 60
+        horas_produtivas = max(0, total_horas_brutas - tempo_espera_horas)
+        
+        rs_hora = total_ganho / horas_produtivas if horas_produtivas > 0 else 0
         rs_pacote = total_ganho / total_pacotes if total_pacotes > 0 else 0
         percentual_nao_essenciais = (total_gastos_nao_essenciais / total_ganho * 100) if total_ganho > 0 else 0
         
@@ -52,7 +58,9 @@ class LogicService:
             "lucro_liquido": lucro_liquido,
             "total_km": total_km,
             "total_pacotes": total_pacotes,
-            "total_horas": total_horas,
+            "total_horas_brutas": total_horas_brutas,
+            "tempo_espera_horas": tempo_espera_horas,
+            "horas_produtivas": horas_produtivas,
             "rs_km": rs_km,
             "rs_hora": rs_hora,
             "rs_pacote": rs_pacote
@@ -73,11 +81,13 @@ class LogicService:
             pacotes = ev.get("pacotes", 0)
             desc = ev.get("descricao")
             cat = ev.get("categoria")
+            tempo = ev.get("tempo_minutos", 0)
             
-            emoji = "💰" if ev.get("tipo") == "corrida" else "⛽" if ev.get("tipo") == "gasto" else "📝"
+            emoji = "💰" if ev.get("tipo") == "corrida" else "⛽" if ev.get("tipo") == "gasto" else "⏳" if ev.get("tipo") == "espera" else "📝"
             
             card += f"{emoji} *{i}. {tipo}*\n"
             if cat: card += f"   • Categoria: {cat}\n"
+            if tempo: card += f"   • Duração: {tempo} min\n"
             if app: card += f"   • App: {app}\n"
             if valor: card += f"   • Valor: R$ {valor:.2f}\n"
             if pacotes: card += f"   • Pacotes: {pacotes}\n"
@@ -98,10 +108,11 @@ class LogicService:
             f"💵 Lucro Líquido: R$ {metrics['lucro_liquido']:.2f}\n"
             f"🛣️ KM Rodados: {metrics['total_km']:.1f} km\n"
             f"📦 Pacotes: {metrics['total_pacotes']}\n"
-            f"⏱️ Horas Trabalhadas: {metrics['total_horas']:.1f}h\n\n"
+            f"⏱️ Horas Produtivas (Rua): {metrics['horas_produtivas']:.1f}h\n"
+            f"⏳ Tempo de Espera (Galpão): {metrics['tempo_espera_horas']:.1f}h\n\n"
             f"📈 Métricas de Eficiência:\n"
             f"- R$/km: R$ {metrics['rs_km']:.2f}\n"
-            f"- R$/hora: R$ {metrics['rs_hora']:.2f}\n"
+            f"- R$/hora (Rua): R$ {metrics['rs_hora']:.2f}\n"
             f"- R$/pacote: R$ {metrics['rs_pacote']:.2f}\n\n"
         )
         

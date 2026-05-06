@@ -113,6 +113,7 @@ class DBService:
                 "operacao_id": operacao_id,
                 "tipo": event_data.get("tipo"),
                 "categoria": event_data.get("categoria"),
+                "tempo_minutos": event_data.get("tempo_minutos", 0),
                 "valor": event_data.get("valor", 0),
                 "km": event_data.get("km", 0),
                 "app_id": app_id,

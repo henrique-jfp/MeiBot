@@ -52,8 +52,9 @@ class AIService:
             "pergunta": "texto da pergunta" ou null,
             "eventos": [
                 {{
-                    "tipo": "corrida" | "gasto" | "pausa" | "ajuste",
+                    "tipo": "corrida" | "gasto" | "pausa" | "ajuste" | "espera",
                     "categoria": "Essencial" | "Não Essencial" | null,
+                    "tempo_minutos": int,
                     "valor": float,
                     "km": float,
                     "app": "Nome do app" ou null,
@@ -69,8 +70,12 @@ class AIService:
         Regras de Categoria para 'gasto':
         - 'Essencial': Combustível, manutenção, óleo, seguro, taxas do app.
         - 'Não Essencial': Cigarro, refrigerante, lanches, café, gastos pessoais não ligados ao trabalho.
+
+        Regras para 'espera':
+        - Use quando o usuário mencionar atraso no galpão, espera de carga ou tempo parado aguardando.
+        - Preencha 'tempo_minutos' com o valor extraído.
         
-        Se não houver valor, km ou pacotes, use 0.
+        Se não houver valor, km, pacotes ou tempo_minutos, use 0.
 
         Mensagem: "{text}"
 
@@ -154,16 +159,20 @@ class AIService:
         - Ganho Total: R$ {current_metrics['total_ganho']:.2f}
         - Lucro Líquido: R$ {current_metrics['lucro_liquido']:.2f}
         - R$/KM: R$ {current_metrics['rs_km']:.2f}
-        - R$/Hora: R$ {current_metrics['rs_hora']:.2f}
+        - R$/Hora (Rua): R$ {current_metrics['rs_hora']:.2f}
+        - Horas Produtivas (Rua): {current_metrics['horas_produtivas']:.1f}h
+        - Tempo de Espera (Galpão): {current_metrics['tempo_espera_horas']:.1f}h
         - % Gastos Não Essenciais: {current_metrics['percentual_nao_essenciais']:.1f}%
 
         DADOS DO PERÍODO ANTERIOR:
         - Ganho Total: R$ {previous_metrics['total_ganho']:.2f}
         - R$/KM: R$ {previous_metrics['rs_km']:.2f}
-        - R$/Hora: R$ {previous_metrics['rs_hora']:.2f}
+        - R$/Hora (Rua): R$ {previous_metrics['rs_hora']:.2f}
+        - Tempo de Espera (Galpão): {previous_metrics.get('tempo_espera_horas', 0):.1f}h
 
         TAREFA:
         Compare os períodos. Diga o que melhorou ou piorou. Julgue o desempenho atual baseado nas REGRAS DE OURO acima.
+        Dê atenção especial ao Tempo de Espera: se for alto, critique a ineficiência do galpão.
         Seja direto, use linguagem de "parceiro de estrada" mas com a autoridade de um analista foda.
         Termine com uma "Dica de Ouro" prática para o próximo período.
         Limite o texto a no máximo 4 parágrafos curtos.
