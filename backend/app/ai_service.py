@@ -45,7 +45,7 @@ class AIService:
 
         A mensagem pode conter múltiplas ações (um "resumão"). Converta a mensagem num JSON estruturado EXATAMENTE neste formato:
         {{
-            "intencao": "iniciar" | "encerrar" | "pergunta" | "registro",
+            "intencao": "iniciar" | "encerrar" | "pergunta" | "registro" | "resumo_semanal" | "resumo_mensal",
             "data_referencia": "YYYY-MM-DD" ou null,
             "hora_inicio": "HH:MM:SS" ou null,
             "hora_fim": "HH:MM:SS" ou null,
@@ -62,6 +62,10 @@ class AIService:
                 }}
             ]
         }}
+        Quando usar as intenções de resumo:
+        - 'resumo_semanal': Quando o usuário pedir explicitamente o resumo da semana, dos últimos dias ou quanto ganhou na semana.
+        - 'resumo_mensal': Quando o usuário pedir o resumo do mês, do mês passado ou quanto ganhou no mês.
+        
         Regras de Categoria para 'gasto':
         - 'Essencial': Combustível, manutenção, óleo, seguro, taxas do app.
         - 'Não Essencial': Cigarro, refrigerante, lanches, café, gastos pessoais não ligados ao trabalho.

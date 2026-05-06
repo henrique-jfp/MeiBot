@@ -70,6 +70,16 @@ async def process_interpreted_data(user, interpreted):
 
     active_op = db.get_active_operation(user_id)
     
+    if intencao == "resumo_semanal":
+        events_db = db.get_weekly_summary(user_id)
+        metrics = LogicService.calculate_metrics(events_db)
+        return LogicService.format_summary(metrics, "RESUMO SEMANAL SOLICITADO")
+
+    if intencao == "resumo_mensal":
+        events_db = db.get_monthly_summary(user_id)
+        metrics = LogicService.calculate_metrics(events_db)
+        return LogicService.format_summary(metrics, "RESUMO MENSAL SOLICITADO")
+
     if intencao == "iniciar":
         if active_op:
             return "Você já tem uma operação ativa! Vamos trabalhar!"
@@ -84,12 +94,18 @@ async def process_interpreted_data(user, interpreted):
         today = datetime.date.today()
         # Verifica se amanhã muda o mês (último dia do mês)
         is_last_day_of_month = (today + datetime.timedelta(days=1)).month != today.month
+        is_first_day_of_month = today.day == 1
         is_saturday = today.weekday() == 5
 
         if is_last_day_of_month:
             events_db = db.get_monthly_summary(user_id)
             metrics = LogicService.calculate_metrics(events_db)
             return LogicService.format_summary(metrics, "RESUMO MENSAL ACUMULADO")
+        elif is_first_day_of_month:
+            # Caso não tenha trabalhado no dia 31, envia o do mês passado no dia 1
+            events_db = db.get_monthly_summary(user_id)
+            metrics = LogicService.calculate_metrics(events_db)
+            return LogicService.format_summary(metrics, "RESUMO DO MÊS ENCERRADO")
         elif is_saturday:
             events_db = db.get_weekly_summary(user_id)
             metrics = LogicService.calculate_metrics(events_db)
