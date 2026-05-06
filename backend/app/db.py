@@ -194,13 +194,13 @@ class DBService:
 
     def update_porteiro(self, user_id: str, rua: str, numero: str, nome_antigo: str, novo_nome: str = None, novo_turno: str = None, novas_notas: str = None):
         try:
-            query = self.supabase.table("mapeamento_porteiros").update({})
             update_data = {}
             if novo_nome: update_data["nome_porteiro"] = novo_nome
             if novo_turno: update_data["turno"] = novo_turno
             if novas_notas: update_data["notas_predio"] = novas_notas
             
-            response = self.supabase.table("mapeamento_porteiros").update(update_data).eq("user_id", user_id).eq("rua", rua).eq("numero", numero).eq("nome_porteiro", nome_antigo).execute()
+            # Tenta busca exata primeiro, se falhar usa ilike para o nome antigo
+            response = self.supabase.table("mapeamento_porteiros").update(update_data).eq("user_id", user_id).ilike("rua", f"%{rua}%").eq("numero", numero).ilike("nome_porteiro", nome_antigo).execute()
             return response.data
         except Exception as e:
             print(f"Error updating porteiro: {e}")
@@ -208,7 +208,8 @@ class DBService:
 
     def get_porteiros_by_address(self, user_id: str, rua: str, numero: str):
         try:
-            response = self.supabase.table("mapeamento_porteiros").select("*").eq("user_id", user_id).eq("rua", rua).eq("numero", numero).execute()
+            # Busca usando ilike para ser insensível a maiúsculas/minúsculas e variações de "Rua"
+            response = self.supabase.table("mapeamento_porteiros").select("*").eq("user_id", user_id).ilike("rua", f"%{rua}%").eq("numero", numero).execute()
             return response.data
         except Exception as e:
             print(f"Error getting porteiros: {e}")

@@ -29,17 +29,21 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         
         if message_type == "text":
             interpreted = await ai.interpret_message(content)
+            print(f"DEBUG: AI Interpreted: {interpreted}")
             response_text = await process_interpreted_data(user, interpreted)
             
         elif message_type == "image":
             image_bytes = base64.b64decode(content)
             interpreted = await ai.process_image(image_bytes, "image/jpeg")
+            print(f"DEBUG: Image AI Interpreted: {interpreted}")
             response_text = await process_interpreted_data(user, interpreted)
             
         elif message_type == "audio":
             audio_bytes = base64.b64decode(content)
             transcription = await ai.transcribe_audio(audio_bytes)
+            print(f"DEBUG: Audio Transcription: {transcription}")
             interpreted = await ai.interpret_message(transcription)
+            print(f"DEBUG: Audio AI Interpreted: {interpreted}")
             response_text = await process_interpreted_data(user, interpreted)
             response_text = f"🎙️ *Transcrição:* \"{transcription}\"\n\n{response_text}"
 
