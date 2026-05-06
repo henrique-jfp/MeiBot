@@ -170,3 +170,55 @@ class DBService:
         thirty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=30)).isoformat()
         response = self.supabase.table("eventos").select("*, apps(nome)").eq("user_id", user_id).gte("timestamp", thirty_days_ago).execute()
         return response.data
+
+    # --- MAPEAMENTO DE PORTEIROS ---
+
+    def add_porteiro(self, user_id: str, rua: str, numero: str, nome: str, turno: str = None, notas: str = None):
+        try:
+            data = {
+                "user_id": user_id,
+                "rua": rua,
+                "numero": numero,
+                "nome_porteiro": nome,
+                "turno": turno,
+                "notas_predio": notas
+            }
+            response = self.supabase.table("mapeamento_porteiros").insert(data).execute()
+            return response.data
+        except Exception as e:
+            # Se der erro de UNIQUE, é duplicado
+            if "duplicate key value" in str(e):
+                return "DUPLICATE"
+            print(f"Error adding porteiro: {e}")
+            return None
+
+    def update_porteiro(self, user_id: str, rua: str, numero: str, nome_antigo: str, novo_nome: str = None, novo_turno: str = None, novas_notas: str = None):
+        try:
+            query = self.supabase.table("mapeamento_porteiros").update({})
+            update_data = {}
+            if novo_nome: update_data["nome_porteiro"] = novo_nome
+            if novo_turno: update_data["turno"] = novo_turno
+            if novas_notas: update_data["notas_predio"] = novas_notas
+            
+            response = self.supabase.table("mapeamento_porteiros").update(update_data).eq("user_id", user_id).eq("rua", rua).eq("numero", numero).eq("nome_porteiro", nome_antigo).execute()
+            return response.data
+        except Exception as e:
+            print(f"Error updating porteiro: {e}")
+            return None
+
+    def get_porteiros_by_address(self, user_id: str, rua: str, numero: str):
+        try:
+            response = self.supabase.table("mapeamento_porteiros").select("*").eq("user_id", user_id).eq("rua", rua).eq("numero", numero).execute()
+            return response.data
+        except Exception as e:
+            print(f"Error getting porteiros: {e}")
+            return []
+
+    def get_all_porteiros(self, user_id: str):
+        try:
+            # Busca todos e ordena por rua e número
+            response = self.supabase.table("mapeamento_porteiros").select("*").eq("user_id", user_id).order("rua").order("numero").execute()
+            return response.data
+        except Exception as e:
+            print(f"Error getting all porteiros: {e}")
+            return []

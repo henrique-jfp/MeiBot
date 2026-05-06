@@ -45,11 +45,19 @@ class AIService:
 
         A mensagem pode conter múltiplas ações (um "resumão"). Converta a mensagem num JSON estruturado EXATAMENTE neste formato:
         {{
-            "intencao": "iniciar" | "encerrar" | "pergunta" | "registro" | "resumo_semanal" | "resumo_mensal",
+            "intencao": "iniciar" | "encerrar" | "pergunta" | "registro" | "resumo_semanal" | "resumo_mensal" | "cadastrar_porteiro" | "corrigir_porteiro" | "consultar_porteiro" | "listar_porteiros",
             "data_referencia": "YYYY-MM-DD" ou null,
             "hora_inicio": "HH:MM:SS" ou null,
             "hora_fim": "HH:MM:SS" ou null,
             "pergunta": "texto da pergunta" ou null,
+            "porteiro_info": {{
+                "rua": "Nome da rua" ou null,
+                "numero": "123" ou null,
+                "nome": "Nome do porteiro" ou null,
+                "nome_antigo": "Nome anterior (apenas para correção/troca)" ou null,
+                "turno": "manhã/tarde/noite" ou null,
+                "notas": "Notas do prédio" ou null
+            }},
             "eventos": [
                 {{
                     "tipo": "rota" | "gasto" | "pausa" | "ajuste" | "espera",
@@ -67,6 +75,12 @@ class AIService:
         - 'resumo_semanal': Quando o usuário pedir explicitamente o resumo da semana, dos últimos dias ou quanto ganhou na semana.
         - 'resumo_mensal': Quando o usuário pedir o resumo do mês, do mês passado ou quanto ganhou no mês.
         
+        Intenções de Porteiros:
+        - 'cadastrar_porteiro': Quando o usuário informar nome de porteiro e endereço para salvar.
+        - 'corrigir_porteiro': Quando o usuário pedir para trocar, alterar ou corrigir um nome ou nota já existente.
+        - 'consultar_porteiro': Quando o usuário perguntar quem é o porteiro de um endereço ou o que tem anotado sobre um prédio.
+        - 'listar_porteiros': Quando o usuário pedir para ver o mapeamento completo, a lista de todos os nomes ou o link do mapeamento.
+
         Regras de Categoria para 'gasto':
         - 'Essencial': Combustível, manutenção, óleo, seguro, taxas do app.
         - 'Não Essencial': Cigarro, refrigerante, lanches, café, gastos pessoais não ligados ao trabalho.

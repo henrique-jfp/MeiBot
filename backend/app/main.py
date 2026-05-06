@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi.responses import HTMLResponse
 from .ai_service import AIService
 from .db import DBService
 from .logic import LogicService
@@ -67,6 +68,44 @@ async def process_interpreted_data(user, interpreted):
             return LogicService.format_events_confirmation(eventos, f"RESUMO RETROATIVO: {data_ref}")
         else:
             return f"Entendi a data {data_ref}, mas não encontrei informações de gastos ou ganhos na mensagem."
+
+    if intencao == "listar_porteiros":
+        # No futuro, aqui pegamos a URL real do servidor
+        url = f"http://192.168.1.23:8000/porteiros/{whatsapp_number}"
+        return f"📋 Aqui está o seu mapeamento completo de porteiros: {url}"
+
+    if intencao == "consultar_porteiro":
+        info = interpreted.get("porteiro_info", {})
+        res = db.get_porteiros_by_address(user_id, info.get("rua"), info.get("numero"))
+        if not res:
+            return f"Não encontrei nenhum porteiro mapeado para {info.get('rua')}, {info.get('numero')}."
+        
+        texto = f"🏢 *Porteiros em {info.get('rua')}, {info.get('numero')}:*\n"
+        for p in res:
+            texto += f"• {p['nome_porteiro']}"
+            if p.get('turno'): texto += f" ({p['turno']})"
+            if p.get('notas_predio'): texto += f"\n  📝 Nota: {p['notas_predio']}"
+            texto += "\n"
+        return texto
+
+    if intencao == "cadastrar_porteiro":
+        info = interpreted.get("porteiro_info", {})
+        res = db.add_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome"), info.get("turno"), info.get("notas"))
+        if res == "DUPLICATE":
+            return f"⚠️ O porteiro *{info.get('nome')}* já está mapeado para esse endereço."
+        elif res:
+            return f"✅ Porteiro *{info.get('nome')}* cadastrado com sucesso em {info.get('rua')}, {info.get('numero')}!"
+        return "❌ Tive um erro ao cadastrar o porteiro. Tente novamente."
+
+    if intencao == "corrigir_porteiro":
+        info = interpreted.get("porteiro_info", {})
+        # A IA deve tentar identificar o 'nome_antigo' se o usuário disser "Troca o João pelo Marcos"
+        # Se não identificar, usamos o nome atual enviado para tentar atualizar as notas ou turno
+        nome_busca = info.get("nome_antigo") or info.get("nome")
+        res = db.update_porteiro(user_id, info.get("rua"), info.get("numero"), nome_busca, info.get("nome"), info.get("turno"), info.get("notas"))
+        if res:
+            return f"✅ Cadastro de porteiros em {info.get('rua')}, {info.get('numero')} atualizado!"
+        return "❌ Não consegui localizar o porteiro para corrigir. Verifique o endereço e o nome."
 
     active_op = db.get_active_operation(user_id)
     
@@ -154,6 +193,66 @@ async def process_interpreted_data(user, interpreted):
         return LogicService.format_events_confirmation(eventos, "DADOS REGISTRADOS")
     else:
         return "Hmm, não entendi o que era pra registrar."
+
+@app.get("/porteiros/{whatsapp_number}", response_class=HTMLResponse)
+async def list_porteiros_page(whatsapp_number: str):
+    user = db.get_user_by_whatsapp(whatsapp_number)
+    if not user:
+        return "<h1>Usuário não encontrado</h1>"
+    
+    porteiros = db.get_all_porteiros(user["id"])
+    
+    # Agrupar por rua
+    ruas = {}
+    for p in porteiros:
+        rua = p["rua"]
+        if rua not in ruas:
+            ruas[rua] = []
+        ruas[rua].append(p)
+
+    html_content = f"""
+    <html>
+        <head>
+            <title>MeiBot - Mapeamento de Porteiros</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{ font-family: sans-serif; background: #f4f4f9; color: #333; padding: 20px; }}
+                h1 {{ color: #25D366; text-align: center; }}
+                .rua-container {{ background: #fff; margin-bottom: 20px; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+                .rua-nome {{ font-weight: bold; font-size: 1.2em; border-bottom: 2px solid #25D366; margin-bottom: 10px; color: #128C7E; }}
+                .item {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
+                .item:last-child {{ border-bottom: none; }}
+                .numero {{ font-weight: bold; color: #444; }}
+                .nome {{ color: #128C7E; }}
+                .nota {{ font-size: 0.9em; color: #666; font-style: italic; margin-top: 4px; }}
+                .turno {{ font-size: 0.8em; background: #e1f5fe; color: #01579b; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }}
+            </style>
+        </head>
+        <body>
+            <h1>📋 Meu Mapeamento</h1>
+    """
+
+    if not ruas:
+        html_content += "<p style='text-align:center'>Nenhum porteiro cadastrado ainda.</p>"
+    else:
+        for rua in sorted(ruas.keys()):
+            html_content += f"<div class='rua-container'><div class='rua-nome'>📍 {rua}</div>"
+            # Ordena por número (convertendo para int se possível para ordem numérica correta)
+            sorted_items = sorted(ruas[rua], key=lambda x: int(''.join(filter(str.isdigit, x['numero']))) if any(c.isdigit() for x in x['numero']) else x['numero'])
+            
+            for p in sorted_items:
+                html_content += f"""
+                <div class='item'>
+                    <span class='numero'>nº {p['numero']}</span>: 
+                    <span class='nome'>{p['nome_porteiro']}</span>
+                    {f"<span class='turno'>{p['turno']}</span>" if p['turno'] else ""}
+                    {f"<div class='nota'>📝 {p['notas_predio']}</div>" if p['notas_predio'] else ""}
+                </div>
+                """
+            html_content += "</div>"
+
+    html_content += "</body></html>"
+    return html_content
 
 if __name__ == "__main__":
     import uvicorn
