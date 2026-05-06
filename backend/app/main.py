@@ -99,13 +99,24 @@ async def process_interpreted_data(user, interpreted):
 
     if intencao == "corrigir_porteiro":
         info = interpreted.get("porteiro_info", {})
-        # A IA deve tentar identificar o 'nome_antigo' se o usuário disser "Troca o João pelo Marcos"
-        # Se não identificar, usamos o nome atual enviado para tentar atualizar as notas ou turno
-        nome_busca = info.get("nome_antigo") or info.get("nome")
-        res = db.update_porteiro(user_id, info.get("rua"), info.get("numero"), nome_busca, info.get("nome"), info.get("turno"), info.get("notas"))
+        rua = info.get("rua")
+        numero = info.get("numero")
+        nome_novo = info.get("nome")
+        nome_busca = info.get("nome_antigo")
+        
+        # Se não enviou o nome antigo, tenta descobrir se só tem um porteiro lá
+        if not nome_busca:
+            existentes = db.get_porteiros_by_address(user_id, rua, numero)
+            if len(existentes) == 1:
+                nome_busca = existentes[0]["nome_porteiro"]
+            else:
+                # Se houver mais de um, ainda tentamos usar o nome_novo (caso seja ajuste de nota/turno)
+                nome_busca = nome_novo
+
+        res = db.update_porteiro(user_id, rua, numero, nome_busca, nome_novo, info.get("turno"), info.get("notas"))
         if res:
-            return f"✅ Cadastro de porteiros em {info.get('rua')}, {info.get('numero')} atualizado!"
-        return "❌ Não consegui localizar o porteiro para corrigir. Verifique o endereço e o nome."
+            return f"✅ Cadastro de porteiros em {rua}, {numero} atualizado!"
+        return f"❌ Não consegui localizar o porteiro para corrigir em {rua}, {numero}. Verifique o endereço ou diga o nome antigo."
 
     active_op = db.get_active_operation(user_id)
     
