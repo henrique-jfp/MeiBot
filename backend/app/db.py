@@ -136,10 +136,32 @@ class DBService:
         response = self.supabase.table("eventos").select("*, apps(nome)").eq("user_id", user_id).gte("timestamp", seven_days_ago).execute()
         return response.data
 
+    def get_previous_weekly_summary(self, user_id: str):
+        import datetime
+        now = datetime.datetime.now()
+        seven_days_ago = (now - datetime.timedelta(days=7)).isoformat()
+        fourteen_days_ago = (now - datetime.timedelta(days=14)).isoformat()
+        response = self.supabase.table("eventos").select("*, apps(nome)").eq("user_id", user_id).gte("timestamp", fourteen_days_ago).lt("timestamp", seven_days_ago).execute()
+        return response.data
+
     def get_monthly_summary(self, user_id: str):
         import datetime
         thirty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=30)).isoformat()
         response = self.supabase.table("eventos").select("*, apps(nome)").eq("user_id", user_id).gte("timestamp", thirty_days_ago).execute()
+        return response.data
+
+    def get_previous_monthly_summary(self, user_id: str):
+        import datetime
+        now = datetime.datetime.now()
+        thirty_days_ago = (now - datetime.timedelta(days=30)).isoformat()
+        sixty_days_ago = (now - datetime.timedelta(days=60)).isoformat()
+        response = self.supabase.table("eventos").select("*, apps(nome)").eq("user_id", user_id).gte("timestamp", sixty_days_ago).lt("timestamp", thirty_days_ago).execute()
+        return response.data
+
+    def get_operations_for_period(self, user_id: str, days: int):
+        import datetime
+        start_date = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
+        response = self.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).gte("hora_inicio", start_date).execute()
         return response.data
 
     def get_all_time_summary(self, user_id: str):

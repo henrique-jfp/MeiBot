@@ -2,7 +2,7 @@ import datetime
 
 class LogicService:
     @staticmethod
-    def calculate_metrics(events: list):
+    def calculate_metrics(events: list, operations: list = None):
         total_ganho = 0
         total_gastos_essenciais = 0
         total_gastos_nao_essenciais = 0
@@ -25,17 +25,36 @@ class LogicService:
         total_gastos = total_gastos_essenciais + total_gastos_nao_essenciais
         lucro_liquido = total_ganho - total_gastos
         rs_km = total_ganho / total_km if total_km > 0 else 0
+        
+        # Cálculo de horas trabalhadas
+        total_horas = 0
+        if operations:
+            for op in operations:
+                if op.get("hora_inicio") and op.get("hora_fim"):
+                    try:
+                        inicio = datetime.datetime.fromisoformat(op["hora_inicio"].replace('Z', '+00:00'))
+                        fim = datetime.datetime.fromisoformat(op["hora_fim"].replace('Z', '+00:00'))
+                        diff = (fim - inicio).total_seconds() / 3600
+                        if diff > 0: total_horas += diff
+                    except:
+                        continue
+        
+        rs_hora = total_ganho / total_horas if total_horas > 0 else 0
         rs_pacote = total_ganho / total_pacotes if total_pacotes > 0 else 0
+        percentual_nao_essenciais = (total_gastos_nao_essenciais / total_ganho * 100) if total_ganho > 0 else 0
         
         return {
             "total_ganho": total_ganho,
             "total_gastos_essenciais": total_gastos_essenciais,
             "total_gastos_nao_essenciais": total_gastos_nao_essenciais,
+            "percentual_nao_essenciais": percentual_nao_essenciais,
             "total_gastos": total_gastos,
             "lucro_liquido": lucro_liquido,
             "total_km": total_km,
             "total_pacotes": total_pacotes,
+            "total_horas": total_horas,
             "rs_km": rs_km,
+            "rs_hora": rs_hora,
             "rs_pacote": rs_pacote
         }
 
@@ -70,17 +89,24 @@ class LogicService:
         return card
 
     @staticmethod
-    def format_summary(metrics: dict, title: str = "RESUMO DA OPERAÇÃO"):
-        return (
+    def format_summary(metrics: dict, title: str = "RESUMO DA OPERAÇÃO", analyst_insight: str = None):
+        resumo = (
             f"📊 *{title.upper()}*\n\n"
             f"💰 Ganho Total: R$ {metrics['total_ganho']:.2f}\n"
             f"⛽ Gastos Essenciais: R$ {metrics['total_gastos_essenciais']:.2f}\n"
-            f"🚬 Gastos Não Essenciais: R$ {metrics['total_gastos_nao_essenciais']:.2f}\n"
+            f"🚬 Gastos Não Essenciais: R$ {metrics['total_gastos_nao_essenciais']:.2f} ({metrics['percentual_nao_essenciais']:.1f}%)\n"
             f"💵 Lucro Líquido: R$ {metrics['lucro_liquido']:.2f}\n"
             f"🛣️ KM Rodados: {metrics['total_km']:.1f} km\n"
-            f"📦 Pacotes: {metrics['total_pacotes']}\n\n"
-            f"📈 Métricas:\n"
+            f"📦 Pacotes: {metrics['total_pacotes']}\n"
+            f"⏱️ Horas Trabalhadas: {metrics['total_horas']:.1f}h\n\n"
+            f"📈 Métricas de Eficiência:\n"
             f"- R$/km: R$ {metrics['rs_km']:.2f}\n"
+            f"- R$/hora: R$ {metrics['rs_hora']:.2f}\n"
             f"- R$/pacote: R$ {metrics['rs_pacote']:.2f}\n\n"
-            f"Bom trabalho! Descansa que amanhã tem mais! 🚀"
         )
+        
+        if analyst_insight:
+            resumo += f"🧠 *VISÃO DO ANALISTA FODA:*\n{analyst_insight}\n\n"
+            
+        resumo += f"Bom trabalho! Descansa que amanhã tem mais! 🚀"
+        return resumo

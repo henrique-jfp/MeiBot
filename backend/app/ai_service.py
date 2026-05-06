@@ -138,3 +138,46 @@ class AIService:
         )
         
         return chat_completion.choices[0].message.content
+
+    @staticmethod
+    async def generate_analyst_insight(current_metrics: dict, previous_metrics: dict, period_type: str):
+        prompt = f"""
+        Você é um ANALISTA DE DADOS FODA especializado em logística e delivery.
+        Seu objetivo é analisar o desempenho de um entregador e dar uma visão real, nua e crua, sem enrolação.
+
+        REGRAS DE OURO DA ANÁLISE:
+        1. Ganho por KM (R$/KM): 1 (Ruim), 2 (Regular), 3 (Bom), 4 (Muito bom), 5+ (Excelente).
+        2. Gastos Não Essenciais (% do Ganho Bruto): 3% (Ok), 5% (Alerta Laranja), 7%+ (Alerta Vermelho).
+        3. Ganho por Hora (R$/Hora): 20 (Péssimo), 30 (Regular), 40 (Bom), 50 (Muito bom), 60+ (Excelente).
+
+        DADOS ATUAIS ({period_type}):
+        - Ganho Total: R$ {current_metrics['total_ganho']:.2f}
+        - Lucro Líquido: R$ {current_metrics['lucro_liquido']:.2f}
+        - R$/KM: R$ {current_metrics['rs_km']:.2f}
+        - R$/Hora: R$ {current_metrics['rs_hora']:.2f}
+        - % Gastos Não Essenciais: {current_metrics['percentual_nao_essenciais']:.1f}%
+
+        DADOS DO PERÍODO ANTERIOR:
+        - Ganho Total: R$ {previous_metrics['total_ganho']:.2f}
+        - R$/KM: R$ {previous_metrics['rs_km']:.2f}
+        - R$/Hora: R$ {previous_metrics['rs_hora']:.2f}
+
+        TAREFA:
+        Compare os períodos. Diga o que melhorou ou piorou. Julgue o desempenho atual baseado nas REGRAS DE OURO acima.
+        Seja direto, use linguagem de "parceiro de estrada" mas com a autoridade de um analista foda.
+        Termine com uma "Dica de Ouro" prática para o próximo período.
+        Limite o texto a no máximo 4 parágrafos curtos.
+        """
+        
+        try:
+            chat_completion = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "Você é um analista de performance experiente e direto."},
+                    {"role": "user", "content": prompt}
+                ],
+                model="llama-3.3-70b-versatile"
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            print(f"Error generating analyst insight: {e}")
+            return "Não consegui gerar a análise agora, mas os números acima estão salvos. Mantenha o foco!"

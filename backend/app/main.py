@@ -71,14 +71,26 @@ async def process_interpreted_data(user, interpreted):
     active_op = db.get_active_operation(user_id)
     
     if intencao == "resumo_semanal":
-        events_db = db.get_weekly_summary(user_id)
-        metrics = LogicService.calculate_metrics(events_db)
-        return LogicService.format_summary(metrics, "RESUMO SEMANAL SOLICITADO")
+        events_curr = db.get_weekly_summary(user_id)
+        ops_curr = db.get_operations_for_period(user_id, 7)
+        metrics_curr = LogicService.calculate_metrics(events_curr, ops_curr)
+        
+        events_prev = db.get_previous_weekly_summary(user_id)
+        metrics_prev = LogicService.calculate_metrics(events_prev, None)
+        
+        insight = await ai.generate_analyst_insight(metrics_curr, metrics_prev, "Semana Atual")
+        return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL SOLICITADO", insight)
 
     if intencao == "resumo_mensal":
-        events_db = db.get_monthly_summary(user_id)
-        metrics = LogicService.calculate_metrics(events_db)
-        return LogicService.format_summary(metrics, "RESUMO MENSAL SOLICITADO")
+        events_curr = db.get_monthly_summary(user_id)
+        ops_curr = db.get_operations_for_period(user_id, 30)
+        metrics_curr = LogicService.calculate_metrics(events_curr, ops_curr)
+        
+        events_prev = db.get_previous_monthly_summary(user_id)
+        metrics_prev = LogicService.calculate_metrics(events_prev, None)
+        
+        insight = await ai.generate_analyst_insight(metrics_curr, metrics_prev, "Mês Atual")
+        return LogicService.format_summary(metrics_curr, "RESUMO MENSAL SOLICITADO", insight)
 
     if intencao == "iniciar":
         if active_op:
@@ -97,19 +109,26 @@ async def process_interpreted_data(user, interpreted):
         is_first_day_of_month = today.day == 1
         is_saturday = today.weekday() == 5
 
-        if is_last_day_of_month:
-            events_db = db.get_monthly_summary(user_id)
-            metrics = LogicService.calculate_metrics(events_db)
-            return LogicService.format_summary(metrics, "RESUMO MENSAL ACUMULADO")
-        elif is_first_day_of_month:
-            # Caso não tenha trabalhado no dia 31, envia o do mês passado no dia 1
-            events_db = db.get_monthly_summary(user_id)
-            metrics = LogicService.calculate_metrics(events_db)
-            return LogicService.format_summary(metrics, "RESUMO DO MÊS ENCERRADO")
+        if is_last_day_of_month or is_first_day_of_month:
+            events_curr = db.get_monthly_summary(user_id)
+            ops_curr = db.get_operations_for_period(user_id, 30)
+            metrics_curr = LogicService.calculate_metrics(events_curr, ops_curr)
+            events_prev = db.get_previous_monthly_summary(user_id)
+            metrics_prev = LogicService.calculate_metrics(events_prev, None)
+            
+            insight = await ai.generate_analyst_insight(metrics_curr, metrics_prev, "Mês")
+            title = "RESUMO MENSAL ACUMULADO" if is_last_day_of_month else "RESUMO DO MÊS ENCERRADO"
+            return LogicService.format_summary(metrics_curr, title, insight)
+            
         elif is_saturday:
-            events_db = db.get_weekly_summary(user_id)
-            metrics = LogicService.calculate_metrics(events_db)
-            return LogicService.format_summary(metrics, "RESUMO SEMANAL ACUMULADO")
+            events_curr = db.get_weekly_summary(user_id)
+            ops_curr = db.get_operations_for_period(user_id, 7)
+            metrics_curr = LogicService.calculate_metrics(events_curr, ops_curr)
+            events_prev = db.get_previous_weekly_summary(user_id)
+            metrics_prev = LogicService.calculate_metrics(events_prev, None)
+            
+            insight = await ai.generate_analyst_insight(metrics_curr, metrics_prev, "Semana")
+            return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL ACUMULADO", insight)
         else:
             return "🚀 Operação encerrada com sucesso! Bom descanso, parceiro. No sábado te envio o resumão da semana completa! 👊"
         
