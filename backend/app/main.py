@@ -86,10 +86,13 @@ async def process_interpreted_data(user, interpreted):
 
     # intencao == "registro" para o dia atual
     if not active_op:
-        active_op = db.start_operation(user_id)
-        for ev in eventos:
-            db.add_event(user_id, active_op["id"], ev)
-        return f"✅ Registrei os dados e iniciei sua operação de hoje automaticamente! Manda bala!"
+        if len(eventos) > 0:
+            active_op = db.start_operation(user_id)
+            for ev in eventos:
+                db.add_event(user_id, active_op["id"], ev)
+            return f"✅ Registrei os dados e iniciei sua operação de hoje automaticamente! Manda bala!"
+        else:
+            return "Hmm, não entendi. Você quer iniciar uma operação ou registrar algum ganho/gasto?"
     
     for ev in eventos:
         db.add_event(user_id, active_op["id"], ev)
