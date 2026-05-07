@@ -83,10 +83,16 @@ async function connectToWhatsApp() {
         // Identificamos mensagens do bot pelos emojis iniciais ou prefixos comuns.
         if (fromMe) {
             const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-            const isBotResponse = /^[✅❌📊🚀⛽📈🎙️]/.test(text) || text.includes('Vou ouvir seu áudio') || text.includes('Hmm, não entendi');
             
-            if (isBotResponse) {
-                // console.log(`[LOOP-PREVENT] Ignorando resposta do próprio bot.`);
+            // Trava 1: Emojis de resposta curta
+            const startsWithBotEmoji = /^[✅❌📊🚀⛽📈🎙️📋🏢]/.test(text);
+            
+            // Trava 2: Mensagens longas do Analista ou dicas (você não digitaria comandos tão longos)
+            const isLongAnalysis = text.length > 300;
+            const containsBotKeywords = text.includes('Análise estratégica') || text.includes('projeto pessoal') || text.includes('Visão do Analista');
+
+            if (startsWithBotEmoji || isLongAnalysis || containsBotKeywords) {
+                // console.log(`[LOOP-PREVENT] Ignorando resposta/análise do próprio bot.`);
                 return;
             }
         }
