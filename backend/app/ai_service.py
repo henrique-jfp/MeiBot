@@ -1,207 +1,156 @@
+import google.generativeai as genai
 import os
 import json
-import datetime
-import google.generativeai as genai
-from groq import Groq
 from dotenv import load_dotenv
+from google.cloud import vision
+from google.oauth2 import service_account
 
 load_dotenv()
 
-# Configure Gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-
-# Configure Groq
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
 class AIService:
-    @staticmethod
-    async def transcribe_audio(audio_bytes: bytes):
-        # Groq Whisper espera um arquivo em disco ou um objeto file-like
-        temp_filename = "temp_audio.ogg"
-        with open(temp_filename, "wb") as f:
-            f.write(audio_bytes)
+    def __init__(self):
+        # Gemini Config
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        # Usando o modelo solicitado (versão 2.5 Flash)
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
         
-        with open(temp_filename, "rb") as file:
-            transcription = groq_client.audio.transcriptions.create(
-                file=(temp_filename, file.read()),
-                model="whisper-large-v3",
-                response_format="text",
-                language="pt"
-            )
-        
-        os.remove(temp_filename)
-        return transcription
+        # Google Vision Config
+        creds_json = os.getenv("GOOGLE_VISION_CREDENTIALS_JSON")
+        if creds_json:
+            try:
+                creds_dict = json.loads(creds_json)
+                if "private_key" in creds_dict:
+                    pk = creds_dict["private_key"]
+                    # Replace literal \n and then remove any other backslashes that might be escaping things incorrectly
+                    pk = pk.replace("\\n", "\n").replace("\\", "")
+                    creds_dict["private_key"] = pk
+                
+                credentials = service_account.Credentials.from_service_account_info(creds_dict)
+                self.vision_client = vision.ImageAnnotatorClient(credentials=credentials)
+            except Exception as e:
+                # Silently fail if Vision is not configured correctly to not break the whole backend
+                print(f"Vision Client initialization skipped: {e}")
+                self.vision_client = None
+        else:
+            self.vision_client = None
 
-    @staticmethod
-    async def interpret_message(text: str):
-        hoje = datetime.date.today().isoformat()
-        
+    async def interpret_message(self, text: str):
         prompt = f"""
-        Você é um assistente de um entregador. Sua tarefa é extrair dados de mensagens sobre o dia de trabalho.
-        Hoje é dia {hoje}. 
-
-        Extraia uma LINHA DO TEMPO e MÉTRICAS GERAIS.
-
-        Converta a mensagem num JSON estruturado EXATAMENTE neste formato:
-        {{
-            "intencao": "iniciar" | "encerrar" | "pergunta" | "registro" | "resumo_diario" | "resumo_semanal" | "resumo_mensal" | "cadastrar_porteiro" | "corrigir_porteiro" | "consultar_porteiro" | "listar_porteiros" | "cadastrar_entregador",
-            "data_referencia": "YYYY-MM-DD" ou null,
-            "pergunta": "texto da pergunta" ou null,
-            "entregador_info": {{
-                "nome": "Nome do entregador" ou null,
-                "valor_diaria": float ou null
-            }},
-            "porteiro_info": {{
-                "rua": "Nome da rua" ou null,
-                "numero": "123" ou null,
-                "nome": "Nome do porteiro" ou null,
-                "nome_antigo": "Nome anterior" ou null,
-                "turno": "manhã/tarde/noite" ou null,
-                "notas": "Notas do prédio" ou null
-            }},
-            "eventos": [
-                {{
-                    "app": "Nome do app (ex: Shopee, Correios)" ou null,
-                    "tipo": "rota" | "gasto" | "ajuste",
-                    "pacotes": int,
-                    "km_deslocamento": float,
-                    "km_rota": float,
-                    "hora_chegada_galpao": "HH:MM:SS" ou null,
-                    "hora_inicio_rota": "HH:MM:SS" ou null,
-                    "hora_fim_operacao": "HH:MM:SS" ou null,
-                    "valor_extra": float,
-                    "categoria": "Essencial" | "Não Essencial" | null,
-                    "descricao": "Detalhe" ou null
-                }}
-            ]
-        }}
-
-        Regras de Intenção (MUITO IMPORTANTE):
-        - 'pergunta': Use quando o usuário fizer uma pergunta específica que exija contar, somar ou consultar o passado (ex: "Quantos dias trabalhei?", "Quanto ganhei segunda?", "Qual o total de km desse mês?").
-        - 'resumo_diario': Quando ele pedir "Analisa o dia tal" ou "Resumo de hoje".
-        - 'resumo_semanal': Quando ele pedir o "Resumo da semana" ou "Relatório semanal" (Análise completa em 3 blocos).
-        - 'resumo_mensal': Quando ele pedir o "Resumo do mês" ou "Relatório mensal".
-        - 'registro': Quando ele estiver apenas informando dados do trabalho para salvar.
-
-        Regras de Extração:
-        - 'hora_chegada_galpao': Chegada no galpão/início do dia.
-        - 'hora_inicio_rota': Saída do galpão/início das entregas.
-        - 'hora_fim_operacao': Fim das entregas/finalização.
-        - 'km_deslocamento': KM de casa ao trabalho.
-        - 'km_rota': KM de entregas.
-        - 'pacotes': Quantidade de entregas.
+        Você é um assistente de logística para entregadores. Interprete a mensagem e retorne um JSON.
         
-        Mensagem: "{text}"
+        Intenções Válidas:
+        - 'iniciar': Quando o entregador quer começar o dia ou a operação.
+        - 'encerrar': Quando o entregador quer fechar o dia ou a operação.
+        - 'registro': Para registrar ganhos, gastos, rotas, pacotes, KM, ou tempos de espera.
+        - 'resumo_diario': Para ver o que foi feito hoje ou em uma data específica.
+        - 'resumo_semanal': Para ver o resumo dos últimos 7 dias.
+        - 'resumo_mensal': Para ver o resumo dos últimos 30 dias.
+        - 'pergunta': Quando o entregador faz uma pergunta sobre seus ganhos ou dados históricos.
+        - 'cadastrar_entregador': Para cadastrar um novo entregador (nome, valor diária).
+        - 'listar_porteiros': Para listar os porteiros mapeados.
+        - 'consultar_porteiro': Para buscar porteiros de um endereço específico.
+        - 'cadastrar_porteiro': Para mapear um novo porteiro em um endereço.
+        - 'corrigir_porteiro': Para atualizar informações de um porteiro já cadastrado.
 
-        Retorne APENAS o objeto JSON.
+        Campos do JSON:
+        - intencao: Uma das intenções acima.
+        - data_referencia: YYYY-MM-DD (se o usuário falar "ontem", "anteontem", "dia 05", etc).
+        - pergunta: O texto da pergunta (se intencao for 'pergunta').
+        - entregador_info: {{'nome': str, 'valor_diaria': float}}
+        - porteiro_info: {{'rua': str, 'numero': str, 'nome': str, 'nome_antigo': str, 'turno': str, 'notas': str}}
+        - eventos: lista de objetos {{'app': str, 'tipo': 'ganho'|'gasto'|'ajuste', 'valor': float, 'km': float, 'pacotes': int, 'km_deslocamento': float, 'km_rota': float, 'hora_chegada_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'valor_extra': float, 'categoria': str, 'descricao': str}}
+        
+        Exemplos:
+        "fiz uma rota hoje na loggi 150 reais 40km 30 pacotes" -> intencao: 'registro', eventos: [{{'app': 'Loggi', 'tipo': 'ganho', 'valor': 150, 'km_rota': 40, 'pacotes': 30}}]
+        "quanto ganhei na semana?" -> intencao: 'resumo_semanal'
+        "resumo da semana" -> intencao: 'resumo_semanal'
+        "resumo de ontem" -> intencao: 'resumo_diario', data_referencia: 'YYYY-MM-DD' (data de ontem)
+        
+        Texto do usuário: "{text}"
         """
-        
-        chat_completion = groq_client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": "Você é um extrator de dados JSON preciso. Retorne apenas o objeto JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            model="llama-3.3-70b-versatile",
-            response_format={ "type": "json_object" }
-        )
-        
-        return json.loads(chat_completion.choices[0].message.content)
+        response = self.model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+        return json.loads(response.text)
 
-    @staticmethod
-    async def process_image(image_bytes: bytes, mime_type: str):
-        prompt = """
-        Analise este print de um aplicativo de entregas.
-        Extraia:
-        1. Valor total ganho na imagem.
-        2. Aplicativo (ex: iFood, Uber, Rappi).
-        3. Quilometragem (se houver).
-        4. Quantidade de entregas/corridas (se houver).
-
-        Retorne no formato JSON:
-        {
-            "intencao": "registro",
-            "data_referencia": null,
-            "hora_inicio": null,
-            "hora_fim": null,
-            "pergunta": null,
-            "eventos": [
-                {"tipo": "corrida", "valor": 0.0, "app": "", "km": 0.0, "pacotes": 0, "descricao": "Print lido"}
-            ]
-        }
-        """
-        
-        response = gemini_model.generate_content([
-            prompt,
-            {"mime_type": mime_type, "data": image_bytes}
-        ])
-        
-        text = response.text.replace('```json', '').replace('```', '').strip()
-        return json.loads(text)
-
-    @staticmethod
-    async def answer_question(context: str, question: str):
+    async def answer_question(self, context: str, question: str):
         prompt = f"""
-        Com base nos dados das entregas abaixo:
+        Com base nos dados abaixo:
         {context}
         
-        Responda à pergunta do entregador: "{question}"
-        
-        Seja direto, motivador e use uma linguagem natural de "parceiro de estrada".
+        Responda à pergunta do entregador de forma direta e amigável:
+        "{question}"
         """
-        
-        chat_completion = groq_client.chat.completions.create(
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            model="llama-3.3-70b-versatile"
-        )
-        
-        return chat_completion.choices[0].message.content
+        response = self.model.generate_content(prompt)
+        return response.text
 
-    @staticmethod
-    async def generate_analyst_insight(current_metrics: dict, previous_metrics: dict, period_type: str):
+    async def process_image(self, image_bytes: bytes, mime_type: str):
+        # 1. OCR com Google Vision (Mais preciso para rotas e comprovantes)
+        ocr_text = ""
+        if self.vision_client:
+            image = vision.Image(content=image_bytes)
+            response = self.vision_client.text_detection(image=image)
+            texts = response.text_annotations
+            if texts:
+                ocr_text = texts[0].description
+        
+        # 2. Interpretação do texto OCR pelo Gemini
         prompt = f"""
-        Você é um ANALISTA DE DADOS FODA especializado em logística e delivery.
-        Seu objetivo é analisar o desempenho de um entregador e dar uma visão real, nua e crua, sem enrolação.
-
-        REGRAS DE OURO DA ANÁLISE:
-        1. Ganho por KM (R$/KM): 1 (Ruim), 2 (Regular), 3 (Bom), 4 (Muito bom), 5+ (Excelente).
-        2. Gastos Não Essenciais (% do Ganho Bruto): 3% (Ok), 5% (Alerta Laranja), 7%+ (Alerta Vermelho).
-        3. Ganho por Hora (R$/Hora): 20 (Péssimo), 30 (Regular), 40 (Bom), 50 (Muito bom), 60+ (Excelente).
-
-        DADOS ATUAIS ({period_type}):
-        - Ganho Total: R$ {current_metrics['total_ganho']:.2f}
-        - Lucro Líquido: R$ {current_metrics['lucro_liquido']:.2f}
-        - R$/KM: R$ {current_metrics['rs_km']:.2f}
-        - R$/Hora (Rua): R$ {current_metrics['rs_hora']:.2f}
-        - Horas Produtivas (Rua): {current_metrics['horas_produtivas']:.1f}h
-        - Tempo de Espera (Galpão): {current_metrics['tempo_espera_horas']:.1f}h
-        - % Gastos Não Essenciais: {current_metrics['percentual_nao_essenciais']:.1f}%
-
-        DADOS DO PERÍODO ANTERIOR:
-        - Ganho Total: R$ {previous_metrics['total_ganho']:.2f}
-        - R$/KM: R$ {previous_metrics['rs_km']:.2f}
-        - R$/Hora (Rua): R$ {previous_metrics['rs_hora']:.2f}
-        - Tempo de Espera (Galpão): {previous_metrics.get('tempo_espera_horas', 0):.1f}h
-
-        TAREFA:
-        Compare os períodos. Diga o que melhorou ou piorou. Julgue o desempenho atual baseado nas REGRAS DE OURO acima.
-        Dê atenção especial ao Tempo de Espera: se for alto, critique a ineficiência do galpão.
-        Seja direto, use linguagem de "parceiro de estrada" mas com a autoridade de um analista foda.
-        Termine com uma "Dica de Ouro" prática para o próximo período.
-        Limite o texto a no máximo 4 parágrafos curtos.
-        """
+        Analise o texto extraído de um comprovante ou tela de app de entrega via OCR.
+        Retorne um JSON com a intenção 'registro' e a lista de 'eventos' encontrados.
+        Identifique: App, Valor, KM, Quantidade de Pacotes, etc.
         
-        try:
-            chat_completion = groq_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": "Você é um analista de performance experiente e direto."},
-                    {"role": "user", "content": prompt}
-                ],
-                model="llama-3.3-70b-versatile"
-            )
-            return chat_completion.choices[0].message.content
-        except Exception as e:
-            print(f"Error generating analyst insight: {e}")
-            return "Não consegui gerar a análise agora, mas os números acima estão salvos. Mantenha o foco!"
+        Texto OCR:
+        {ocr_text}
+        """
+        response = self.model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+        return json.loads(response.text)
+
+    async def transcribe_audio(self, audio_bytes: bytes):
+        prompt = "Transcreva este áudio de um entregador descrevendo seu dia ou fazendo uma pergunta."
+        response = self.model.generate_content([
+            prompt,
+            {'mime_type': 'audio/ogg', 'data': audio_bytes}
+        ])
+        return response.text
+
+    async def generate_analyst_insight(self, current_metrics: dict, previous_metrics: dict = None, period_type: str = "Semana"):
+        curr = {
+            "ganho": current_metrics.get("total_ganhos", 0),
+            "gasto": current_metrics.get("total_gastos", 0),
+            "saldo": current_metrics.get("saldo", 0),
+            "km": current_metrics.get("km_total", 0),
+            "horas": current_metrics.get("total_hours", 0),
+            "rs_hora": current_metrics.get("ganho_por_hora", 0)
+        }
+        
+        prev_str = "N/A"
+        if previous_metrics:
+            prev = {
+                "ganho": previous_metrics.get("total_ganhos", 0),
+                "km": previous_metrics.get("km_total", 0),
+                "rs_hora": previous_metrics.get("ganho_por_hora", 0)
+            }
+            prev_str = f"Ganho: R$ {prev['ganho']:.2f}, KM: {prev['km']:.1f}, R$/Hora: R$ {prev['rs_hora']:.2f}"
+
+        prompt = f"""
+        Você é o ANALISTA ESTRATÉGICO SÊNIOR do MeiBot.
+        Sua missão é dar uma consultoria de negócios detalhada para o entregador.
+        
+        DADOS ATUAIS ({period_type}):
+        - Ganho Total: R$ {curr['ganho']:.2f}
+        - Saldo Líquido: R$ {curr['saldo']:.2f}
+        - KM Total: {curr['km']:.1f}
+        - Horas: {curr['horas']:.1f}h
+        - R$/Hora: R$ {curr['rs_hora']:.2f}
+        
+        COMPARAÇÃO ANTERIOR:
+        {prev_str}
+        
+        Sua resposta deve ter no mínimo 3 parágrafos curtos:
+        1. Análise de Performance: Comente sobre o ganho por hora e o custo por KM. Diga se ele está sendo eficiente ou se está "pagando para trabalhar".
+        2. Comparação: Se houver dados anteriores, compare se ele melhorou ou piorou e o porquê provável.
+        3. Dica de Ouro: Dê uma estratégia real para ele ganhar mais dinheiro (ex: escolher melhor os horários, focar em apps que pagam mais por km, reduzir gastos supérfluos).
+        
+        Use gírias de entregador (pista, meta, foguete, parceiro) mas mantenha a seriedade financeira.
+        """
+        response = self.model.generate_content(prompt)
+        return response.text

@@ -124,7 +124,7 @@ function shouldHandleGroup(name, isTest) {
 }
 
 async function handleRouteImage(sock, msg, groupName, isTest) {
-    if (!state.active || state.locked) return true;
+    if (!state.active || state.locked) return false;
     if (!isTest && ROUTES_CONFIG.schedule.enabledInProd && !isWithinSchedule()) {
         return true;
     }
@@ -142,7 +142,7 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     }
 
     if (!buffer || !mimeType || !ROUTES_CONFIG.allowedMimeTypes.includes(mimeType)) {
-        return true;
+        return false;
     }
 
     const payload = {
@@ -152,8 +152,8 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
 
     const parsed = await parseRouteSheet(payload);
     if (parsed.error || !parsed.routes || parsed.routes.length === 0) {
-        console.log('[ROUTE-CLAIM] No routes parsed.');
-        return true;
+        console.log('[ROUTE-CLAIM] No routes parsed, passing to main bot.');
+        return false;
     }
 
     const candidates = buildCandidates(parsed.routes);
@@ -254,5 +254,6 @@ async function handleIncomingMessage(sock, msg) {
 module.exports = {
     handleIncomingMessage,
     handleReaction,
-    handleTextReply
+    handleTextReply,
+    getGroupName
 };

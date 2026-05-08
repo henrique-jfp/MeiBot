@@ -47,12 +47,16 @@ async function connectToWhatsApp() {
             const statusCode = (lastDisconnect.error instanceof Boom) 
                 ? lastDisconnect.error.output.statusCode 
                 : 0;
+            const reason = lastDisconnect.error?.message || 'unknown';
+            console.log(`[CONN] Conexão fechada. Motivo: ${reason}, Código: ${statusCode}`);
             
             if (statusCode !== DisconnectReason.loggedOut) {
+                console.log('[CONN] Tentando reconectar em 10s...');
                 setTimeout(() => connectToWhatsApp(), 10000);
             }
         } else if (connection === 'open') {
             console.log('✅ MeiBot conectado com sucesso!');
+            console.log('Usuário:', sock.user);
         }
     });
 
@@ -62,63 +66,76 @@ async function connectToWhatsApp() {
 
         const remoteJid = msg.key.remoteJid;
         const fromMe = msg.key.fromMe;
-        const myId = sock.user.id.split(':')[0];
+        const myId = sock.user?.id?.split(':')[0];
 
-        try {
-            const handled = await routeClaim.handleIncomingMessage(sock, msg);
-            if (handled) return;
-        } catch (err) {
-            console.error('[ROUTE-CLAIM] Error:', err.message);
-        }
-        
-        // --- TRAVA DE SEGURANÇA (SELF-ONLY) ---
-        // O remoteJid na conversa consigo mesmo geralmente é o seu próprio número @s.whatsapp.net
-        const isMe = remoteJid.includes(myId);
-
-        if (!isMe) {
-            console.log(`[IGNORE] Mensagem de ${remoteJid} ignorada: não é a sua conversa pessoal.`);
+        if (!remoteJid || !myId) {
             return;
         }
 
-        // Se a mensagem foi enviada POR VOCÊ (no celular), processamos.
-        // Se a mensagem foi enviada PELO BOT (via código), ignoramos para evitar loop.
-        // O Baileys costuma marcar mensagens enviadas pelo próprio socket como fromMe: true.
-        // Mas mensagens que você digita no celular também podem vir como fromMe: true na conversa consigo mesmo.
-        
-        // Vamos logar para entender o comportamento no seu servidor:
-        console.log(`[MSG] Recebida de ${remoteJid} | fromMe: ${fromMe}`);
+        // LOG DE ENTRADA (Apenas para depuração interna)
+        console.log(`[RAW-MSG] From: ${remoteJid} | fromMe: ${fromMe}`);
 
-        // Se for uma mensagem que o BOT enviou (fromMe: true), ignore para evitar loop.
-        // Identificamos mensagens do bot pelos emojis iniciais ou prefixos comuns.
-        if (fromMe) {
-            const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-            
-            // Trava 1: Emojis de resposta curta
-            const startsWithBotEmoji = /^[✅❌📊🚀⛽📈🎙️📋🏢]/.test(text);
-            
-            // Trava 2: Mensagens longas do Analista ou dicas (você não digitaria comandos tão longos)
-            const isLongAnalysis = text.length > 300;
-            const containsBotKeywords = text.includes('Análise estratégica') || text.includes('projeto pessoal') || text.includes('Visão do Analista');
-
-            if (startsWithBotEmoji || isLongAnalysis || containsBotKeywords) {
-                // console.log(`[LOOP-PREVENT] Ignorando resposta/análise do próprio bot.`);
-                return;
+        // --- GATEWAY DE GRUPOS E COMANDOS DE ROTA ---
+        if (remoteJid.endsWith('@g.us')) {
+            try {
+                await routeClaim.handleIncomingMessage(sock, msg);
+            } catch (err) {
+                console.error('[ROUTE-CLAIM] Error:', err.message);
             }
+            // INDEPENDENTE do resultado, se é grupo, o bot morre aqui.
+            // Nunca deixa passar para o processamento de IA geral.
+            return;
+        }
+        
+        // --- TRAVA DE SEGURANÇA ESTRITA (SELF-ONLY) ---
+        // Só processa se o remoteJid contiver o seu próprio ID.
+        // Isso garante que se você mandar mensagem para outra pessoa, o bot não responda.
+        const isSelfChat = remoteJid.includes(myId);
+        
+        // Só responde se for no chat comigo mesmo E se a mensagem veio de MIM (para evitar loops)
+        if (!isSelfChat || !fromMe) {
+            return;
         }
 
-        // Se você quer que o bot responda quando você digita algo para si mesmo:
-        // Na conversa consigo mesmo, as mensagens que VOCÊ envia chegam com fromMe: true.
-        // Então NÃO podemos simplesmente ignorar fromMe: true.
+        console.log(`[MSG] Processando: ${remoteJid} | fromMe: ${fromMe}`);
+
+        // --- TRAVA DE LOOP INTELIGENTE ---
+        const text = msg.message.conversation || 
+                     msg.message.extendedTextMessage?.text || 
+                     msg.message.ephemeralMessage?.message?.extendedTextMessage?.text ||
+                     msg.message.ephemeralMessage?.message?.conversation ||
+                     "";
+
+        // Se a mensagem for uma resposta do próprio bot, ignora
+        const startsWithBotEmoji = /^[✅❌📊🚀⛽📈🎙️📋🏢]/.test(text);
+        const isLongAnalysis = text.length > 400;
+        const containsBotKeywords = text.includes('Análise estratégica') || text.includes('Visão do Analista') || text.includes('Saldo Líquido');
+
+        if (startsWithBotEmoji || isLongAnalysis || containsBotKeywords) {
+            return;
+        }
 
         const from = remoteJid.split('@')[0];
         let payload = { from, type: 'text', content: '' };
 
         try {
-            if (msg.message.conversation || msg.message.extendedTextMessage) {
-                payload.content = msg.message.conversation || msg.message.extendedTextMessage.text;
+            // Captura de conteúdo
+            const messageContent = msg.message.conversation || 
+                                 msg.message.extendedTextMessage?.text || 
+                                 msg.message.imageMessage?.caption ||
+                                 msg.message.videoMessage?.caption ||
+                                 msg.message.ephemeralMessage?.message?.extendedTextMessage?.text ||
+                                 msg.message.ephemeralMessage?.message?.conversation ||
+                                 msg.message.ephemeralMessage?.message?.imageMessage?.caption ||
+                                 msg.message.viewOnceMessageV2?.message?.imageMessage?.caption ||
+                                 msg.message.viewOnceMessageV2?.message?.conversation ||
+                                 "";
+
+            if (messageContent) {
+                payload.content = messageContent;
                 payload.type = 'text';
             } 
-            else if (msg.message.imageMessage) {
+            else if (msg.message.imageMessage || msg.message.ephemeralMessage?.message?.imageMessage || msg.message.viewOnceMessageV2?.message?.imageMessage) {
                 const buffer = await downloadMediaMessage(msg, 'buffer', {});
                 payload.content = buffer.toString('base64');
                 payload.type = 'image';
@@ -134,6 +151,11 @@ async function connectToWhatsApp() {
                 const reply = await sendToBackend(payload);
                 
                 if (reply) {
+                    // SILÊNCIO TOTAL em erros de cota ou erros internos
+                    if (reply.includes('Quota exceeded') || reply.includes('429') || reply.includes('erro interno')) {
+                        console.log('[WARN] Erro detectado (Cota ou Interno). Bot ficará silencioso conforme configurado.');
+                        return;
+                    }
                     await sock.sendMessage(remoteJid, { text: reply });
                 }
             }

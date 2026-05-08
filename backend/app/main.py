@@ -76,44 +76,37 @@ async def process_interpreted_data(user, interpreted):
         active_op = db.get_or_create_operation_by_date(user_id, data_ref)
     else:
         active_op = db.get_active_operation(user_id)
-        if not active_op and intencao == "registro" and len(eventos_brutos) > 0:
+        # Se não tem operação ativa, mas tem eventos para registrar, CRIA uma automaticamente
+        if not active_op and len(eventos_brutos) > 0:
+            print(f"DEBUG: Criando operação automática para o usuário {user_id}")
             active_op = db.start_operation(user_id)
 
     # 3. Processamento de Eventos com Parametrização
     eventos_processados = []
+    
+    # Se ainda assim não tiver active_op (falha no banco), tenta criar uma de emergência
+    if not active_op or not active_op.get("id"):
+        today = datetime.date.today().isoformat()
+        active_op = db.get_or_create_operation_by_date(user_id, today)
     for ev in eventos_brutos:
-        app_info = db.get_app_by_name(ev.get("app"))
-        
-        # Inteligência de Galpão (Espera)
-        if ev.get("hora_chegada_galpao") and ev.get("hora_inicio_rota"):
-            try:
-                h1 = datetime.datetime.strptime(ev["hora_chegada_galpao"], "%H:%M:%S")
-                h2 = datetime.datetime.strptime(ev["hora_inicio_rota"], "%H:%M:%S")
-                diff_min = int((h2 - h1).total_seconds() / 60)
-                if diff_min > 0:
-                    espera_ev = {
-                        "tipo": "ajuste", "sub_tipo": "espera_galpao", 
-                        "tempo_minutos": diff_min, "app": ev.get("app"),
-                        "descricao": f"Espera no galpão {ev.get('app')}"
-                    }
-                    db.add_event(user_id, active_op["id"], espera_ev)
-                    eventos_processados.append(espera_ev)
-            except: pass
+        if data_ref:
+            ev["data_referencia"] = data_ref
+        db.add_event(user_id, active_op["id"], ev)
+        eventos_processados.append(ev)
 
-        # Cálculo de Valor Automático (Parametrização)
-        if app_info:
+        # Só calcula se o valor não tiver sido extraído pela IA ou for 0
+        if app_info and (not ev.get("valor") or ev.get("valor") == 0):
             if app_info.get("tipo_remuneracao") == "pacote":
                 ev["valor"] = ev.get("pacotes", 0) * app_info["valor_base"]
             elif app_info.get("tipo_remuneracao") == "rota":
                 ev["valor"] = app_info["valor_base"]
-            
-            # Adicionar Bônus/Ajuste se houver valor_extra
-            if ev.get("valor_extra"):
-                ev["valor"] += ev["valor_extra"]
 
-            # Lançamento automático de repasse para entregador
-            if app_info.get("entregador_padrao_id"):
-                # Busca valor da diária do entregador padrão
+        # Sempre adiciona valor_extra se houver
+        if ev.get("valor_extra"):
+            ev["valor"] = (ev.get("valor") or 0) + ev["valor_extra"]
+
+        # Lançamento automático de repasse para entregador
+        if app_info and app_info.get("entregador_padrao_id"):                # Busca valor da diária do entregador padrão
                 res_ent = db.supabase.table("entregadores").select("valor_diaria").eq("id", app_info["entregador_padrao_id"]).execute()
                 if res_ent.data:
                     valor_pagamento = res_ent.data[0]["valor_diaria"]

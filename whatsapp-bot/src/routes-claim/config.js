@@ -2,10 +2,7 @@ require('dotenv').config();
 
 const ROUTES_CONFIG = {
     testGroupName: 'SPX Motorista',
-    prodGroupNames: [
-        'ROTAS E DISTRIBUICAO ILHA -2026',
-        'HUB ILHA -2026'
-    ],
+    prodGroupNames: [],
     timezone: 'America/Sao_Paulo',
     schedule: {
         enabledInProd: true,

@@ -2,153 +2,132 @@ import datetime
 
 class LogicService:
     @staticmethod
+    def format_events_confirmation(eventos, title):
+        if not eventos: return "Nenhum dado registrado."
+        res = f"✅ *{title}*\n\n"
+        for ev in eventos:
+            tipo = ev.get("tipo", "evento").upper()
+            app = ev.get("app", "")
+            valor = ev.get("valor", 0)
+            res += f"• {tipo} ({app}): R$ {valor:.2f}\n"
+        return res
+
+    @staticmethod
     def calculate_metrics_grouped(events: list, operations: list = None):
         apps_data = {}
         
         # Consolidados da Empresa
         consolidado = {
-            "total_ganho": 0,
-            "total_gastos_essenciais": 0,
-            "total_gastos_nao_essenciais": 0,
-            "total_km": 0,
-            "total_pacotes": 0,
-            "total_horas_brutas": 0,
-            "tempo_espera_horas": 0
+            "total_ganhos": 0,
+            "total_gastos": 0,
+            "total_ajustes": 0,
+            "km_total": 0,
+            "saldo": 0,
+            "total_horas": 0,
+            "ganho_por_hora": 0,
+            "custo_por_km": 0,
+            "total_operacoes": len(operations) if operations else 0
         }
 
-        # Agrupar eventos por App
-        for event in events:
-            app_name = event.get('apps', {}).get('nome', 'Geral')
-            if app_name not in apps_data:
-                apps_data[app_name] = {
-                    "total_ganho": 0,
-                    "total_km": 0,
-                    "total_pacotes": 0,
-                    "tempo_espera_horas": 0,
-                    "total_minutos_rota": 0
-                }
-            
-            val = event.get('valor', 0)
-            km = event.get('km', 0)
-            pacotes = event.get('pacotes', 0)
-            
-            if event['tipo'] in ['corrida', 'rota']:
-                apps_data[app_name]["total_ganho"] += val
-                apps_data[app_name]["total_km"] += km
-                apps_data[app_name]["total_pacotes"] += pacotes
-                consolidado["total_ganho"] += val
-                consolidado["total_km"] += km
-                consolidado["total_pacotes"] += pacotes
+        for ev in events:
+            # Pega o valor de forma ultra-robusta
+            try:
+                val = float(ev.get("valor") or 0)
+            except:
+                val = 0
                 
-                # Cálculo de duração se houver timestamps
-                if event.get("hora_inicio") and event.get("hora_fim"):
-                    try:
-                        inicio = datetime.datetime.fromisoformat(event["hora_inicio"].replace('Z', '+00:00'))
-                        fim = datetime.datetime.fromisoformat(event["hora_fim"].replace('Z', '+00:00'))
-                        diff = (fim - inicio).total_seconds() / 3600
-                        if diff > 0: apps_data[app_name]["total_minutos_rota"] += diff * 60
-                    except: pass
+            # Pega o KM de forma ultra-robusta
+            try:
+                km_val = float(ev.get("km") or 0)
+            except:
+                km_val = 0
 
-            elif event['tipo'] == 'gasto':
-                if event.get('categoria') == 'Essencial':
-                    consolidado["total_gastos_essenciais"] += val
-                else:
-                    consolidado["total_gastos_nao_essenciais"] += val
-            elif event['tipo'] == 'ajuste':
-                apps_data[app_name]["total_ganho"] += val
-                consolidado["total_ganho"] += val
+            # Identifica o app (considerando o join do Supabase)
+            app_info = ev.get("apps")
+            app_name = "Outros"
+            if isinstance(app_info, dict):
+                app_name = app_info.get("nome") or "Outros"
+            elif ev.get("app"):
+                app_name = ev.get("app")
+
+            tipo = str(ev.get("tipo") or "").lower()
+
+            if app_name not in apps_data:
+                apps_data[app_name] = {"ganhos": 0, "gastos": 0, "km": 0}
+
+            if tipo in ["ganho", "rota", "corrida", "faturamento"]:
+                apps_data[app_name]["ganhos"] += val
+                consolidado["total_ganhos"] += val
+            elif tipo in ["gasto", "despesa", "saída"]:
+                apps_data[app_name]["gastos"] += val
+                consolidado["total_gastos"] += val
+            elif tipo == "ajuste":
+                consolidado["total_ajustes"] += val
             
-            if event.get('sub_tipo') == 'espera_galpao':
-                espera = event.get('tempo_minutos', 0) / 60
-                apps_data[app_name]["tempo_espera_horas"] += espera
-                consolidado["tempo_espera_horas"] += espera
+            consolidado["km_total"] += km_val
+            apps_data[app_name]["km"] += km_val
 
-        # Horas Brutas totais pelas operações
+        # Cálculo de Horas
         if operations:
+            total_sec = 0
+            now = datetime.datetime.now()
             for op in operations:
-                if op.get("hora_inicio") and op.get("hora_fim"):
+                if op.get("hora_inicio"):
                     try:
-                        inicio = datetime.datetime.fromisoformat(op["hora_inicio"].replace('Z', '+00:00'))
-                        fim = datetime.datetime.fromisoformat(op["hora_fim"].replace('Z', '+00:00'))
-                        diff = (fim - inicio).total_seconds() / 3600
-                        if diff > 0: consolidado["total_horas_brutas"] += diff
-                    except: continue
+                        h1 = datetime.datetime.fromisoformat(op["hora_inicio"].replace('Z', '+00:00'))
+                        # Se não tem hora_fim (operação ativa), usa o 'agora'
+                        if op.get("hora_fim"):
+                            h2 = datetime.datetime.fromisoformat(op["hora_fim"].replace('Z', '+00:00'))
+                        else:
+                            # Converte 'now' para o mesmo formato/timezone se necessário
+                            h2 = now.astimezone(h1.tzinfo) if h1.tzinfo else now
+                        
+                        diff = (h2 - h1).total_seconds()
+                        if diff > 0:
+                            total_sec += diff
+                    except Exception as e:
+                        print(f"Erro ao calcular horas da operação {op.get('id')}: {e}")
+            consolidado["total_hours"] = total_sec / 3600
+        
+        consolidado["saldo"] = consolidado["total_ganhos"] - consolidado["total_gastos"]
+        if consolidado.get("total_hours", 0) > 0:
+            consolidado["ganho_por_hora"] = consolidado["saldo"] / consolidado["total_hours"]
+        
+        if consolidado["km_total"] > 0:
+            consolidado["custo_por_km"] = consolidado["total_gastos"] / consolidado["km_total"]
 
-        # Finalizar métricas de cada App
-        for app in apps_data:
-            d = apps_data[app]
-            d["horas_produtivas"] = (d["total_minutos_rota"] / 60) if d["total_minutos_rota"] > 0 else 0
-            d["rs_km"] = d["total_ganho"] / d["total_km"] if d["total_km"] > 0 else 0
-            d["rs_hora"] = d["total_ganho"] / d["horas_produtivas"] if d["horas_produtivas"] > 0 else 0
-
-        # Finalizar métricas do Consolidado
-        consolidado["lucro_liquido"] = consolidado["total_ganho"] - (consolidado["total_gastos_essenciais"] + consolidado["total_gastos_nao_essenciais"])
-        consolidado["horas_produtivas"] = max(0, consolidado["total_horas_brutas"] - consolidado["tempo_espera_horas"])
-        consolidado["rs_km"] = consolidado["total_ganho"] / consolidado["total_km"] if consolidado["total_km"] > 0 else 0
-        consolidado["rs_hora"] = consolidado["total_ganho"] / consolidado["horas_produtivas"] if consolidado["horas_produtivas"] > 0 else 0
-        consolidado["percentual_nao_essenciais"] = (consolidado["total_gastos_nao_essenciais"] / consolidado["total_ganho"] * 100) if consolidado["total_ganho"] > 0 else 0
-
-        return {"apps": apps_data, "consolidado": consolidado}
+        return {
+            "consolidado": consolidado,
+            "apps": apps_data
+        }
 
     @staticmethod
     def format_summary_3_blocks(metrics: dict, title: str = "RESUMO DA OPERAÇÃO", analyst_insight: str = None):
-        resumo = f"📊 *{title.upper()}*\n\n"
-        
-        # Bloco de Apps
-        for app_name, m in metrics["apps"].items():
-            if app_name == "Geral" and m["total_ganho"] == 0: continue
-            resumo += f"🏢 *OPERAÇÃO {app_name.upper()}*\n"
-            resumo += f"💰 Ganho: R$ {m['total_ganho']:.2f}\n"
-            resumo += f"🛣️ KM: {m['total_km']:.1f} | 📦 Pcts: {m['total_pacotes']}\n"
-            resumo += f"⏱️ Rota: {m['horas_produtivas']:.1f}h | ⏳ Galpão: {m['tempo_espera_horas']:.1f}h\n"
-            resumo += f"📈 Eficiência: R$ {m['rs_km']:.2f}/km | R$ {m['rs_hora']:.2f}/h\n\n"
-
-        # Bloco Consolidado Empresa
         c = metrics["consolidado"]
-        resumo += f"🏢 *CONSOLIDADO DA EMPRESA*\n"
-        resumo += f"💵 Lucro Líquido: R$ {c['lucro_liquido']:.2f}\n"
-        resumo += f"⛽ Gastos Essenciais: R$ {c['total_gastos_essenciais']:.2f}\n"
-        resumo += f"🚬 Gastos Não Essenciais: {c['percentual_nao_essenciais']:.1f}%\n"
-        resumo += f"🛣️ KM Total: {c['total_km']:.1f} | ⏱️ Horas Totais: {c['total_horas_brutas']:.1f}h\n"
-        resumo += f"📈 Média Geral: R$ {c['rs_km']:.2f}/km\n\n"
+        
+        msg = f"📊 *{title}*\n"
+        msg += "--------------------------\n"
+        msg += f"💰 *Saldo Líquido:* R$ {c['saldo']:.2f}\n"
+        msg += f"📈 *Ganhos:* R$ {c['total_ganhos']:.2f}\n"
+        msg += f"📉 *Gastos:* R$ {c['total_gastos']:.2f}\n"
+        msg += "--------------------------\n"
+        msg += f"🛣️ *KM Total:* {c['km_total']:.1f} km\n"
+        
+        if c.get("total_hours"):
+            msg += f"⏱️ *Tempo Total:* {c['total_hours']:.1f}h\n"
+            msg += f"🕒 *Ganho/Hora:* R$ {c.get('ganho_por_hora', 0):.2f}/h\n"
 
         if analyst_insight:
-            resumo += f"🧠 *VISÃO DO ANALISTA FODA:*\n{analyst_insight}\n\n"
+            msg += "\n\n🧐 *Visão do Analista:*\n"
+            msg += f"_{analyst_insight}_"
             
-        resumo += f"Bom trabalho, Boss! 🚀"
-        return resumo
+        return msg
 
     @staticmethod
     def calculate_metrics(events: list, operations: list = None):
-        # Mantendo para compatibilidade ou refatorando para usar o novo
-        res = LogicService.calculate_metrics_grouped(events, operations)
-        return res["consolidado"]
+        # Versão simplificada para compatibilidade
+        return LogicService.calculate_metrics_grouped(events, operations)
 
     @staticmethod
     def format_summary(metrics: dict, title: str = "RESUMO DA OPERAÇÃO", analyst_insight: str = None):
-        # Redireciona para o novo formato se vier no formato agrupado
-        if "consolidado" in metrics:
-            return LogicService.format_summary_3_blocks(metrics, title, analyst_insight)
-        
-        # Fallback para o formato antigo caso receba apenas o dicionário de métricas
-        resumo = (
-            f"📊 *{title.upper()}*\n\n"
-            f"💰 Ganho Total: R$ {metrics['total_ganho']:.2f}\n"
-            f"⛽ Gastos Essenciais: R$ {metrics['total_gastos_essenciais']:.2f}\n"
-            f"🚬 Gastos Não Essenciais: R$ {metrics['total_gastos_nao_essenciais']:.2f} ({metrics['percentual_nao_essenciais']:.1f}%)\n"
-            f"💵 Lucro Líquido: R$ {metrics['lucro_liquido']:.2f}\n"
-            f"🛣️ KM Rodados: {metrics['total_km']:.1f} km\n"
-            f"📦 Pacotes: {metrics['total_pacotes']}\n"
-            f"⏱️ Horas Produtivas (Rua): {metrics['horas_produtivas']:.1f}h\n"
-            f"⏳ Tempo de Espera (Galpão): {metrics['tempo_espera_horas']:.1f}h\n\n"
-            f"📈 Métricas de Eficiência:\n"
-            f"- R$/km: R$ {metrics['rs_km']:.2f}\n"
-            f"- R$/hora (Rua): R$ {metrics['rs_hora']:.2f}\n"
-            f"- R$/pacote: R$ {metrics['rs_pacote']:.2f}\n\n"
-        )
-        
-        if analyst_insight:
-            resumo += f"🧠 *VISÃO DO ANALISTA FODA:*\n{analyst_insight}\n\n"
-            
-        resumo += f"Bom trabalho! Descansa que amanhã tem mais! 🚀"
-        return resumo
+        return LogicService.format_summary_3_blocks(metrics, title, analyst_insight)

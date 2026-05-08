@@ -6,7 +6,7 @@ const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000/webhook';
 
 const api = axios.create({
     baseURL: backendUrl.replace('/webhook', ''),
-    timeout: 30000,
+    timeout: 60000,
 });
 
 async function sendToBackend(payload) {

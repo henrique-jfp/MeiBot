@@ -32,7 +32,15 @@ class DBService:
     def get_active_operation(self, user_id: str):
         if not user_id: return None
         try:
+            # 1. Tenta achar a que está marcada como 'ativa'
             response = self.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).eq("status", "ativa").execute()
+            if response.data:
+                return response.data[0]
+            
+            # 2. Se não achou 'ativa', tenta achar qualquer uma de HOJE
+            import datetime
+            today = datetime.date.today().isoformat()
+            response = self.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).eq("data", today).execute()
             if response.data:
                 return response.data[0]
         except Exception as e:
@@ -73,7 +81,9 @@ class DBService:
     def start_operation(self, user_id: str):
         if not user_id: return {"id": None}
         try:
-            data = {"user_id": user_id, "status": "ativa"}
+            import datetime
+            now = datetime.datetime.now().isoformat()
+            data = {"user_id": user_id, "status": "ativa", "hora_inicio": now}
             response = self.supabase.table("operacoes_dia").insert(data).execute()
             if response.data:
                 return response.data[0]
@@ -117,26 +127,38 @@ class DBService:
             return None
 
     def add_event(self, user_id: str, operacao_id: str, event_data: dict):
-        if not user_id or not operacao_id: return None
+        if not user_id or not operacao_id: 
+            print(f"DEBUG DB: Falha ao salvar evento. User: {user_id}, Op: {operacao_id}")
+            return None
         try:
-            app_info = self.get_app_by_name(event_data.get("app"))
-            app_id = app_info["id"] if app_info else None
+            # Busca app_id se o nome for fornecido
+            app_id = None
+            if event_data.get("app"):
+                app_info = self.get_app_by_name(event_data.get("app"))
+                app_id = app_info["id"] if app_info else None
             
+            # Garante que números sejam números
+            def to_float(v):
+                try: return float(v or 0)
+                except: return 0.0
+
             data = {
                 "user_id": user_id,
                 "operacao_id": operacao_id,
-                "tipo": event_data.get("tipo"),
-                "categoria": event_data.get("categoria"),
-                "tempo_minutos": event_data.get("tempo_minutos", 0),
-                "valor": event_data.get("valor", 0),
-                "km": event_data.get("km", 0),
+                "tipo": str(event_data.get("tipo") or "registro"),
+                "valor": to_float(event_data.get("valor")),
+                "km": to_float(event_data.get("km") or event_data.get("km_rota")),
                 "app_id": app_id,
-                "pacotes": event_data.get("pacotes", 0),
-                "descricao": event_data.get("descricao"),
-                "hora_inicio": event_data.get("hora_inicio"),
-                "hora_fim": event_data.get("hora_fim"),
-                "sub_tipo": event_data.get("sub_tipo")
+                "pacotes": int(event_data.get("pacotes") or 0),
+                "descricao": event_data.get("descricao") or event_data.get("pergunta"),
+                "categoria": event_data.get("categoria")
             }
+            
+            # Se tiver data específica no evento
+            if event_data.get("data_referencia"):
+                data["timestamp"] = f"{event_data.get('data_referencia')}T12:00:00Z"
+
+            print(f"DEBUG DB: Inserindo evento: {data['tipo']} - R$ {data['valor']}")
             response = self.supabase.table("eventos").insert(data).execute()
             if response.data:
                 return response.data[0]
@@ -168,21 +190,22 @@ class DBService:
 
     def get_weekly_summary(self, user_id: str):
         import datetime
-        seven_days_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).isoformat()
+        # Usando 8 dias para garantir cobertura de fuso horário
+        seven_days_ago = (datetime.datetime.now() - datetime.timedelta(days=8)).isoformat()
         response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", seven_days_ago).execute()
         return response.data
 
     def get_previous_weekly_summary(self, user_id: str):
         import datetime
         now = datetime.datetime.now()
-        seven_days_ago = (now - datetime.timedelta(days=7)).isoformat()
-        fourteen_days_ago = (now - datetime.timedelta(days=14)).isoformat()
+        seven_days_ago = (now - datetime.timedelta(days=8)).isoformat()
+        fourteen_days_ago = (now - datetime.timedelta(days=16)).isoformat()
         response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", fourteen_days_ago).lt("timestamp", seven_days_ago).execute()
         return response.data
 
     def get_monthly_summary(self, user_id: str):
         import datetime
-        thirty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=30)).isoformat()
+        thirty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=31)).isoformat()
         response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", thirty_days_ago).execute()
         return response.data
 
