@@ -22,12 +22,13 @@ async function connectToWhatsApp() {
         auth: state,
         printQRInTerminal: false,
         logger: pino({ level: 'error' }),
-        browser: ['Ubuntu', 'Chrome', '20.0.04'],
+        browser: Browsers.macOS('Desktop'),
         syncFullHistory: false,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
-        keepAliveIntervalMs: 15000,
+        keepAliveIntervalMs: 30000,
         markOnlineOnConnect: true,
+        generateHighQualityLinkPreview: false,
     });
 
     sock.ev.on('creds.update', saveCreds);
