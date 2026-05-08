@@ -268,7 +268,7 @@ async def list_porteiros_page(whatsapp_number: str):
         for rua in sorted(ruas.keys()):
             html_content += f"<div class='rua-container'><div class='rua-nome'>📍 {rua}</div>"
             # Ordena por número (convertendo para int se possível para ordem numérica correta)
-            sorted_items = sorted(ruas[rua], key=lambda x: int(''.join(filter(str.isdigit, x['numero']))) if any(c.isdigit() for x in x['numero']) else x['numero'])
+            sorted_items = sorted(ruas[rua], key=lambda x: int(''.join(filter(str.isdigit, x['numero']))) if any(c.isdigit() for c in x['numero']) else x['numero'])
             
             for p in sorted_items:
                 html_content += f"""
