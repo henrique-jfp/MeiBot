@@ -75,7 +75,7 @@ async def process_interpreted_data(user, interpreted):
 
     if intencao == "listar_porteiros":
         # No futuro, aqui pegamos a URL real do servidor
-        url = f"http://192.168.1.23:8000/porteiros/{whatsapp_number}"
+        url = f"http://192.168.1.23:8000/porteiros/{user['whatsapp_number']}"
         return f"📋 Aqui está o seu mapeamento completo de porteiros: {url}"
 
     if intencao == "consultar_porteiro":
@@ -108,19 +108,35 @@ async def process_interpreted_data(user, interpreted):
         nome_novo = info.get("nome")
         nome_busca = info.get("nome_antigo")
         
-        # Se não enviou o nome antigo, tenta descobrir se só tem um porteiro lá
+        # 1. Tenta achar pelo endereço exato se só tiver um lá
         if not nome_busca:
             existentes = db.get_porteiros_by_address(user_id, rua, numero)
             if len(existentes) == 1:
                 nome_busca = existentes[0]["nome_porteiro"]
-            else:
-                # Se houver mais de um, ainda tentamos usar o nome_novo (caso seja ajuste de nota/turno)
-                nome_busca = nome_novo
+        
+        # 2. Se falhar, tenta achar o registro original pelo NOME do porteiro (caso o endereço esteja errado)
+        if not nome_busca and nome_novo:
+            # Busca no banco qualquer registro desse porteiro para este usuário
+            try:
+                res_nome = db.supabase.table("mapeamento_porteiros").select("*").eq("user_id", user_id).ilike("nome_porteiro", f"%{nome_novo}%").execute()
+                if res_nome.data:
+                    # Usa o endereço e nome do registro encontrado como base para a correção
+                    p_orig = res_nome.data[0]
+                    res = db.update_porteiro(user_id, p_orig["rua"], p_orig["numero"], p_orig["nome_porteiro"], nome_novo, info.get("turno"), info.get("notas"))
+                    # Se mandou rua/numero novos na correção, atualiza também
+                    if rua or numero:
+                        update_end = {}
+                        if rua: update_end["rua"] = rua
+                        if numero: update_end["numero"] = numero
+                        db.supabase.table("mapeamento_porteiros").update(update_end).eq("id", p_orig["id"]).execute()
+                    return f"✅ Cadastro de *{nome_novo}* corrigido e atualizado!"
+            except:
+                pass
 
-        res = db.update_porteiro(user_id, rua, numero, nome_busca, nome_novo, info.get("turno"), info.get("notas"))
+        res = db.update_porteiro(user_id, rua, numero, nome_busca or nome_novo, nome_novo, info.get("turno"), info.get("notas"))
         if res:
             return f"✅ Cadastro de porteiros em {rua}, {numero} atualizado!"
-        return f"❌ Não consegui localizar o porteiro para corrigir em {rua}, {numero}. Verifique o endereço ou diga o nome antigo."
+        return f"❌ Não consegui localizar o porteiro para corrigir. Dica: Diga o nome que foi cadastrado errado."
 
     active_op = db.get_active_operation(user_id)
     

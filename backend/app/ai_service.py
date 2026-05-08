@@ -82,12 +82,17 @@ class AIService:
         - 'listar_porteiros': Quando o usuário pedir para ver o mapeamento completo, a lista de todos os nomes ou o link do mapeamento.
 
         Regras de Categoria para 'gasto':
-        - 'Essencial': Combustível, manutenção, óleo, seguro, taxas do app.
+        - 'Essencial': Combustível, manutenção, óleo, seguro, taxas do app, SALÁRIOS de ajudantes/entregadores, TERCEIRIZAÇÃO.
         - 'Não Essencial': Cigarro, refrigerante, lanches, café, gastos pessoais não ligados ao trabalho.
 
         Regras para 'espera':
         - Use quando o usuário mencionar atraso no galpão, espera de carga ou tempo parado aguardando.
         - Exemplo: "Cheguei 13h e peguei a rota 13h40" -> GERAR UM EVENTO SEPARADO do tipo 'espera' com tempo_minutos: 40.
+        - Se o usuário der dois horários de início (ex: chegou 5h20 e pegou a rota 6h), a diferença entre eles É uma espera.
+
+        Regras para 'corrigir_porteiro':
+        - Tente identificar o nome que está sendo corrigido (nome_antigo) e o novo nome (nome).
+        - Exemplo: "Troca o nome do porteiro de João para Everaldo" -> nome_antigo: João, nome: Everaldo.
 
         Regras para 'rota':
         - Representa o tempo real de entregas/trabalho.
