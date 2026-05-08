@@ -74,8 +74,7 @@ async def process_interpreted_data(user, interpreted):
             return f"Entendi a data {data_ref}, mas não encontrei informações de gastos ou ganhos na mensagem."
 
     if intencao == "listar_porteiros":
-        # No futuro, aqui pegamos a URL real do servidor
-        url = f"http://192.168.1.23:8000/porteiros/{user['whatsapp_number']}"
+        url = f"https://meibot.henriquedejesus.dev/porteiros/{user['whatsapp_number']}"
         return f"📋 Aqui está o seu mapeamento completo de porteiros: {url}"
 
     if intencao == "consultar_porteiro":
