@@ -3,12 +3,15 @@ from fastapi.responses import HTMLResponse
 from .ai_service import AIService
 from .db import DBService
 from .logic import LogicService
+from .routes_claim.router import router as routes_claim_router
 import base64
 import datetime
 
 app = FastAPI()
 db = DBService()
 ai = AIService()
+
+app.include_router(routes_claim_router)
 
 @app.post("/webhook")
 async def handle_webhook(request: Request, background_tasks: BackgroundTasks):

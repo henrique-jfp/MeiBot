@@ -10,6 +10,7 @@ const { Boom } = require('@hapi/boom');
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const { sendToBackend } = require('./api');
+const routeClaim = require('./routes-claim/handler');
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -62,6 +63,13 @@ async function connectToWhatsApp() {
         const remoteJid = msg.key.remoteJid;
         const fromMe = msg.key.fromMe;
         const myId = sock.user.id.split(':')[0];
+
+        try {
+            const handled = await routeClaim.handleIncomingMessage(sock, msg);
+            if (handled) return;
+        } catch (err) {
+            console.error('[ROUTE-CLAIM] Error:', err.message);
+        }
         
         // --- TRAVA DE SEGURANÇA (SELF-ONLY) ---
         // O remoteJid na conversa consigo mesmo geralmente é o seu próprio número @s.whatsapp.net
@@ -131,6 +139,17 @@ async function connectToWhatsApp() {
             }
         } catch (err) {
             console.error('Erro no processamento:', err);
+        }
+    });
+
+    sock.ev.on('messages.reaction', async (reactions) => {
+        for (const reaction of reactions) {
+            try {
+                const handled = await routeClaim.handleReaction(sock, reaction);
+                if (handled) return;
+            } catch (err) {
+                console.error('[ROUTE-CLAIM] Reaction error:', err.message);
+            }
         }
     });
 }
