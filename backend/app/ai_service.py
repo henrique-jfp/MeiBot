@@ -40,71 +40,61 @@ class AIService:
         prompt = f"""
         Você é um assistente de um entregador. Sua tarefa é extrair dados de mensagens sobre o dia de trabalho.
         Hoje é dia {hoje}. 
-        Se o usuário mencionar uma data passada (ex: "ontem", "segunda"), preencha "data_referencia" com YYYY-MM-DD.
-        Se ele informar horário de trabalho (ex: "de 10h às 15h"), preencha "hora_inicio" e "hora_fim" no formato "HH:MM:SS".
 
-        A mensagem pode conter múltiplas ações (um "resumão"). Converta a mensagem num JSON estruturado EXATAMENTE neste formato:
+        Extraia uma LINHA DO TEMPO e MÉTRICAS GERAIS.
+
+        Converta a mensagem num JSON estruturado EXATAMENTE neste formato:
         {{
-            "intencao": "iniciar" | "encerrar" | "pergunta" | "registro" | "resumo_semanal" | "resumo_mensal" | "cadastrar_porteiro" | "corrigir_porteiro" | "consultar_porteiro" | "listar_porteiros",
+            "intencao": "iniciar" | "encerrar" | "pergunta" | "registro" | "resumo_diario" | "resumo_semanal" | "resumo_mensal" | "cadastrar_porteiro" | "corrigir_porteiro" | "consultar_porteiro" | "listar_porteiros" | "cadastrar_entregador",
             "data_referencia": "YYYY-MM-DD" ou null,
-            "hora_inicio": "HH:MM:SS" ou null,
-            "hora_fim": "HH:MM:SS" ou null,
             "pergunta": "texto da pergunta" ou null,
+            "entregador_info": {{
+                "nome": "Nome do entregador" ou null,
+                "valor_diaria": float ou null
+            }},
             "porteiro_info": {{
                 "rua": "Nome da rua" ou null,
                 "numero": "123" ou null,
                 "nome": "Nome do porteiro" ou null,
-                "nome_antigo": "Nome anterior (apenas para correção/troca)" ou null,
+                "nome_antigo": "Nome anterior" ou null,
                 "turno": "manhã/tarde/noite" ou null,
                 "notas": "Notas do prédio" ou null
             }},
             "eventos": [
                 {{
-                    "tipo": "rota" | "gasto" | "pausa" | "ajuste" | "espera",
-                    "categoria": "Essencial" | "Não Essencial" | null,
-                    "tempo_minutos": int,
-                    "valor": float,
-                    "km": float,
-                    "app": "Nome do app" ou null,
+                    "app": "Nome do app (ex: Shopee, Correios)" ou null,
+                    "tipo": "rota" | "gasto" | "ajuste",
                     "pacotes": int,
+                    "km_deslocamento": float,
+                    "km_rota": float,
+                    "hora_chegada_galpao": "HH:MM:SS" ou null,
+                    "hora_inicio_rota": "HH:MM:SS" ou null,
+                    "hora_fim_operacao": "HH:MM:SS" ou null,
+                    "valor_extra": float,
+                    "categoria": "Essencial" | "Não Essencial" | null,
                     "descricao": "Detalhe" ou null
                 }}
             ]
         }}
-        Quando usar as intenções de resumo:
-        - 'resumo_semanal': Quando o usuário pedir explicitamente o resumo da semana, dos últimos dias ou quanto ganhou na semana.
-        - 'resumo_mensal': Quando o usuário pedir o resumo do mês, do mês passado ou quanto ganhou no mês.
+
+        Regras de Intenção (MUITO IMPORTANTE):
+        - 'pergunta': Use quando o usuário fizer uma pergunta específica que exija contar, somar ou consultar o passado (ex: "Quantos dias trabalhei?", "Quanto ganhei segunda?", "Qual o total de km desse mês?").
+        - 'resumo_diario': Quando ele pedir "Analisa o dia tal" ou "Resumo de hoje".
+        - 'resumo_semanal': Quando ele pedir o "Resumo da semana" ou "Relatório semanal" (Análise completa em 3 blocos).
+        - 'resumo_mensal': Quando ele pedir o "Resumo do mês" ou "Relatório mensal".
+        - 'registro': Quando ele estiver apenas informando dados do trabalho para salvar.
+
+        Regras de Extração:
+        - 'hora_chegada_galpao': Chegada no galpão/início do dia.
+        - 'hora_inicio_rota': Saída do galpão/início das entregas.
+        - 'hora_fim_operacao': Fim das entregas/finalização.
+        - 'km_deslocamento': KM de casa ao trabalho.
+        - 'km_rota': KM de entregas.
+        - 'pacotes': Quantidade de entregas.
         
-        Intenções de Porteiros:
-        - 'cadastrar_porteiro': Quando o usuário informar nome de porteiro e endereço para salvar.
-        - 'corrigir_porteiro': Quando o usuário pedir para trocar, alterar ou corrigir um nome ou nota já existente.
-        - 'consultar_porteiro': Quando o usuário perguntar quem é o porteiro de um endereço ou o que tem anotado sobre um prédio.
-        - 'listar_porteiros': Quando o usuário pedir para ver o mapeamento completo, a lista de todos os nomes ou o link do mapeamento.
-
-        Regras de Categoria para 'gasto':
-        - 'Essencial': Combustível, manutenção, óleo, seguro, taxas do app, SALÁRIOS de ajudantes/entregadores, TERCEIRIZAÇÃO.
-        - 'Não Essencial': Cigarro, refrigerante, lanches, café, gastos pessoais não ligados ao trabalho.
-
-        Regras para 'espera':
-        - Use quando o usuário mencionar atraso no galpão, espera de carga ou tempo parado aguardando.
-        - Exemplo: "Cheguei 13h e peguei a rota 13h40" -> GERAR UM EVENTO SEPARADO do tipo 'espera' com tempo_minutos: 40.
-        - Se o usuário der dois horários de início (ex: chegou 5h20 e pegou a rota 6h), a diferença entre eles É uma espera.
-
-        Regras para 'corrigir_porteiro':
-        - Tente identificar o nome que está sendo corrigido (nome_antigo) e o novo nome (nome).
-        - Exemplo: "Troca o nome do porteiro de João para Everaldo" -> nome_antigo: João, nome: Everaldo.
-
-        Regras para 'rota':
-        - Representa o tempo real de entregas/trabalho.
-        - Se o usuário der os horários (ex: peguei a rota 13h40 e terminei 18h), calcule a duração apenas desse período e coloque em 'tempo_minutos'.
-        
-        IMPORTANTE: 'rota' e 'espera' DEVEM ser dois itens separados na lista 'eventos'. Nunca misture o tempo de espera dentro do item de rota.
-        
-        Se não houver valor, km, pacotes ou tempo_minutos, use 0.
-
         Mensagem: "{text}"
 
-        Retorne APENAS o objeto JSON e nada mais.
+        Retorne APENAS o objeto JSON.
         """
         
         chat_completion = groq_client.chat.completions.create(

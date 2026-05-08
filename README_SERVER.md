@@ -1,3 +1,4 @@
+
 # 🧠 Servidor ContaComigo (Alfredo) - HP Pavilion X360
 
 Este documento é a referência técnica oficial para a configuração, operação e manutenção do servidor local que hospeda o ecossistema ContaComigo. O servidor foi projetado para ser resiliente, eficiente em hardware limitado e totalmente gerenciável por IA.

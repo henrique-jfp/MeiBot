@@ -58,21 +58,97 @@ async def process_interpreted_data(user, interpreted):
     intencao = interpreted.get("intencao")
     user_id = user["id"]
     data_ref = interpreted.get("data_referencia")
-    hora_inicio = interpreted.get("hora_inicio")
-    hora_fim = interpreted.get("hora_fim")
-    eventos = interpreted.get("eventos", [])
+    eventos_brutos = interpreted.get("eventos", [])
     
-    # Lógica para lançamento retroativo ("Resumão combo")
-    if data_ref:
-        op = db.get_or_create_operation_by_date(user_id, data_ref, hora_inicio, hora_fim)
-        for ev in eventos:
-            db.add_event(user_id, op["id"], ev)
-            
-        if len(eventos) > 0:
-            return LogicService.format_events_confirmation(eventos, f"RESUMO RETROATIVO: {data_ref}")
-        else:
-            return f"Entendi a data {data_ref}, mas não encontrei informações de gastos ou ganhos na mensagem."
+    # 1. Tratamento de Novas Intenções de Cadastro
+    if intencao == "cadastrar_entregador":
+        info = interpreted.get("entregador_info", {})
+        res = db.add_entregador(user_id, info.get("nome"), info.get("valor_diaria"))
+        if res:
+            return f"✅ Entregador *{info.get('nome')}* cadastrado com diária de R$ {info.get('valor_diaria'):.2f}!"
+        return "❌ Erro ao cadastrar entregador."
 
+    # 2. Preparação da Operação (Dia atual ou retroativo)
+    if data_ref:
+        active_op = db.get_or_create_operation_by_date(user_id, data_ref)
+    else:
+        active_op = db.get_active_operation(user_id)
+        if not active_op and intencao == "registro" and len(eventos_brutos) > 0:
+            active_op = db.start_operation(user_id)
+
+    # 3. Processamento de Eventos com Parametrização
+    eventos_processados = []
+    for ev in eventos_brutos:
+        app_info = db.get_app_by_name(ev.get("app"))
+        
+        # Inteligência de Galpão (Espera)
+        if ev.get("hora_chegada_galpao") and ev.get("hora_inicio_rota"):
+            try:
+                h1 = datetime.datetime.strptime(ev["hora_chegada_galpao"], "%H:%M:%S")
+                h2 = datetime.datetime.strptime(ev["hora_inicio_rota"], "%H:%M:%S")
+                diff_min = int((h2 - h1).total_seconds() / 60)
+                if diff_min > 0:
+                    espera_ev = {
+                        "tipo": "ajuste", "sub_tipo": "espera_galpao", 
+                        "tempo_minutos": diff_min, "app": ev.get("app"),
+                        "descricao": f"Espera no galpão {ev.get('app')}"
+                    }
+                    db.add_event(user_id, active_op["id"], espera_ev)
+                    eventos_processados.append(espera_ev)
+            except: pass
+
+        # Cálculo de Valor Automático (Parametrização)
+        if app_info:
+            if app_info.get("tipo_remuneracao") == "pacote":
+                ev["valor"] = ev.get("pacotes", 0) * app_info["valor_base"]
+            elif app_info.get("tipo_remuneracao") == "rota":
+                ev["valor"] = app_info["valor_base"]
+            
+            # Adicionar Bônus/Ajuste se houver valor_extra
+            if ev.get("valor_extra"):
+                ev["valor"] += ev["valor_extra"]
+
+            # Lançamento automático de repasse para entregador
+            if app_info.get("entregador_padrao_id"):
+                # Busca valor da diária do entregador padrão
+                res_ent = db.supabase.table("entregadores").select("valor_diaria").eq("id", app_info["entregador_padrao_id"]).execute()
+                if res_ent.data:
+                    valor_pagamento = res_ent.data[0]["valor_diaria"]
+                    gasto_ent = {
+                        "tipo": "gasto", "categoria": "Essencial", 
+                        "valor": valor_pagamento, "app": ev.get("app"),
+                        "descricao": f"Pagamento entregador (Auto)"
+                    }
+                    db.add_event(user_id, active_op["id"], gasto_ent)
+                    eventos_processados.append(gasto_ent)
+
+        # Mapeamento de KMs
+        # Se houver deslocamento, cria evento separado
+        if ev.get("km_deslocamento"):
+            desl_ev = {
+                "tipo": "ajuste", "sub_tipo": "deslocamento", 
+                "km": ev["km_deslocamento"], "app": ev.get("app"),
+                "descricao": "Deslocamento até galpão"
+            }
+            db.add_event(user_id, active_op["id"], desl_ev)
+            eventos_processados.append(desl_ev)
+        
+        # O evento principal de rota
+        ev["km"] = ev.get("km_rota", ev.get("km", 0))
+        ev["hora_inicio"] = ev.get("hora_inicio_rota")
+        ev["hora_fim"] = ev.get("hora_fim_operacao")
+        
+        db.add_event(user_id, active_op["id"], ev)
+        eventos_processados.append(ev)
+
+    if intencao == "registro":
+        if not active_op:
+            return "Hmm, não entendi. Você quer iniciar uma operação ou registrar algo?"
+        if len(eventos_processados) > 0:
+            return LogicService.format_events_confirmation(eventos_processados, "DADOS REGISTRADOS")
+        return "Nenhum dado claro para registrar."
+
+    # --- RESTO DAS INTENÇÕES ---
     if intencao == "listar_porteiros":
         url = f"https://meibot.henriquedejesus.dev/porteiros/{user['whatsapp_number']}"
         return f"📋 Aqui está o seu mapeamento completo de porteiros: {url}"
@@ -139,26 +215,34 @@ async def process_interpreted_data(user, interpreted):
 
     active_op = db.get_active_operation(user_id)
     
+    if intencao == "resumo_diario":
+        target_date = data_ref or datetime.date.today().isoformat()
+        events_curr = db.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", target_date).lt("timestamp", (datetime.datetime.fromisoformat(target_date) + datetime.timedelta(days=1)).isoformat()).execute().data
+        ops_curr = db.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).eq("data", target_date).execute().data
+        
+        metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
+        return LogicService.format_summary(metrics_curr, f"RESUMO DO DIA {target_date}")
+
     if intencao == "resumo_semanal":
         events_curr = db.get_weekly_summary(user_id)
         ops_curr = db.get_operations_for_period(user_id, 7)
-        metrics_curr = LogicService.calculate_metrics(events_curr, ops_curr)
+        metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
         
         events_prev = db.get_previous_weekly_summary(user_id)
         metrics_prev = LogicService.calculate_metrics(events_prev, None)
         
-        insight = await ai.generate_analyst_insight(metrics_curr, metrics_prev, "Semana Atual")
+        insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Semana Atual")
         return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL SOLICITADO", insight)
 
     if intencao == "resumo_mensal":
         events_curr = db.get_monthly_summary(user_id)
         ops_curr = db.get_operations_for_period(user_id, 30)
-        metrics_curr = LogicService.calculate_metrics(events_curr, ops_curr)
+        metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
         
         events_prev = db.get_previous_monthly_summary(user_id)
         metrics_prev = LogicService.calculate_metrics(events_prev, None)
         
-        insight = await ai.generate_analyst_insight(metrics_curr, metrics_prev, "Mês Atual")
+        insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Mês Atual")
         return LogicService.format_summary(metrics_curr, "RESUMO MENSAL SOLICITADO", insight)
 
     if intencao == "iniciar":
@@ -181,22 +265,22 @@ async def process_interpreted_data(user, interpreted):
         if is_last_day_of_month or is_first_day_of_month:
             events_curr = db.get_monthly_summary(user_id)
             ops_curr = db.get_operations_for_period(user_id, 30)
-            metrics_curr = LogicService.calculate_metrics(events_curr, ops_curr)
+            metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
             events_prev = db.get_previous_monthly_summary(user_id)
             metrics_prev = LogicService.calculate_metrics(events_prev, None)
             
-            insight = await ai.generate_analyst_insight(metrics_curr, metrics_prev, "Mês")
+            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Mês")
             title = "RESUMO MENSAL ACUMULADO" if is_last_day_of_month else "RESUMO DO MÊS ENCERRADO"
             return LogicService.format_summary(metrics_curr, title, insight)
             
         elif is_saturday:
             events_curr = db.get_weekly_summary(user_id)
             ops_curr = db.get_operations_for_period(user_id, 7)
-            metrics_curr = LogicService.calculate_metrics(events_curr, ops_curr)
+            metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
             events_prev = db.get_previous_weekly_summary(user_id)
             metrics_prev = LogicService.calculate_metrics(events_prev, None)
             
-            insight = await ai.generate_analyst_insight(metrics_curr, metrics_prev, "Semana")
+            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Semana")
             return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL ACUMULADO", insight)
         else:
             return "🚀 Operação encerrada com sucesso! Bom descanso, parceiro. No sábado te envio o resumão da semana completa! 👊"
