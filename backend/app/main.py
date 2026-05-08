@@ -137,12 +137,15 @@ async def process_interpreted_data(user, interpreted):
             eventos_processados.append(desl_ev)
         
         # O evento principal de rota
-        ev["km"] = ev.get("km_rota", ev.get("km", 0))
-        ev["hora_inicio"] = ev.get("hora_inicio_rota")
-        ev["hora_fim"] = ev.get("hora_fim_operacao")
-        
-        db.add_event(user_id, active_op["id"], ev)
-        eventos_processados.append(ev)
+        if active_op and active_op.get("id"):
+            ev["km"] = ev.get("km_rota", ev.get("km", 0))
+            ev["hora_inicio"] = ev.get("hora_inicio_rota")
+            ev["hora_fim"] = ev.get("hora_fim_operacao")
+            
+            db.add_event(user_id, active_op["id"], ev)
+            eventos_processados.append(ev)
+        else:
+            print("WARNING: Tentativa de registrar evento sem operação ativa.")
 
     if intencao == "registro":
         if not active_op:
