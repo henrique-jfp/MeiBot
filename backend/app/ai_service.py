@@ -149,7 +149,7 @@ class AIService:
             apps_str = "\n".join(app_lines)
 
         prompt = f"""
-        Você é o ANALISTA ESTRATÉGICO SÊNIOR do MeiBot.
+        Você é um analista de operação de entregas. Escreva como um humano experiente, com leitura rápida e direta.
         Sua missão é dar uma consultoria curta, prática e financeira para o entregador.
         
         DADOS ATUAIS ({period_type}):
@@ -165,18 +165,26 @@ class AIService:
         DADOS POR PLATAFORMA:
         {apps_str}
         
-        Responda exatamente neste formato, sem markdown, sem bullets e sem emojis:
+        Responda exatamente neste formato, sem markdown e sem bullets:
 
         Shopee
-        Um parágrafo curto analisando a Shopee. Se não houver operação, diga isso claramente e sugira monitorar oportunidade.
+        Um parágrafo curto, natural e específico analisando a Shopee. Se não houver operação, diga isso claramente e sugira monitorar oportunidade. Não use frases genéricas repetidas.
 
         Correios
-        Um parágrafo curto analisando os Correios. Se não houver KM ou tempo, alerte sobre falha de rastreamento.
+        Um parágrafo curto, natural e específico analisando os Correios. Se não houver KM ou tempo, alerte sobre falha de rastreamento. Evite linguagem robótica.
 
         Panorama Geral
-        Um parágrafo curto sobre o resultado total, ganho/hora, eficiência por KM e principal ação para melhorar.
+        Um parágrafo curto sobre o resultado total, ganho/hora, eficiência por KM e principal ação para melhorar. Termine com uma orientação prática, como faria alguém olhando a operação de fora.
         
-        Seja direto e mantenha tom profissional.
+        Pode usar poucos emojis funcionais, como 📦, 💰, 📈, 📉, 🛣️ e ⏱️, mas sem exagerar.
+        Use linguagem humana, variando a forma de começar as frases, e sem soar como template.
         """
-        response = self.model.generate_content(prompt)
+        response = self.model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "max_output_tokens": 350,
+            }
+        )
         return response.text
