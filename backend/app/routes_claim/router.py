@@ -1,14 +1,18 @@
 import base64
 import traceback
 from fastapi import APIRouter, Request
-from .ai_routes import PARSER_VERSION, parse_route_sheet
+from .ai_routes import PARSER_VERSION, VISION_STATUS, parse_route_sheet
 
 router = APIRouter(prefix="/routes-claim")
 
 
 @router.get("/version")
 async def parser_version():
-    return {"parser_version": PARSER_VERSION}
+    return {
+        "parser_version": PARSER_VERSION,
+        "vision_available": VISION_STATUS["available"],
+        "vision_reason": VISION_STATUS["reason"],
+    }
 
 
 @router.post("/parse")
@@ -34,6 +38,10 @@ async def parse_routes(request: Request):
             f"confidence={parsed.get('confidence')} "
             f"routes={len(parsed.get('routes') or [])} "
             f"parser_version={parsed.get('parser_version')} "
+            f"vision_available={parsed.get('vision_available')} "
+            f"vision_reason={parsed.get('vision_reason')} "
+            f"ocr_text_len={parsed.get('ocr_text_len')} "
+            f"ocr_rows={parsed.get('ocr_rows')} "
             f"error={parsed.get('error')} "
             f"error_detail={parsed.get('error_detail')}"
         )

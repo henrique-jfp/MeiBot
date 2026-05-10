@@ -16,6 +16,8 @@ async function parseRouteSheet(payload) {
             `[ROUTE-CLAIM] Parser response source=${data.source || 'unknown'} ` +
             `confidence=${data.confidence ?? 'n/a'} routes=${Array.isArray(data.routes) ? data.routes.length : 0} ` +
             `parser_version=${data.parser_version || 'missing'} ` +
+            `vision=${data.vision_available ?? 'n/a'} vision_reason=${data.vision_reason || 'n/a'} ` +
+            `ocr_text_len=${data.ocr_text_len ?? 'n/a'} ocr_rows=${data.ocr_rows ?? 'n/a'} ` +
             `error=${data.error || 'none'} detail=${data.detail || data.error_detail || 'none'}`
         );
         return response.data;

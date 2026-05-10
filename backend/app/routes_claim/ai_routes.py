@@ -19,7 +19,13 @@ load_dotenv()
 TARGET_ALIASES = ("rocinha", "roc")
 MIN_DETERMINISTIC_CONFIDENCE = 0.75
 IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-PARSER_VERSION = "routes-claim-2026-05-10-gemini25-v3"
+PARSER_VERSION = "routes-claim-2026-05-10-ocr-first-v4"
+ROUTES_ENABLE_GEMINI_OCR_FALLBACK = os.getenv("ROUTES_ENABLE_GEMINI_OCR_FALLBACK", "false").lower() == "true"
+ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK = os.getenv("ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK", "false").lower() == "true"
+VISION_STATUS = {
+    "available": False,
+    "reason": "not_initialized",
+}
 
 _genai_key = os.getenv("GEMINI_API_KEY")
 if _genai_key:
@@ -34,10 +40,13 @@ _gemini_model_names = [
 
 def _build_vision_client():
     if vision is None or service_account is None:
+        VISION_STATUS["reason"] = "google_cloud_vision_import_unavailable"
         return None
 
     creds_json = os.getenv("GOOGLE_VISION_CREDENTIALS_JSON")
     if not creds_json:
+        VISION_STATUS["reason"] = "missing_GOOGLE_VISION_CREDENTIALS_JSON"
+        print("[ROUTE-CLAIM] Vision unavailable: missing GOOGLE_VISION_CREDENTIALS_JSON")
         return None
 
     try:
@@ -45,8 +54,12 @@ def _build_vision_client():
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
         credentials = service_account.Credentials.from_service_account_info(creds_dict)
-        return vision.ImageAnnotatorClient(credentials=credentials)
+        client = vision.ImageAnnotatorClient(credentials=credentials)
+        VISION_STATUS["available"] = True
+        VISION_STATUS["reason"] = "ok"
+        return client
     except Exception as exc:
+        VISION_STATUS["reason"] = str(exc)
         print(f"[ROUTE-CLAIM] Vision unavailable: {exc}")
         return None
 
@@ -259,6 +272,7 @@ def _extract_text_with_vision(file_bytes):
     image = vision.Image(content=file_bytes)
     response = _vision_client.document_text_detection(image=image)
     if response.error.message:
+        VISION_STATUS["reason"] = response.error.message
         print(f"[ROUTE-CLAIM] Vision OCR error: {response.error.message}")
         return "", []
 
@@ -404,11 +418,16 @@ def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
 
 def parse_route_sheet(file_bytes: bytes, mime_type: str):
     ocr_text = ""
+    ocr_rows = []
     deterministic = {
         "routes": [],
         "confidence": 0.0,
         "source": "unsupported",
         "parser_version": PARSER_VERSION,
+        "vision_available": VISION_STATUS["available"],
+        "vision_reason": VISION_STATUS["reason"],
+        "ocr_text_len": 0,
+        "ocr_rows": 0,
     }
 
     if mime_type in IMAGE_MIME_TYPES:
@@ -416,16 +435,42 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
         if ocr_rows:
             deterministic = _parse_routes_from_lines(ocr_rows, "vision_geometry_parser")
             deterministic["parser_version"] = PARSER_VERSION
+            deterministic["vision_available"] = VISION_STATUS["available"]
+            deterministic["vision_reason"] = VISION_STATUS["reason"]
+            deterministic["ocr_text_len"] = len(ocr_text or "")
+            deterministic["ocr_rows"] = len(ocr_rows)
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
                 return deterministic
         if ocr_text:
             deterministic = _parse_routes_from_text(ocr_text)
             deterministic["parser_version"] = PARSER_VERSION
+            deterministic["vision_available"] = VISION_STATUS["available"]
+            deterministic["vision_reason"] = VISION_STATUS["reason"]
+            deterministic["ocr_text_len"] = len(ocr_text or "")
+            deterministic["ocr_rows"] = len(ocr_rows)
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
                 return deterministic
 
+    should_use_gemini = (
+        (bool(ocr_text) and ROUTES_ENABLE_GEMINI_OCR_FALLBACK) or
+        (not ocr_text and ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK)
+    )
+    if not should_use_gemini:
+        deterministic["source"] = (
+            "ocr_parse_failed_gemini_disabled"
+            if ocr_text or ocr_rows
+            else "no_ocr_gemini_disabled"
+        )
+        deterministic["ocr_text_len"] = len(ocr_text or "")
+        deterministic["ocr_rows"] = len(ocr_rows)
+        return deterministic
+
     fallback = _fallback_with_gemini(file_bytes, mime_type, ocr_text)
     fallback["parser_version"] = PARSER_VERSION
+    fallback["vision_available"] = VISION_STATUS["available"]
+    fallback["vision_reason"] = VISION_STATUS["reason"]
+    fallback["ocr_text_len"] = len(ocr_text or "")
+    fallback["ocr_rows"] = len(ocr_rows)
     if fallback["routes"]:
         return fallback
 
