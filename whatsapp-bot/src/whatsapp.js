@@ -113,8 +113,9 @@ async function connectToWhatsApp() {
         const startsWithBotEmoji = /^[✅❌⚠️📊🚀⛽📈🎙️📋🏢]/.test(text);
         const isLongAnalysis = text.length > 400;
         const containsBotKeywords = text.includes('Análise estratégica') || text.includes('Visão do Analista') || text.includes('Saldo Líquido') || text.includes('instabilidade');
+        const isRouteClaimNotification = /^Rota confirmada:/i.test(text.trim());
 
-        if (startsWithBotEmoji || isLongAnalysis || containsBotKeywords) {
+        if (startsWithBotEmoji || isLongAnalysis || containsBotKeywords || isRouteClaimNotification) {
             return;
         }
 
