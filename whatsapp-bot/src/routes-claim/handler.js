@@ -106,6 +106,15 @@ function hasConfirmToken(text) {
     return ROUTES_CONFIG.confirmTokens.some(token => normalized.includes(token));
 }
 
+async function notifyPrivateConfirmation(sock, candidate) {
+    const myId = sock.user?.id?.split(':')[0];
+    if (!myId || !candidate?.gaiola) return;
+
+    await sock.sendMessage(`${myId}@s.whatsapp.net`, {
+        text: `Rota confirmada: ${candidate.gaiola}`
+    });
+}
+
 function getInnerMessage(message) {
     let current = message;
     for (let i = 0; i < 5; i += 1) {
@@ -282,6 +291,7 @@ async function handleReaction(sock, reaction) {
 
     const emoji = reaction.reaction?.text || reaction.reaction || '';
     if (isConfirmEmoji(emoji)) {
+        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index]);
         groupState.locked = true;
         return true;
     }
@@ -312,6 +322,7 @@ async function handleTextReply(sock, msg) {
     if (!text) return false;
 
     if (hasConfirmToken(text)) {
+        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index]);
         groupState.locked = true;
         return true;
     }
