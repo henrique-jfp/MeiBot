@@ -85,6 +85,8 @@ class LogicService:
         consolidado = {
             "total_ganhos": 0,
             "total_gastos": 0,
+            "gastos_essenciais": 0,
+            "gastos_nao_essenciais": 0,
             "total_ajustes": 0,
             "km_total": 0,
             "saldo": 0,
@@ -116,9 +118,10 @@ class LogicService:
                 app_name = ev.get("app")
 
             tipo = str(ev.get("tipo") or "").lower()
+            categoria = str(ev.get("categoria") or "").lower()
 
             if app_name not in apps_data:
-                apps_data[app_name] = {"ganhos": 0, "gastos": 0, "km": 0}
+                apps_data[app_name] = {"ganhos": 0, "gastos": 0, "km": 0, "horas": 0}
 
             if tipo in ["ganho", "rota", "corrida", "faturamento"]:
                 apps_data[app_name]["ganhos"] += val
@@ -126,13 +129,33 @@ class LogicService:
             elif tipo in ["gasto", "despesa", "saída"]:
                 apps_data[app_name]["gastos"] += val
                 consolidado["total_gastos"] += val
+                if categoria == "não essencial" or categoria == "nao essencial":
+                    consolidado["gastos_nao_essenciais"] += val
+                else:
+                    consolidado["gastos_essenciais"] += val
             elif tipo == "ajuste":
                 consolidado["total_ajustes"] += val
             
             consolidado["km_total"] += km_val
             apps_data[app_name]["km"] += km_val
 
-        # Cálculo de Horas
+            # Cálculo de horas por evento (se houver)
+            h_ini = ev.get("hora_inicio")
+            h_fim = ev.get("hora_fim")
+            if h_ini and h_fim:
+                try:
+                    # Tenta formato HH:MM
+                    if ":" in str(h_ini) and len(str(h_ini)) <= 5:
+                        fmt = "%H:%M"
+                        t1 = datetime.datetime.strptime(h_ini, fmt)
+                        t2 = datetime.datetime.strptime(h_fim, fmt)
+                        diff = (t2 - t1).total_seconds()
+                        if diff < 0: diff += 24 * 3600
+                        apps_data[app_name]["horas"] += diff / 3600
+                except:
+                    pass
+
+        # Cálculo de Horas Totais (Operação)
         if operations:
             total_sec = 0
             now = datetime.datetime.now()
@@ -140,11 +163,9 @@ class LogicService:
                 if op.get("hora_inicio"):
                     try:
                         h1 = datetime.datetime.fromisoformat(op["hora_inicio"].replace('Z', '+00:00'))
-                        # Se não tem hora_fim (operação ativa), usa o 'agora'
                         if op.get("hora_fim"):
                             h2 = datetime.datetime.fromisoformat(op["hora_fim"].replace('Z', '+00:00'))
                         else:
-                            # Converte 'now' para o mesmo formato/timezone se necessário
                             h2 = now.astimezone(h1.tzinfo) if h1.tzinfo else now
                         
                         diff = (h2 - h1).total_seconds()
@@ -177,21 +198,20 @@ class LogicService:
             for name, data in apps.items():
                 if name and match_text in name.lower():
                     return name, data
-            return match_text.title(), {"ganhos": 0, "gastos": 0, "km": 0}
+            return match_text.title(), {"ganhos": 0, "gastos": 0, "km": 0, "horas": 0}
 
         def app_block(label: str, data: dict):
-            saldo = (data.get("ganhos", 0) or 0) - (data.get("gastos", 0) or 0)
             ganhos = data.get("ganhos", 0) or 0
-            gastos = data.get("gastos", 0) or 0
             km = data.get("km", 0) or 0
-            eficiencia = saldo / km if km else 0
+            horas = data.get("horas", 0) or 0
+            eficiencia_km = ganhos / km if km else 0
+            eficiencia_hora = ganhos / horas if horas else 0
+            
             msg_block = f"\n📦 {label.upper()}\n"
             msg_block += "┌──────────────────────────\n"
-            msg_block += f" 💰 Saldo Líquido: {LogicService.format_brl(saldo)}\n"
-            msg_block += f" 📈 Ganhos:        {LogicService.format_brl(ganhos)}\n"
-            msg_block += f" 📉 Gastos:        {LogicService.format_brl(gastos)}\n"
-            msg_block += f" 🛣️ KM Rodados:    {LogicService.format_decimal(km)} km ({LogicService.format_brl(eficiencia)}/km)\n"
-            msg_block += " ⏱️ Tempo Total:   0h (R$ 0,00/h)\n"
+            msg_block += f" 💰 Faturamento:   {LogicService.format_brl(ganhos)}\n"
+            msg_block += f" 🛣️ KM Rodados:    {LogicService.format_decimal(km)} km ({LogicService.format_brl(eficiencia_km)}/km)\n"
+            msg_block += f" ⏱️ Tempo Rota:    {LogicService.format_decimal(horas)}h ({LogicService.format_brl(eficiencia_hora)}/h)\n"
             msg_block += "└──────────────────────────\n"
             return msg_block
 
@@ -215,7 +235,8 @@ class LogicService:
         msg += "┌──────────────────────────\n"
         msg += f" 💰 Saldo Líquido: {LogicService.format_brl(c.get('saldo', 0))}\n"
         msg += f" 📈 Ganhos Totais: {LogicService.format_brl(c.get('total_ganhos', 0))}\n"
-        msg += f" 📉 Gastos Totais: {LogicService.format_brl(c.get('total_gastos', 0))}\n"
+        msg += f" 📉 Gastos Essenciais: {LogicService.format_brl(c.get('gastos_essenciais', 0))}\n"
+        msg += f" 🍔 Gastos Não Essenciais: {LogicService.format_brl(c.get('gastos_nao_essenciais', 0))}\n"
         msg += f" 🛣️ KM Total:      {LogicService.format_decimal(km_total)} km\n"
         msg += f" ⏱️ Tempo Total:   {LogicService.format_decimal(total_hours)}h\n"
         msg += f" 💸 Ganho/Hora:    {LogicService.format_brl(ganho_hora)}/h\n"
