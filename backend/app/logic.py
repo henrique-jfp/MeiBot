@@ -168,9 +168,17 @@ class LogicService:
                 
                 consolidado["total_gastos"] += val
                 
-                # Classificação RIGOROSA por categoria
+                # Classificação ULTRA-RIGOROSA por categoria e descrição
                 cat_clean = categoria.lower().strip()
-                if "não essencial" in cat_clean or "nao essencial" in cat_clean or "cigarro" in cat_clean or "coca" in cat_clean:
+                desc_clean = str(ev.get("descricao") or "").lower().strip()
+                
+                # Lista de palavras que definem um gasto como NÃO ESSENCIAL
+                non_essential_keywords = ["não essencial", "nao essencial", "cigarro", "coca", "lanche", "comida", "hamburguer", "podrão", "doce", "bebida"]
+                
+                is_non_essential = any(k in cat_clean for k in non_essential_keywords) or \
+                                   any(k in desc_clean for k in non_essential_keywords)
+                
+                if is_non_essential:
                     consolidado["gastos_nao_essenciais"] += val
                 else:
                     consolidado["gastos_essenciais"] += val
