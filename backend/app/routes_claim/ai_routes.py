@@ -24,8 +24,11 @@ _genai_key = os.getenv("GEMINI_API_KEY")
 if _genai_key:
     genai.configure(api_key=_genai_key)
 
-_gemini_model_name = os.getenv("ROUTES_GEMINI_MODEL", "gemini-2.5-flash")
-_gemini_model = genai.GenerativeModel(_gemini_model_name) if _genai_key else None
+_gemini_model_names = [
+    name.strip()
+    for name in os.getenv("ROUTES_GEMINI_MODELS", "gemini-2.5-flash,gemini-2.0-flash").split(",")
+    if name.strip() and "1.5" not in name.strip()
+]
 
 
 def _build_vision_client():
@@ -346,7 +349,7 @@ def _confidence_for_routes(routes, source):
 
 
 def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
-    if not _gemini_model:
+    if not _genai_key or not _gemini_model_names:
         return {"routes": [], "confidence": 0.0, "source": "no_gemini"}
 
     prompt = (
@@ -363,29 +366,39 @@ def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
         "Nao explique, nao use markdown."
     )
 
-    try:
-        source = "gemini_ocr_fallback" if ocr_text else "gemini_image_fallback"
-        if ocr_text:
-            response = _gemini_model.generate_content(
-                [prompt, "OCR text:\n" + _compact_ocr_for_gemini(ocr_text)],
-                generation_config={"response_mime_type": "application/json"},
-            )
-        else:
-            response = _gemini_model.generate_content(
-                [prompt, {"mime_type": mime_type, "data": file_bytes}],
-                generation_config={"response_mime_type": "application/json"},
-            )
+    source = "gemini_ocr_fallback" if ocr_text else "gemini_image_fallback"
+    last_error = None
+    for model_name in _gemini_model_names:
+        try:
+            model = genai.GenerativeModel(model_name)
+            if ocr_text:
+                response = model.generate_content(
+                    [prompt, "OCR text:\n" + _compact_ocr_for_gemini(ocr_text)],
+                    generation_config={"response_mime_type": "application/json"},
+                )
+            else:
+                response = model.generate_content(
+                    [prompt, {"mime_type": mime_type, "data": file_bytes}],
+                    generation_config={"response_mime_type": "application/json"},
+                )
 
-        parsed = _parse_json_response(response.text)
-        routes = _normalize_ai_routes(parsed)
-        return {
-            "routes": routes,
-            "confidence": _confidence_for_routes(routes, source),
-            "source": source,
-        }
-    except Exception as exc:
-        print(f"[ROUTE-CLAIM] Gemini fallback failed: {exc}")
-        return {"routes": [], "confidence": 0.0, "source": "gemini_fallback_failed"}
+            parsed = _parse_json_response(response.text)
+            routes = _normalize_ai_routes(parsed)
+            return {
+                "routes": routes,
+                "confidence": _confidence_for_routes(routes, source),
+                "source": f"{source}:{model_name}",
+            }
+        except Exception as exc:
+            last_error = exc
+            print(f"[ROUTE-CLAIM] Gemini fallback failed model={model_name}: {exc}")
+
+    return {
+        "routes": [],
+        "confidence": 0.0,
+        "source": "gemini_fallback_failed",
+        "error_detail": str(last_error) if last_error else None,
+    }
 
 
 def parse_route_sheet(file_bytes: bytes, mime_type: str):

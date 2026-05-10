@@ -28,7 +28,8 @@ async def parse_routes(request: Request):
             f"source={parsed.get('source')} "
             f"confidence={parsed.get('confidence')} "
             f"routes={len(parsed.get('routes') or [])} "
-            f"error={parsed.get('error')}"
+            f"error={parsed.get('error')} "
+            f"error_detail={parsed.get('error_detail')}"
         )
         return parsed
     except Exception as exc:
