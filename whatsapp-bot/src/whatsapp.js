@@ -12,6 +12,10 @@ const pino = require('pino');
 const { sendToBackend } = require('./api');
 const routeClaim = require('./routes-claim/handler');
 
+// Cache para evitar processamento de mensagens duplicadas (loops e LID/JID duplication)
+const processedMessages = new Set();
+const CACHE_LIMIT = 100;
+
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     
@@ -98,6 +102,17 @@ async function connectToWhatsApp() {
         // Só responde se for no chat comigo mesmo E se a mensagem veio de MIM (para evitar loops)
         if (!isSelfChat || !fromMe) {
             return;
+        }
+
+        // --- TRAVA DE DUPLICIDADE (CACHE DE IDs) ---
+        const messageId = msg.key.id;
+        if (processedMessages.has(messageId)) {
+            return;
+        }
+        processedMessages.add(messageId);
+        if (processedMessages.size > CACHE_LIMIT) {
+            const firstItem = processedMessages.values().next().value;
+            processedMessages.delete(firstItem);
         }
 
         console.log(`[MSG] Processando: ${remoteJid} | fromMe: ${fromMe}`);
