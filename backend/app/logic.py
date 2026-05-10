@@ -19,23 +19,31 @@ class LogicService:
         return f"{number:.{digits}f}".replace(".", ",")
 
     @staticmethod
-    def format_events_confirmation(eventos, title):
+    def format_events_confirmation(eventos, title, data_ref=None):
         if not eventos: return "Nenhum dado registrado."
         
         ganhos = [e for e in eventos if str(e.get("tipo")).upper() == "GANHO"]
         gastos = [e for e in eventos if str(e.get("tipo")).upper() == "GASTO"]
         
-        res = "✅ <b>Registro concluído</b>\n\n"
+        data_str = ""
+        if data_ref:
+            try:
+                dt = datetime.datetime.fromisoformat(data_ref)
+                data_str = f" do dia *{dt.strftime('%d/%m/%Y')}*"
+            except:
+                data_str = f" do dia *{data_ref}*"
+
+        res = f"✅ *Registro concluído*{data_str}\n\n"
         
         # Bloco de Ganhos
         for g in ganhos:
             app = g.get("app", "Rota")
             valor = g.get("valor", 0)
-            res += f"💰 <b>{app}</b> — R$ {valor:.2f}\n"
+            res += f"💰 *{app}* — R$ {valor:.2f}\n"
         
         # Bloco de Despesas
         if gastos:
-            res += "\n💸 <b>Despesas</b>\n"
+            res += "\n💸 *Despesas*\n"
             for gast in gastos:
                 desc = gast.get("app") or gast.get("descricao") or "Gasto"
                 # Icones amigáveis para gastos comuns
@@ -51,7 +59,7 @@ class LogicService:
             km = g.get("km")
             pacotes = g.get("pacotes")
             if km or pacotes:
-                res += "\n📦 <b>Entrega</b>\n"
+                res += "\n📦 *Entrega*\n"
                 parts = []
                 if km: parts.append(f"🚗 {float(km):.1f} km")
                 if pacotes: parts.append(f"📦 {int(pacotes)} pacotes")

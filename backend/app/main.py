@@ -129,7 +129,7 @@ async def process_interpreted_data(user, interpreted):
             eventos_processados.append(ev)
 
     if intencao == "registro":
-        return LogicService.format_events_confirmation(eventos_processados, "DADOS REGISTRADOS") if eventos_processados else "Nada para registrar."
+        return LogicService.format_events_confirmation(eventos_processados, "DADOS REGISTRADOS", data_ref) if eventos_processados else "Nada para registrar."
 
     if intencao == "resumo_diario":
         target_date = data_ref or datetime.date.today().isoformat()
