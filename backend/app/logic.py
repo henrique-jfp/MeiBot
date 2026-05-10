@@ -155,25 +155,11 @@ class LogicService:
                 except:
                     pass
 
-        # Cálculo de Horas Totais (Operação)
-        if operations:
-            total_sec = 0
-            now = datetime.datetime.now()
-            for op in operations:
-                if op.get("hora_inicio"):
-                    try:
-                        h1 = datetime.datetime.fromisoformat(op["hora_inicio"].replace('Z', '+00:00'))
-                        if op.get("hora_fim"):
-                            h2 = datetime.datetime.fromisoformat(op["hora_fim"].replace('Z', '+00:00'))
-                        else:
-                            h2 = now.astimezone(h1.tzinfo) if h1.tzinfo else now
-                        
-                        diff = (h2 - h1).total_seconds()
-                        if diff > 0:
-                            total_sec += diff
-                    except Exception as e:
-                        print(f"Erro ao calcular horas da operação {op.get('id')}: {e}")
-            consolidado["total_hours"] = total_sec / 3600
+        # Cálculo de Horas Totais (Soma das rotas individuais para ignorar repouso)
+        total_worked_hours = 0
+        for app_name in apps_data:
+            total_worked_hours += apps_data[app_name].get("horas", 0)
+        consolidado["total_hours"] = total_worked_hours
         
         consolidado["saldo"] = consolidado["total_ganhos"] - consolidado["total_gastos"]
         if consolidado.get("total_hours", 0) > 0:

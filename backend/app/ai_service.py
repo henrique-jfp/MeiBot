@@ -55,8 +55,12 @@ class AIService:
         - 'cadastrar_entregador': Para cadastrar um novo entregador (nome, valor diária).
         - 'listar_porteiros': Para listar os porteiros mapeados.
         - 'consultar_porteiro': Para buscar porteiros de um endereço específico.
-        - 'cadastrar_porteiro': Para mapear um novo porteiro em um endereço.
-        - 'corrigir_porteiro': Para atualizar informações de um porteiro já cadastrado.
+        - cadastrar_porteiro: Para mapear um novo porteiro em um endereço.
+        - corrigir_porteiro: Para atualizar informações de um porteiro já cadastrado.
+
+        Regras de Negócio Pessoais (Aplique AUTOMATICAMENTE se o app for mencionado):
+        - 'Shopee': Valor bruto é SEMPRE R$ 305.00 e KM é SEMPRE 60. Se for Shopee, gere DOIS eventos: um de 'ganho' (R$ 305) e outro de 'gasto' (categoria: 'Essencial', valor: 130.00, descricao: 'Salário ajudante Shopee').
+        - 'Correios': KM é SEMPRE 20. O valor do ganho é pacotes * 2.00. Se a pessoa falar 'Fechei Correios, 50 pacotes', o valor deve ser 100.00.
 
         Campos do JSON:
         - intencao: Uma das intenções acima.
