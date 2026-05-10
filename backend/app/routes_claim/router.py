@@ -1,4 +1,5 @@
 import base64
+import traceback
 from fastapi import APIRouter, Request
 from .ai_routes import parse_route_sheet
 
@@ -32,4 +33,5 @@ async def parse_routes(request: Request):
         return parsed
     except Exception as exc:
         print(f"[ROUTE-CLAIM] parse exception mime={mime_type} bytes={len(file_bytes)} error={exc}")
+        traceback.print_exc()
         return {"error": "parse_failed", "detail": str(exc)}

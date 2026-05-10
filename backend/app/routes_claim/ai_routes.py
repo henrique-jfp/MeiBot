@@ -5,8 +5,14 @@ import unicodedata
 
 import google.generativeai as genai
 from dotenv import load_dotenv
-from google.cloud import vision
-from google.oauth2 import service_account
+
+try:
+    from google.cloud import vision
+    from google.oauth2 import service_account
+except Exception as exc:
+    print(f"[ROUTE-CLAIM] Google Vision imports unavailable: {exc}")
+    vision = None
+    service_account = None
 
 load_dotenv()
 
@@ -23,6 +29,9 @@ _gemini_model = genai.GenerativeModel(_gemini_model_name) if _genai_key else Non
 
 
 def _build_vision_client():
+    if vision is None or service_account is None:
+        return None
+
     creds_json = os.getenv("GOOGLE_VISION_CREDENTIALS_JSON")
     if not creds_json:
         return None

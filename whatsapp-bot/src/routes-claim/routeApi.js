@@ -15,7 +15,7 @@ async function parseRouteSheet(payload) {
         console.log(
             `[ROUTE-CLAIM] Parser response source=${data.source || 'unknown'} ` +
             `confidence=${data.confidence ?? 'n/a'} routes=${Array.isArray(data.routes) ? data.routes.length : 0} ` +
-            `error=${data.error || 'none'}`
+            `error=${data.error || 'none'} detail=${data.detail || 'none'}`
         );
         return response.data;
     } catch (error) {
