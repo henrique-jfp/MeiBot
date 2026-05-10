@@ -161,17 +161,16 @@ class LogicService:
                 consolidado["total_ganhos"] += val
             elif tipo in ["gasto", "despesa", "saída"]:
                 # REGRA DE ISOLAMENTO: Só desconta do APP se o gasto for explicitamente dele
-                # Gastos genéricos (sem app_id ou categoria de custo fixo como combustível) 
-                # somam apenas no consolidado da empresa.
-                
-                # Se o evento veio com apps (join) ou app_id preenchido, ele é específico
                 has_app_link = bool(ev.get("apps") or ev.get("app_id"))
                 
                 if has_app_link:
                     apps_data[app_name]["gastos"] += val
                 
                 consolidado["total_gastos"] += val
-                if categoria == "não essencial" or categoria == "nao essencial":
+                
+                # Classificação RIGOROSA por categoria
+                cat_clean = categoria.lower().strip()
+                if "não essencial" in cat_clean or "nao essencial" in cat_clean or "cigarro" in cat_clean or "coca" in cat_clean:
                     consolidado["gastos_nao_essenciais"] += val
                 else:
                     consolidado["gastos_essenciais"] += val
