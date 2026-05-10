@@ -110,9 +110,13 @@ async function notifyPrivateConfirmation(sock, candidate) {
     const myId = sock.user?.id?.split(':')[0];
     if (!myId || !candidate?.gaiola) return;
 
-    await sock.sendMessage(`${myId}@s.whatsapp.net`, {
-        text: `Rota confirmada: ${candidate.gaiola}`
-    });
+    try {
+        await sock.sendMessage(`${myId}@s.whatsapp.net`, {
+            text: `Rota confirmada: ${candidate.gaiola}`
+        });
+    } catch (error) {
+        console.error('[ROUTE-CLAIM] Private confirmation failed:', error.message);
+    }
 }
 
 function getInnerMessage(message) {
@@ -291,8 +295,8 @@ async function handleReaction(sock, reaction) {
 
     const emoji = reaction.reaction?.text || reaction.reaction || '';
     if (isConfirmEmoji(emoji)) {
-        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index]);
         groupState.locked = true;
+        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index]);
         return true;
     }
 
@@ -303,6 +307,8 @@ async function handleReaction(sock, reaction) {
         } else {
             groupState.candidates = [];
             groupState.lastClaimId = null;
+            groupState.lastClaimSignature = null;
+            groupState.lastClaimAt = 0;
         }
         return true;
     }
@@ -322,8 +328,8 @@ async function handleTextReply(sock, msg) {
     if (!text) return false;
 
     if (hasConfirmToken(text)) {
-        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index]);
         groupState.locked = true;
+        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index]);
         return true;
     }
 

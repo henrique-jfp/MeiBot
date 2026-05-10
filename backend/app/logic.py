@@ -2,6 +2,23 @@ import datetime
 
 class LogicService:
     @staticmethod
+    def format_brl(value):
+        try:
+            number = float(value or 0)
+        except Exception:
+            number = 0
+        formatted = f"{number:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {formatted}"
+
+    @staticmethod
+    def format_decimal(value, digits=1):
+        try:
+            number = float(value or 0)
+        except Exception:
+            number = 0
+        return f"{number:.{digits}f}".replace(".", ",")
+
+    @staticmethod
     def format_events_confirmation(eventos, title):
         if not eventos: return "Nenhum dado registrado."
         res = f"✅ *{title}*\n\n"
@@ -153,6 +170,7 @@ class LogicService:
     def format_summary_3_blocks(metrics: dict, title: str = "RESUMO DA OPERAÇÃO", analyst_insight: str = None):
         c = metrics["consolidado"]
         apps = metrics.get("apps") or {}
+        period_label = metrics.get("period_label")
 
         def find_app(match_text: str):
             match_text = match_text.lower()
@@ -163,36 +181,52 @@ class LogicService:
 
         def app_block(label: str, data: dict):
             saldo = (data.get("ganhos", 0) or 0) - (data.get("gastos", 0) or 0)
-            msg_block = f"{label}\n"
-            msg_block += f"💰 *Saldo Líquido:* R$ {saldo:.2f}\n"
-            msg_block += f"📈 *Ganhos:* R$ {data.get('ganhos', 0):.2f}\n"
-            msg_block += f"📉 *Gastos:* R$ {data.get('gastos', 0):.2f}\n"
-            msg_block += f"🛣️ *KM Total:* {data.get('km', 0):.1f} km\n"
+            ganhos = data.get("ganhos", 0) or 0
+            gastos = data.get("gastos", 0) or 0
+            km = data.get("km", 0) or 0
+            eficiencia = saldo / km if km else 0
+            msg_block = f"\n {label.upper()}\n"
+            msg_block += "┌─────────────────────\n"
+            msg_block += f" Saldo Líquido: {LogicService.format_brl(saldo)}\n"
+            msg_block += f" Ganhos:       {LogicService.format_brl(ganhos)}\n"
+            msg_block += f" Gastos:       {LogicService.format_brl(gastos)}\n"
+            msg_block += f" KM Rodados:   {LogicService.format_decimal(km)} km • {LogicService.format_brl(eficiencia)}/km\n"
+            msg_block += " Tempo:        0h • R$ 0,00/h\n"
+            msg_block += "└─────────────────────\n"
             return msg_block
 
         shopee_name, shopee_data = find_app("shopee")
         correios_name, correios_data = find_app("correio")
 
-        msg = f"📊 *{title}*\n"
-        msg += "--------------------------\n"
-        msg += app_block(f"🏬 *{shopee_name}*", shopee_data)
-        msg += "--------------------------\n"
-        msg += app_block(f"🏤 *{correios_name}*", correios_data)
-        msg += "--------------------------\n"
+        header = title
+        if period_label:
+            header = f"{title} • {period_label}"
 
-        msg += "🏢 *Consolidado*\n"
-        msg += f"💰 *Saldo Líquido:* R$ {c['saldo']:.2f}\n"
-        msg += f"📈 *Ganhos:* R$ {c['total_ganhos']:.2f}\n"
-        msg += f"📉 *Gastos:* R$ {c['total_gastos']:.2f}\n"
-        msg += f"🛣️ *KM Total:* {c['km_total']:.1f} km\n"
+        km_total = c.get("km_total", 0) or 0
+        total_hours = c.get("total_hours", 0) or 0
+        ganho_hora = c.get("ganho_por_hora", 0) or 0
+        eficiencia = (c.get("saldo", 0) or 0) / km_total if km_total else 0
 
-        if c.get("total_hours"):
-            msg += f"⏱️ *Tempo Total:* {c['total_hours']:.1f}h\n"
-            msg += f"🕒 *Ganho/Hora:* R$ {c.get('ganho_por_hora', 0):.2f}/h\n"
+        msg = "╔══════════════════════╗\n"
+        msg += f" {header}\n"
+        msg += "╚══════════════════════╝\n"
+        msg += app_block(shopee_name, shopee_data)
+        msg += app_block(correios_name, correios_data)
+
+        msg += "\n CONSOLIDADO DA OPERAÇÃO\n"
+        msg += "┌─────────────────────\n"
+        msg += f" Saldo Líquido: {LogicService.format_brl(c.get('saldo', 0))}\n"
+        msg += f" Ganhos Totais: {LogicService.format_brl(c.get('total_ganhos', 0))}\n"
+        msg += f" Gastos Totais: {LogicService.format_brl(c.get('total_gastos', 0))}\n"
+        msg += f" KM Total:      {LogicService.format_decimal(km_total)} km\n"
+        msg += f" Tempo Total:   {LogicService.format_decimal(total_hours)}h\n"
+        msg += f" Ganho/Hora:    {LogicService.format_brl(ganho_hora)}/h\n"
+        msg += f" Eficiência:    {LogicService.format_brl(eficiencia)}/km\n"
+        msg += "└─────────────────────\n"
 
         if analyst_insight:
-            msg += "\n🧐 *Visão do Analista:*\n"
-            msg += f"_{analyst_insight}_"
+            msg += "\n VISÃO DO ANALISTA ESTRATÉGICO\n\n"
+            msg += analyst_insight
 
         return msg
 

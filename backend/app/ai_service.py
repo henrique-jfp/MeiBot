@@ -115,7 +115,7 @@ class AIService:
         ])
         return response.text
 
-    async def generate_analyst_insight(self, current_metrics: dict, previous_metrics: dict = None, period_type: str = "Semana"):
+    async def generate_analyst_insight(self, current_metrics: dict, previous_metrics: dict = None, period_type: str = "Semana", app_metrics: dict = None):
         curr = {
             "ganho": current_metrics.get("total_ganhos", 0),
             "gasto": current_metrics.get("total_gastos", 0),
@@ -134,9 +134,23 @@ class AIService:
             }
             prev_str = f"Ganho: R$ {prev['ganho']:.2f}, KM: {prev['km']:.1f}, R$/Hora: R$ {prev['rs_hora']:.2f}"
 
+        apps_str = "Sem dados por plataforma."
+        if app_metrics:
+            app_lines = []
+            for name, data in app_metrics.items():
+                ganhos = float(data.get("ganhos", 0) or 0)
+                gastos = float(data.get("gastos", 0) or 0)
+                km = float(data.get("km", 0) or 0)
+                saldo = ganhos - gastos
+                app_lines.append(
+                    f"- {name}: saldo R$ {saldo:.2f}, ganhos R$ {ganhos:.2f}, "
+                    f"gastos R$ {gastos:.2f}, KM {km:.1f}"
+                )
+            apps_str = "\n".join(app_lines)
+
         prompt = f"""
         Você é o ANALISTA ESTRATÉGICO SÊNIOR do MeiBot.
-        Sua missão é dar uma consultoria de negócios detalhada para o entregador.
+        Sua missão é dar uma consultoria curta, prática e financeira para o entregador.
         
         DADOS ATUAIS ({period_type}):
         - Ganho Total: R$ {curr['ganho']:.2f}
@@ -147,13 +161,22 @@ class AIService:
         
         COMPARAÇÃO ANTERIOR:
         {prev_str}
+
+        DADOS POR PLATAFORMA:
+        {apps_str}
         
-        Sua resposta deve ter no mínimo 3 parágrafos curtos:
-        1. Análise de Performance: Comente sobre o ganho por hora e o custo por KM. Diga se ele está sendo eficiente ou se está "pagando para trabalhar".
-        2. Comparação: Se houver dados anteriores, compare se ele melhorou ou piorou e o porquê provável.
-        3. Dica de Ouro: Dê uma estratégia real para ele ganhar mais dinheiro (ex: escolher melhor os horários, focar em apps que pagam mais por km, reduzir gastos supérfluos).
+        Responda exatamente neste formato, sem markdown, sem bullets e sem emojis:
+
+        Shopee
+        Um parágrafo curto analisando a Shopee. Se não houver operação, diga isso claramente e sugira monitorar oportunidade.
+
+        Correios
+        Um parágrafo curto analisando os Correios. Se não houver KM ou tempo, alerte sobre falha de rastreamento.
+
+        Panorama Geral
+        Um parágrafo curto sobre o resultado total, ganho/hora, eficiência por KM e principal ação para melhorar.
         
-        Use gírias de entregador (pista, meta, foguete, parceiro) mas mantenha a seriedade financeira.
+        Seja direto e mantenha tom profissional.
         """
         response = self.model.generate_content(prompt)
         return response.text
