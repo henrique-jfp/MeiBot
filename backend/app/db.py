@@ -151,7 +151,9 @@ class DBService:
                 "app_id": app_id,
                 "pacotes": int(event_data.get("pacotes") or 0),
                 "descricao": event_data.get("descricao") or event_data.get("pergunta"),
-                "categoria": event_data.get("categoria")
+                "categoria": event_data.get("categoria"),
+                "hora_inicio": event_data.get("hora_inicio") or event_data.get("hora_inicio_rota"),
+                "hora_fim": event_data.get("hora_fim") or event_data.get("hora_fim_operacao")
             }
             
             # Se tiver data específica no evento
