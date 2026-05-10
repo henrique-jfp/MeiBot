@@ -69,19 +69,51 @@ async def process_interpreted_data(user, interpreted):
         res = db.add_entregador(user_id, info.get("nome"), info.get("valor_diaria"))
         return f"✅ Entregador *{info.get('nome')}* cadastrado!" if res else "❌ Erro."
 
-    active_op = db.get_active_operation(user_id)
-    if not active_op and len(eventos_brutos) > 0:
-        active_op = db.start_operation(user_id)
+    # 1. Pega ou cria a operação correta (suporte a retroativo)
+    if data_ref:
+        active_op = db.get_or_create_operation_by_date(user_id, data_ref)
+    else:
+        active_op = db.get_active_operation(user_id)
+        if not active_op and len(eventos_brutos) > 0:
+            active_op = db.start_operation(user_id)
 
     eventos_processados = []
     for ev in eventos_brutos:
-        app_info = db.get_app_by_name(ev.get("app")) if ev.get("app") else None
-        if app_info and (not ev.get("valor") or ev.get("valor") == 0):
-            if app_info.get("tipo_remuneracao") == "pacote":
-                ev["valor"] = ev.get("pacotes", 0) * app_info["valor_base"]
-            elif app_info.get("tipo_remuneracao") == "rota":
-                ev["valor"] = app_info["valor_base"]
+        # Normalização e Regras de Negócio Hardcoded
+        app_name_raw = str(ev.get("app") or "").lower()
+        
+        if "shopee" in app_name_raw:
+            ev["app"] = "Shopee"
+            ev["valor"] = 305.0
+            ev["km"] = 60.0
+            ev["tipo"] = "ganho"
+            # Adiciona gasto do ajudante automaticamente se não existir
+            ja_tem_gasto = any("ajudante" in str(e.get("descricao") or "").lower() for e in eventos_brutos)
+            if not ja_tem_gasto:
+                gasto_aj = {"app": "Shopee", "tipo": "gasto", "categoria": "Essencial", "valor": 130.0, "descricao": "Salário ajudante Shopee (Auto)"}
+                if active_op:
+                    if data_ref: gasto_aj["data_referencia"] = data_ref
+                    db.add_event(user_id, active_op["id"], gasto_aj)
+                eventos_processados.append(gasto_aj)
+        
+        elif "correio" in app_name_raw:
+            ev["app"] = "Correios"
+            ev["km"] = 20.0
+            ev["tipo"] = "ganho"
+            if not ev.get("valor") or ev.get("valor") == 0:
+                ev["valor"] = float(ev.get("pacotes") or 0) * 2.0
+        
+        else:
+            # Regras via Banco de Dados
+            app_info = db.get_app_by_name(ev.get("app")) if ev.get("app") else None
+            if app_info and (not ev.get("valor") or ev.get("valor") == 0):
+                if app_info.get("tipo_remuneracao") == "pacote":
+                    ev["valor"] = ev.get("pacotes", 0) * app_info["valor_base"]
+                elif app_info.get("tipo_remuneracao") == "rota":
+                    ev["valor"] = app_info["valor_base"]
+
         if active_op:
+            if data_ref: ev["data_referencia"] = data_ref
             db.add_event(user_id, active_op["id"], ev)
             eventos_processados.append(ev)
 
