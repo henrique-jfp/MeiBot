@@ -273,7 +273,7 @@ async def process_interpreted_data(user, interpreted):
         metrics_prev = LogicService.calculate_metrics(events_prev, None)
         
         try:
-            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Semana Atual", metrics_curr.get("apps"))
+            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev["consolidado"], "Semana Atual", metrics_curr.get("apps"))
         except Exception as e:
             print(f"AI insight failed (weekly): {e}")
             insight = None
@@ -289,7 +289,7 @@ async def process_interpreted_data(user, interpreted):
         metrics_prev = LogicService.calculate_metrics(events_prev, None)
         
         try:
-            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Mês Atual", metrics_curr.get("apps"))
+            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev["consolidado"], "Mês Atual", metrics_curr.get("apps"))
         except Exception as e:
             print(f"AI insight failed (monthly): {e}")
             insight = None
@@ -321,7 +321,7 @@ async def process_interpreted_data(user, interpreted):
             metrics_prev = LogicService.calculate_metrics(events_prev, None)
             
             try:
-                insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Mês", metrics_curr.get("apps"))
+                insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev["consolidado"], "Mês", metrics_curr.get("apps"))
             except Exception as e:
                 print(f"AI insight failed (month close): {e}")
                 insight = None
@@ -337,7 +337,7 @@ async def process_interpreted_data(user, interpreted):
             metrics_prev = LogicService.calculate_metrics(events_prev, None)
             
             try:
-                insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Semana", metrics_curr.get("apps"))
+                insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev["consolidado"], "Semana", metrics_curr.get("apps"))
             except Exception as e:
                 print(f"AI insight failed (week close): {e}")
                 insight = None
