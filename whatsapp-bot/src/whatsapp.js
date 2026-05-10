@@ -12,6 +12,9 @@ const pino = require('pino');
 const { sendToBackend } = require('./api');
 const routeClaim = require('./routes-claim/handler');
 
+// Inicia o monitor de horários para captura de rotas
+routeClaim.startScheduleMonitor();
+
 // Cache para evitar processamento de mensagens duplicadas (loops e LID/JID duplication)
 const processedMessages = new Set();
 const CACHE_LIMIT = 100;
@@ -64,6 +67,10 @@ async function connectToWhatsApp() {
         }
     });
 
+    // Cache de textos para evitar loops de conteúdo idêntico
+    const processedTexts = new Set();
+    const TEXT_CACHE_LIMIT = 50;
+
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message) return;
@@ -73,71 +80,79 @@ async function connectToWhatsApp() {
         const myId = sock.user?.id?.split(':')[0];
         const myLid = sock.user?.lid?.split(':')[0];
 
-        if (!remoteJid || !myId) {
-            return;
-        }
+        if (!remoteJid || !myId) return;
 
+        // --- PRIORIDADE 1: COMANDOS (Sempre processar, ignora filtros de tempo) ---
         try {
             const handledRouteControl = await routeClaim.handleIncomingMessage(sock, msg);
-            if (handledRouteControl) return;
+            if (handledRouteControl) {
+                console.log(`[ROUTE-CLAIM] Comando ou imagem processada: ${remoteJid}`);
+                return;
+            }
         } catch (err) {
             console.error('[ROUTE-CLAIM] Error:', err.message);
         }
 
-        // LOG DE ENTRADA (Apenas para depuração interna)
-        console.log(`[RAW-MSG] From: ${remoteJid} | fromMe: ${fromMe}`);
+        // --- FILTRO DE MENSAGENS ANTIGAS (EVITA LOOPS DE HISTÓRICO) ---
+        const messageTimestamp = msg.messageTimestamp;
+        const now = Math.floor(Date.now() / 1000);
+        if (messageTimestamp && (now - messageTimestamp) > 60) {
+            return;
+        }
 
-        // --- GATEWAY DE GRUPOS E COMANDOS DE ROTA ---
+        // --- GATEWAY DE GRUPOS ---
         if (remoteJid.endsWith('@g.us')) {
-            // INDEPENDENTE do resultado, se é grupo, o bot morre aqui.
-            // Nunca deixa passar para o processamento de IA geral.
             return;
         }
         
         // --- TRAVA DE SEGURANÇA ESTRITA (SELF-ONLY) ---
-        // Só processa se o remoteJid contiver o seu próprio ID.
-        // Isso garante que se você mandar mensagem para outra pessoa, o bot não responda.
         const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
-        
-        // Só responde se for no chat comigo mesmo E se a mensagem veio de MIM (para evitar loops)
         if (!isSelfChat || !fromMe) {
             return;
         }
 
-        // --- TRAVA DE DUPLICIDADE (CACHE DE IDs) ---
-        const messageId = msg.key.id;
-        if (processedMessages.has(messageId)) {
-            return;
-        }
-        processedMessages.add(messageId);
-        if (processedMessages.size > CACHE_LIMIT) {
-            const firstItem = processedMessages.values().next().value;
-            processedMessages.delete(firstItem);
-        }
-
-        console.log(`[MSG] Processando: ${remoteJid} | fromMe: ${fromMe}`);
-
-        // --- TRAVA DE LOOP INTELIGENTE ---
+        // --- EXTRAÇÃO DE TEXTO PARA DEDUPLICAÇÃO ---
         const text = msg.message.conversation || 
                      msg.message.extendedTextMessage?.text || 
                      msg.message.ephemeralMessage?.message?.extendedTextMessage?.text ||
                      msg.message.ephemeralMessage?.message?.conversation ||
                      "";
 
-        // Se a mensagem for uma resposta do próprio bot, ignora
-        const startsWithBotEmoji = /^[✅❌⚠️📊🚀⛽📈🎙️📋🏢╔┌]/.test(text.trim());
-        const isLongAnalysis = text.length > 400;
-        const containsBotKeywords = text.includes('Análise estratégica') || 
-                                    text.includes('Visão do Analista') || 
-                                    text.includes('VISÃO DO ANALISTA') ||
-                                    text.includes('Saldo Líquido') || 
-                                    text.includes('SALDO LÍQUIDO') ||
-                                    text.includes('instabilidade') ||
-                                    text.includes('RESUMO SEMANAL') ||
-                                    text.includes('CONSOLIDADO DA OPERAÇÃO');
-        const isRouteClaimNotification = /^Rota confirmada:/i.test(text.trim());
+        // --- TRAVA DE DUPLICIDADE (ID e TEXTO) ---
+        const messageId = msg.key.id;
+        const textHash = text.trim().substring(0, 100);
+        
+        if (processedMessages.has(messageId) || (textHash && processedTexts.has(textHash))) {
+            return;
+        }
+        
+        processedMessages.add(messageId);
+        if (textHash) processedTexts.add(textHash);
 
-        if (startsWithBotEmoji || isLongAnalysis || containsBotKeywords || isRouteClaimNotification) {
+        if (processedMessages.size > CACHE_LIMIT) {
+            const firstItem = processedMessages.values().next().value;
+            processedMessages.delete(firstItem);
+        }
+        if (processedTexts.size > TEXT_CACHE_LIMIT) {
+            const firstItem = processedTexts.values().next().value;
+            processedTexts.delete(firstItem);
+        }
+
+        console.log(`[MSG] Processando: ${remoteJid} | fromMe: ${fromMe}`);
+
+        // --- TRAVA DE LOOP (Detecção de respostas do Bot) ---
+        const startsWithBotEmoji = /^[✅❌⚠️📊🔄🚀⛽📈🎙️📋🏢╔┌]/.test(text.trim());
+        const isBotMessage = text.includes('Análise estratégica') || 
+                             text.includes('Visão do Analista') || 
+                             text.includes('VISÃO DO ANALISTA') ||
+                             text.includes('Saldo Líquido') || 
+                             text.includes('SALDO LÍQUIDO') ||
+                             text.includes('RESUMO SEMANAL') ||
+                             text.includes('CONSOLIDADO DA OPERAÇÃO') ||
+                             text.includes('Rota confirmada:') ||
+                             text.includes('Sistema de rotas');
+
+        if (startsWithBotEmoji || isBotMessage || text.length > 500) {
             return;
         }
 

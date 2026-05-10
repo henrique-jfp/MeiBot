@@ -6,9 +6,9 @@ const ROUTES_CONFIG = {
     timezone: 'America/Sao_Paulo',
     schedule: {
         enabledInProd: true,
-        startMinutes: 23 * 60,
-        endMinutes: 4 * 60 + 30,
-        weekdaysOnly: true
+        startMinutes: 14 * 60 + 30,
+        endMinutes: 16 * 60,
+        weekdaysOnly: false
     },
     minConfidence: 0.75,
     targetNeighborhoodAliases: ['rocinha', 'roc'],

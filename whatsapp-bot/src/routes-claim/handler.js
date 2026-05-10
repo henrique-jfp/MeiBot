@@ -70,23 +70,36 @@ function isProdGroup(name) {
         .includes(normalizeText(name));
 }
 
-async function handleCommand(msg, myJid) {
-    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+async function handleCommand(sock, msg) {
+    const text = msg.message?.conversation || 
+                 msg.message?.extendedTextMessage?.text || 
+                 msg.message?.ephemeralMessage?.message?.extendedTextMessage?.text ||
+                 msg.message?.ephemeralMessage?.message?.conversation ||
+                 '';
+                 
+    const remoteJid = msg.key.remoteJid;
+    console.log(`[DEBUG-COMMAND] Recebido em ${remoteJid}: "${text}"`);
+
     if (!text) return false;
 
     const command = normalizeText(text);
+    console.log(`[DEBUG-COMMAND] Comando normalizado: "${command}"`);
+
     if (command === 'reativar rotas') {
         state.groups.clear();
+        await sock.sendMessage(remoteJid, { text: '🔄 *Memória de rotas limpa!* O bot tentará capturar novamente imagens já enviadas hoje.' });
         return true;
     }
 
     if (command === 'desativar rotas') {
         state.active = false;
+        await sock.sendMessage(remoteJid, { text: '❌ *Sistema de rotas DESATIVADO.*' });
         return true;
     }
 
     if (command === 'ativar rotas') {
         state.active = true;
+        await sock.sendMessage(remoteJid, { text: '✅ *Sistema de rotas ATIVADO.*' });
         return true;
     }
 
@@ -307,8 +320,9 @@ async function handleReaction(sock, reaction) {
     const emoji = reaction.reaction?.text || reaction.reaction || '';
     if (isConfirmEmoji(emoji)) {
         groupState.locked = true;
+        state.active = false; // Desativa o bot após confirmação
         const participant = reaction.key?.participant || reaction.key?.remoteJid;
-        console.log(`[ROUTE-CLAIM] Reação de confirmação detectada (${emoji}) de ${participant}`);
+        console.log(`[ROUTE-CLAIM] Reação de confirmação detectada (${emoji}) de ${participant}. Bot desativado.`);
         await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index], participant);
         return true;
     }
@@ -335,7 +349,7 @@ async function handleReactionMessage(sock, msg) {
     
     const messageId = reactionMessage.key?.id;
     const remoteJid = msg.key.remoteJid;
-    const participant = msg.key.participant || msg.key.remoteJid;
+    const participant = msg.key.remoteJid;
 
     console.log(`[DEBUG] reactionMessage detectada! Emoji: ${reactionMessage.text}, Para mensagem: ${messageId}`);
 
@@ -350,7 +364,8 @@ async function handleReactionMessage(sock, msg) {
 
     if (isConfirmEmoji(emoji)) {
         groupState.locked = true;
-        console.log(`[ROUTE-CLAIM] Reação de confirmação em upsert detectada (${emoji})`);
+        state.active = false; // Desativa o bot após confirmação
+        console.log(`[ROUTE-CLAIM] Reação de confirmação em upsert detectada (${emoji}). Bot desativado.`);
         await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index], participant);
         return true;
     }
@@ -384,8 +399,9 @@ async function handleTextReply(sock, msg) {
 
     if (hasConfirmToken(text)) {
         groupState.locked = true;
+        state.active = false; // Desativa o bot após confirmação
         const participant = msg.key.participant || msg.key.remoteJid;
-        console.log(`[ROUTE-CLAIM] Resposta de confirmação detectada de ${participant}`);
+        console.log(`[ROUTE-CLAIM] Resposta de confirmação detectada de ${participant}. Bot desativado.`);
         await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index], participant);
         return true;
     }
@@ -394,33 +410,18 @@ async function handleTextReply(sock, msg) {
 }
 
 async function handleIncomingMessage(sock, msg) {
-    // Adicionando log de debug para inspecionar mensagens em grupos
-    if (msg.key.remoteJid.endsWith('@g.us')) {
-        const msgType = Object.keys(msg.message || {})[0];
-        if (msgType === 'reactionMessage') {
-             console.log(`[DEBUG] Reação no grupo ${msg.key.remoteJid} para msg ${msg.message.reactionMessage.key.id}`);
-        }
-    }
-
-    if (msg.message?.reactionMessage) {
-        return await handleReactionMessage(sock, msg);
-    }
-
     const remoteJid = msg.key.remoteJid;
     const isGroup = remoteJid.endsWith('@g.us');
-    const myId = sock.user?.id?.split(':')[0];
-
-    if (!isGroup && myId) {
-        const myJid = `${myId}@s.whatsapp.net`;
-        if (remoteJid === myJid) {
-            const handled = await handleCommand(msg, myJid);
-            if (handled) return true;
-        }
+    
+    // Se for conversa privada, tenta interceptar o comando primeiro
+    if (!isGroup) {
+        const handled = await handleCommand(sock, msg);
+        if (handled) return true;
+        // Se for privado mas não for comando, o módulo de rotas ignora
         return false;
     }
 
-    if (!isGroup) return false;
-
+    // Daqui pra baixo é apenas para GRUPOS
     const groupName = await getGroupName(sock, remoteJid);
     if (!groupName) return false;
 
@@ -433,9 +434,38 @@ async function handleIncomingMessage(sock, msg) {
     return handleRouteImage(sock, msg, groupName, isTest);
 }
 
+let monitorInterval = null;
+
+function startScheduleMonitor() {
+    if (monitorInterval) clearInterval(monitorInterval);
+    monitorInterval = setInterval(() => {
+        const { hour, minute } = getLocalTime();
+        const minutesNow = hour * 60 + minute;
+        const { startMinutes, endMinutes } = ROUTES_CONFIG.schedule;
+        
+        // At exatamente startMinutes (14:30)
+        if (minutesNow === startMinutes) {
+            if (!state.active) {
+                console.log('[ROUTE-CLAIM] Automático: Iniciando janela de rotas.');
+                state.active = true;
+                state.groups.clear(); // Limpa cache de processamento do dia anterior
+            }
+        }
+        
+        // At exatamente endMinutes (16:00)
+        if (minutesNow === endMinutes) {
+            if (state.active) {
+                console.log('[ROUTE-CLAIM] Automático: Encerrando janela de rotas.');
+                state.active = false;
+            }
+        }
+    }, 60000); // Verifica a cada minuto
+}
+
 module.exports = {
     handleIncomingMessage,
     handleReaction,
     handleTextReply,
-    getGroupName
+    getGroupName,
+    startScheduleMonitor
 };
