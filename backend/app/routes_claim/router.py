@@ -1,9 +1,14 @@
 import base64
 import traceback
 from fastapi import APIRouter, Request
-from .ai_routes import parse_route_sheet
+from .ai_routes import PARSER_VERSION, parse_route_sheet
 
 router = APIRouter(prefix="/routes-claim")
+
+
+@router.get("/version")
+async def parser_version():
+    return {"parser_version": PARSER_VERSION}
 
 
 @router.post("/parse")
@@ -28,6 +33,7 @@ async def parse_routes(request: Request):
             f"source={parsed.get('source')} "
             f"confidence={parsed.get('confidence')} "
             f"routes={len(parsed.get('routes') or [])} "
+            f"parser_version={parsed.get('parser_version')} "
             f"error={parsed.get('error')} "
             f"error_detail={parsed.get('error_detail')}"
         )

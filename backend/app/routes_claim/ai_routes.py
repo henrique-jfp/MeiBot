@@ -19,6 +19,7 @@ load_dotenv()
 TARGET_ALIASES = ("rocinha", "roc")
 MIN_DETERMINISTIC_CONFIDENCE = 0.75
 IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+PARSER_VERSION = "routes-claim-2026-05-10-gemini25-v3"
 
 _genai_key = os.getenv("GEMINI_API_KEY")
 if _genai_key:
@@ -403,21 +404,31 @@ def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
 
 def parse_route_sheet(file_bytes: bytes, mime_type: str):
     ocr_text = ""
-    deterministic = {"routes": [], "confidence": 0.0, "source": "unsupported"}
+    deterministic = {
+        "routes": [],
+        "confidence": 0.0,
+        "source": "unsupported",
+        "parser_version": PARSER_VERSION,
+    }
 
     if mime_type in IMAGE_MIME_TYPES:
         ocr_text, ocr_rows = _extract_text_with_vision(file_bytes)
         if ocr_rows:
             deterministic = _parse_routes_from_lines(ocr_rows, "vision_geometry_parser")
+            deterministic["parser_version"] = PARSER_VERSION
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
                 return deterministic
         if ocr_text:
             deterministic = _parse_routes_from_text(ocr_text)
+            deterministic["parser_version"] = PARSER_VERSION
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
                 return deterministic
 
     fallback = _fallback_with_gemini(file_bytes, mime_type, ocr_text)
+    fallback["parser_version"] = PARSER_VERSION
     if fallback["routes"]:
         return fallback
 
+    if fallback.get("source") == "gemini_fallback_failed":
+        return fallback
     return deterministic
