@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import re
@@ -13,6 +14,14 @@ except Exception as exc:
     print(f"[ROUTE-CLAIM] Google Vision imports unavailable: {exc}")
     vision = None
     service_account = None
+
+try:
+    from pdf2image import convert_from_bytes
+    from PIL import Image
+    PDF_SUPPORT_AVAILABLE = True
+except ImportError:
+    print("[ROUTE-CLAIM] pdf2image or Pillow not installed. PDF support will be disabled.")
+    PDF_SUPPORT_AVAILABLE = False
 
 load_dotenv()
 
@@ -419,6 +428,21 @@ def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
 def parse_route_sheet(file_bytes: bytes, mime_type: str):
     ocr_text = ""
     ocr_rows = []
+
+    # Suporte para PDF: Converte a primeira página em imagem JPEG antes de processar
+    if mime_type == "application/pdf" and PDF_SUPPORT_AVAILABLE:
+        try:
+            # Converte apenas a primeira página do PDF
+            images = convert_from_bytes(file_bytes, first_page=1, last_page=1, fmt="jpeg")
+            if images:
+                img_byte_arr = io.BytesIO()
+                images[0].save(img_byte_arr, format="JPEG")
+                file_bytes = img_byte_arr.getvalue()
+                mime_type = "image/jpeg"  # A partir daqui, tratamos como imagem
+                print("[ROUTE-CLAIM] PDF converted to JPEG successfully for OCR processing")
+        except Exception as exc:
+            print(f"[ROUTE-CLAIM] PDF conversion failed: {exc}")
+
     deterministic = {
         "routes": [],
         "confidence": 0.0,

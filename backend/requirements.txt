@@ -8,3 +8,5 @@ groq
 pydantic
 httpx
 python-multipart
+pdf2image
+Pillow

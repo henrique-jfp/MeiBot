@@ -23,7 +23,7 @@ O sistema utiliza uma abordagem de separação estrita para garantir performance
 1.  **Ambientes Virtuais (VENV):** 
     *   `~/contacomigo/venv`: Isolado para as regras de negócio e bot.
     *   `~/alfredo-ops/venv`: Isolado exclusivamente para o servidor MCP.
-2.  **Bibliotecas de Sistema:** Dependências pesadas como `Pandas`, `Numpy`, `OpenCV` e `Psycopg2` são instaladas via `apt` no sistema e compartilhadas com o venv via `--system-site-packages` para reduzir overhead.
+2.  **Bibliotecas de Sistema:** Dependências pesadas como `Pandas`, `Numpy`, `OpenCV`, `Psycopg2` e `poppler-utils` (essencial para ler PDFs) são instaladas via `apt` no sistema e compartilhadas com o venv via `--system-site-packages` para reduzir overhead.
 3.  **Persistência e Orquestração:** Gerenciado via `systemd` para garantir auto-restart e logs centralizados no `journalctl`.
 4.  **Rede e Túnel:** Cloudflare Tunnel (`cloudflared`) expondo serviços locais de forma segura sem abertura de portas no roteador.
 
