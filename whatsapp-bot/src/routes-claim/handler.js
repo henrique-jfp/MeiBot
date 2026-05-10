@@ -106,6 +106,54 @@ function hasConfirmToken(text) {
     return ROUTES_CONFIG.confirmTokens.some(token => normalized.includes(token));
 }
 
+function getInnerMessage(message) {
+    let current = message;
+    for (let i = 0; i < 5; i += 1) {
+        if (!current) return null;
+        if (current.ephemeralMessage?.message) {
+            current = current.ephemeralMessage.message;
+            continue;
+        }
+        if (current.viewOnceMessage?.message) {
+            current = current.viewOnceMessage.message;
+            continue;
+        }
+        if (current.viewOnceMessageV2?.message) {
+            current = current.viewOnceMessageV2.message;
+            continue;
+        }
+        if (current.documentWithCaptionMessage?.message) {
+            current = current.documentWithCaptionMessage.message;
+            continue;
+        }
+        return current;
+    }
+    return current;
+}
+
+function getRouteMediaInfo(msg) {
+    const message = getInnerMessage(msg.message);
+    if (!message) return null;
+
+    if (message.imageMessage) {
+        return {
+            mimeType: message.imageMessage.mimetype || 'image/jpeg',
+            caption: message.imageMessage.caption || '',
+            kind: 'image'
+        };
+    }
+
+    if (message.documentMessage) {
+        return {
+            mimeType: message.documentMessage.mimetype || '',
+            caption: message.documentMessage.caption || '',
+            kind: 'document'
+        };
+    }
+
+    return null;
+}
+
 async function sendClaimMessage(sock, groupJid, candidate) {
     const claimText = `${ROUTES_CONFIG.claimTextPrefix} ${candidate.gaiola}`;
     const result = await sock.sendMessage(groupJid, { text: claimText });
@@ -131,61 +179,80 @@ function isAuthorizedSender(msg) {
 async function handleRouteImage(sock, msg, groupName, isTest) {
     const groupJid = msg.key.remoteJid;
     const groupState = getGroupState(groupJid);
+    const messageId = msg.key.id;
 
     if (!state.active || groupState.locked) return true;
+    if (messageId && groupState.processedMessageIds.has(messageId)) return true;
     if (groupState.lastClaimId) return true;
+    if (groupState.inFlight) return true;
     if (!isAuthorizedSender(msg)) return true;
     if (!isTest && ROUTES_CONFIG.schedule.enabledInProd && !isWithinSchedule()) {
         return true;
     }
 
-    const message = msg.message;
-    let mimeType = null;
-    let buffer = null;
+    const mediaInfo = getRouteMediaInfo(msg);
+    const mimeType = mediaInfo?.mimeType || null;
 
-    if (message.imageMessage) {
-        mimeType = message.imageMessage.mimetype || 'image/jpeg';
-        buffer = await downloadMediaMessage(msg, 'buffer', {});
-    } else if (message.documentMessage) {
-        mimeType = message.documentMessage.mimetype || '';
-        buffer = await downloadMediaMessage(msg, 'buffer', {});
-    }
-
-    if (!buffer || !mimeType || !ROUTES_CONFIG.allowedMimeTypes.includes(mimeType)) {
+    if (!mediaInfo || !mimeType || !ROUTES_CONFIG.allowedMimeTypes.includes(mimeType)) {
         return true;
     }
 
-    const payload = {
-        mime_type: mimeType,
-        content_base64: buffer.toString('base64')
-    };
+    groupState.inFlight = true;
+    if (messageId) groupState.processedMessageIds.add(messageId);
 
-    const parsed = await parseRouteSheet(payload);
-    if (
-        parsed.error ||
-        !parsed.routes ||
-        parsed.routes.length === 0 ||
-        (typeof parsed.confidence === 'number' && parsed.confidence < ROUTES_CONFIG.minConfidence)
-    ) {
-        console.log('[ROUTE-CLAIM] No confident routes parsed.');
+    try {
+        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        if (!buffer) return true;
+
+        const payload = {
+            mime_type: mimeType,
+            content_base64: buffer.toString('base64')
+        };
+
+        const parsed = await parseRouteSheet(payload);
+        if (
+            parsed.error ||
+            !parsed.routes ||
+            parsed.routes.length === 0 ||
+            (typeof parsed.confidence === 'number' && parsed.confidence < ROUTES_CONFIG.minConfidence)
+        ) {
+            console.log('[ROUTE-CLAIM] No confident routes parsed.');
+            return true;
+        }
+
+        const candidates = buildCandidates(parsed.routes);
+        if (candidates.length === 0) {
+            console.log('[ROUTE-CLAIM] No Rocinha routes found.');
+            return true;
+        }
+
+        const picked = pickCandidate(candidates);
+        const claimSignature = `${picked.selected.gaiola}:${picked.selected.rocinha_pacotes ?? ''}:${picked.selected.pacotes_total ?? ''}`;
+        const now = Date.now();
+        if (
+            groupState.lastClaimSignature === claimSignature &&
+            now - groupState.lastClaimAt < 10 * 60 * 1000
+        ) {
+            console.log(`[ROUTE-CLAIM] Duplicate claim suppressed signature=${claimSignature}`);
+            return true;
+        }
+
+        groupState.candidates = picked.ordered;
+        groupState.index = 0;
+        groupState.lastClaimSignature = claimSignature;
+        groupState.lastClaimAt = now;
+        console.log(
+            `[ROUTE-CLAIM] Claiming route gaiola=${picked.selected.gaiola} ` +
+            `rocinha=${picked.selected.rocinha_pacotes ?? 'n/a'} total=${picked.selected.pacotes_total}`
+        );
+        await sendClaimMessage(sock, groupJid, picked.selected);
         return true;
+    } finally {
+        groupState.inFlight = false;
+        if (groupState.processedMessageIds.size > 200) {
+            groupState.processedMessageIds = new Set([...groupState.processedMessageIds].slice(-100));
+        }
     }
-
-    const candidates = buildCandidates(parsed.routes);
-    if (candidates.length === 0) {
-        console.log('[ROUTE-CLAIM] No Rocinha routes found.');
-        return true;
-    }
-
-    const picked = pickCandidate(candidates);
-    groupState.candidates = picked.ordered;
-    groupState.index = 0;
-    console.log(
-        `[ROUTE-CLAIM] Claiming route gaiola=${picked.selected.gaiola} ` +
-        `rocinha=${picked.selected.rocinha_pacotes ?? 'n/a'} total=${picked.selected.pacotes_total}`
-    );
-    await sendClaimMessage(sock, groupJid, picked.selected);
-    return true;
 }
 
 function findGroupStateByClaim(messageKey) {

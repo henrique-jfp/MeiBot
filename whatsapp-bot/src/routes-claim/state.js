@@ -9,6 +9,10 @@ function getGroupState(groupJid) {
         state.groups.set(groupJid, {
             locked: false,
             lastClaimId: null,
+            lastClaimSignature: null,
+            lastClaimAt: 0,
+            inFlight: false,
+            processedMessageIds: new Set(),
             candidates: [],
             index: 0
         });
