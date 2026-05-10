@@ -84,33 +84,44 @@ async def process_interpreted_data(user, interpreted):
         
         if "shopee" in app_name_raw:
             ev["app"] = "Shopee"
-            ev["valor"] = 305.0
+            ev["valor"] = 305.0 + float(ev.get("valor_extra") or 0)
             ev["km"] = 60.0
             ev["tipo"] = "ganho"
-            # Adiciona gasto do ajudante automaticamente se não existir
-            ja_tem_gasto = any("ajudante" in str(e.get("descricao") or "").lower() for e in eventos_brutos)
-            if not ja_tem_gasto:
-                gasto_aj = {"app": "Shopee", "tipo": "gasto", "categoria": "Essencial", "valor": 130.0, "descricao": "Salário ajudante Shopee (Auto)"}
-                if active_op:
-                    if data_ref: gasto_aj["data_referencia"] = data_ref
-                    db.add_event(user_id, active_op["id"], gasto_aj)
-                eventos_processados.append(gasto_aj)
         
         elif "correio" in app_name_raw:
             ev["app"] = "Correios"
             ev["km"] = 20.0
             ev["tipo"] = "ganho"
             if not ev.get("valor") or ev.get("valor") == 0:
-                ev["valor"] = float(ev.get("pacotes") or 0) * 2.0
+                ev["valor"] = (float(ev.get("pacotes") or 0) * 2.0) + float(ev.get("valor_extra") or 0)
+            else:
+                ev["valor"] = float(ev["valor"]) + float(ev.get("valor_extra") or 0)
         
         else:
             # Regras via Banco de Dados
             app_info = db.get_app_by_name(ev.get("app")) if ev.get("app") else None
             if app_info and (not ev.get("valor") or ev.get("valor") == 0):
                 if app_info.get("tipo_remuneracao") == "pacote":
-                    ev["valor"] = ev.get("pacotes", 0) * app_info["valor_base"]
+                    ev["valor"] = (ev.get("pacotes", 0) * app_info["valor_base"]) + float(ev.get("valor_extra") or 0)
                 elif app_info.get("tipo_remuneracao") == "rota":
-                    ev["valor"] = app_info["valor_base"]
+                    ev["valor"] = app_info["valor_base"] + float(ev.get("valor_extra") or 0)
+            elif ev.get("valor"):
+                ev["valor"] = float(ev["valor"]) + float(ev.get("valor_extra") or 0)
+
+        # 2. Lançamento AUTOMÁTICO de repasse para entregador (Ajudante) via Banco
+        app_info = db.get_app_by_name(ev.get("app")) if ev.get("app") else None
+        if app_info and app_info.get("entregador_padrao_id"):
+            res_ent = db.supabase.table("entregadores").select("valor_diaria").eq("id", app_info["entregador_padrao_id"]).execute()
+            if res_ent.data:
+                valor_pagamento = res_ent.data[0]["valor_diaria"]
+                gasto_ent = {
+                    "tipo": "gasto", "categoria": "Essencial",
+                    "valor": valor_pagamento, "app": ev.get("app"),
+                    "descricao": f"Pagamento ajudante {ev.get('app')} (Auto)"
+                }
+                if data_ref: gasto_ent["data_referencia"] = data_ref
+                db.add_event(user_id, active_op["id"], gasto_ent)
+                eventos_processados.append(gasto_ent)
 
         if active_op:
             if data_ref: ev["data_referencia"] = data_ref
