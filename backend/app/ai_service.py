@@ -165,15 +165,15 @@ class AIService:
         DADOS POR PLATAFORMA:
         {apps_str}
         
-        Responda exatamente neste formato, sem markdown e sem bullets:
+        Responda exatamente neste formato, sem markdown, sem bullets e sem qualquer outra seção:
 
-        Shopee
+        Analise da Shopee
         Um parágrafo curto, natural e específico analisando a Shopee. Se não houver operação, diga isso claramente e sugira monitorar oportunidade. Não use frases genéricas repetidas.
 
-        Correios
+        Analise da operação dos Correios
         Um parágrafo curto, natural e específico analisando os Correios. Se não houver KM ou tempo, alerte sobre falha de rastreamento. Evite linguagem robótica.
 
-        Panorama Geral
+        Analise Geral da empresa
         Um parágrafo curto sobre o resultado total, ganho/hora, eficiência por KM e principal ação para melhorar. Termine com uma orientação prática, como faria alguém olhando a operação de fora.
         
         Pode usar poucos emojis funcionais, como 📦, 💰, 📈, 📉, 🛣️ e ⏱️, mas sem exagerar.

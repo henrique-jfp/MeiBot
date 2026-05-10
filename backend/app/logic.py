@@ -225,7 +225,7 @@ class LogicService:
         msg += "└─────────────────────\n"
 
         if analyst_insight:
-            msg += "\n 🧐 VISÃO DO ANALISTA ESTRATÉGICO\n\n"
+            msg += "\n 🧐 ANÁLISES DA OPERAÇÃO\n\n"
             msg += analyst_insight
 
         return msg
