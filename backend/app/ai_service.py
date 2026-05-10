@@ -59,18 +59,19 @@ class AIService:
         - corrigir_porteiro: Para atualizar informações de um porteiro já cadastrado.
 
         Regras de Negócio Pessoais (OBRIGATÓRIO):
-        - Se o app for 'Shopee': Valor bruto = 305.00, KM = 60. Gere também um evento de gasto: {{"app": "Shopee", "tipo": "gasto", "categoria": "Essencial", "valor": 130.00, "descricao": "Salário ajudante Shopee"}}.
+        - Se o app for 'Shopee': Valor bruto = 305.00, KM = 60. 
         - Se o app for 'Correios': KM = 20. Valor bruto = pacotes * 2.00.
         
         Nomes de APP padronizados (use EXATAMENTE estes):
         - 'Shopee', 'Correios', 'Mercado Livre', 'iFood', 'Uber', 'Loggi', 'Lalamove'.
-        - Para gastos, use: 'Combustível', 'Manutenção', 'Alimentação', 'Outros'.
+        - Para gastos (tipo: 'gasto'), use: 'Combustível', 'Manutenção', 'Alimentação', 'Outros'. 
+        - NUNCA use 'Correios' ou 'Shopee' para um evento do tipo 'gasto' (como gasolina ou comida).
 
         Campos do JSON:
         - intencao: Uma das intenções acima.
         - data_referencia: YYYY-MM-DD (obrigatório se mencionado data ou "ontem", "anteontem", "dia X").
         - pergunta: O texto da pergunta (se intencao for 'pergunta').
-        - eventos: lista de objetos {{'app': str, 'tipo': 'ganho'|'gasto'|'ajuste', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'categoria': str, 'descricao': str}}
+        - eventos: lista de objetos {{'app': str, 'tipo': 'ganho'|'gasto', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'categoria': str, 'descricao': str}}
         
         Texto do usuário: "{text}"
         """

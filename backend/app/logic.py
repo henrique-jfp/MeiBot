@@ -23,52 +23,37 @@ class LogicService:
         if not eventos: return "Nenhum dado registrado."
         res = f"✅ *{title}*\n\n"
         for ev in eventos:
-            tipo = ev.get("tipo", "evento").upper()
-            app = ev.get("app", "")
+            tipo_raw = str(ev.get("tipo", "evento")).upper()
+            
+            # Emoji por tipo
+            emoji = "💰" if tipo_raw == "GANHO" else "📉"
+            if tipo_raw == "GASTO": emoji = "💸"
+            if tipo_raw == "AJUSTE": emoji = "⚙️"
+            
+            app = ev.get("app", "Geral")
             valor = ev.get("valor", 0)
-            km = ev.get("km_rota", ev.get("km"))
+            km = ev.get("km")
             pacotes = ev.get("pacotes")
-            h_chegada = ev.get("hora_chegada_galpao")
             h_inicio = ev.get("hora_inicio_rota") or ev.get("hora_inicio")
             h_fim = ev.get("hora_fim_operacao") or ev.get("hora_fim")
 
-            res += f"• {tipo} ({app}): R$ {valor:.2f}"
+            res += f"{emoji} *{tipo_raw} ({app}):* R$ {valor:.2f}"
 
             details = []
             if km:
                 details.append(f"{float(km):.1f} km")
             if pacotes:
                 details.append(f"{int(pacotes)} pacotes")
-            if h_chegada:
-                details.append(f"chegada {h_chegada}")
-            if h_inicio:
-                details.append(f"inicio {h_inicio}")
-            if h_fim:
-                details.append(f"fim {h_fim}")
-
+            
             if h_inicio and h_fim:
                 try:
                     fmt = "%H:%M"
                     t1 = datetime.datetime.strptime(h_inicio, fmt)
                     t2 = datetime.datetime.strptime(h_fim, fmt)
                     diff = (t2 - t1).total_seconds()
-                    if diff < 0:
-                        diff += 24 * 3600
+                    if diff < 0: diff += 24 * 3600
                     horas = diff / 3600
-                    details.append(f"duracao {horas:.2f}h")
-                except Exception:
-                    pass
-
-            if h_chegada and h_inicio:
-                try:
-                    fmt = "%H:%M"
-                    t1 = datetime.datetime.strptime(h_chegada, fmt)
-                    t2 = datetime.datetime.strptime(h_inicio, fmt)
-                    diff = (t2 - t1).total_seconds()
-                    if diff < 0:
-                        diff += 24 * 3600
-                    espera = diff / 60
-                    details.append(f"espera {int(espera)} min")
+                    details.append(f"{horas:.2f}h")
                 except Exception:
                     pass
 
