@@ -185,47 +185,45 @@ class LogicService:
             gastos = data.get("gastos", 0) or 0
             km = data.get("km", 0) or 0
             eficiencia = saldo / km if km else 0
-            msg_block = f"\n 📦 {label.upper()}\n"
-            msg_block += "┌─────────────────────\n"
-            msg_block += f" 💰 Saldo Líquido: {LogicService.format_brl(saldo)}\n"
-            msg_block += f" 📈 Ganhos:       {LogicService.format_brl(ganhos)}\n"
-            msg_block += f" 📉 Gastos:       {LogicService.format_brl(gastos)}\n"
-            msg_block += f" 🛣️ KM Rodados:   {LogicService.format_decimal(km)} km • {LogicService.format_brl(eficiencia)}/km\n"
-            msg_block += " ⏱️ Tempo:        0h • R$ 0,00/h\n"
-            msg_block += "└─────────────────────\n"
+            msg_block = f"\n {label.upper()}\n"
+            msg_block += "┌──────────────────────────\n"
+            msg_block += f" Saldo Líquido: {LogicService.format_brl(saldo)}\n"
+            msg_block += f" Ganhos:        {LogicService.format_brl(ganhos)}\n"
+            msg_block += f" Gastos:        {LogicService.format_brl(gastos)}\n"
+            msg_block += f" KM Rodados:    {LogicService.format_decimal(km)} km ({LogicService.format_brl(eficiencia)}/km)\n"
+            msg_block += "⏱️ Tempo Total:   0h (R$ 0,00/h)\n"
+            msg_block += "└──────────────────────────\n"
             return msg_block
 
         shopee_name, shopee_data = find_app("shopee")
         correios_name, correios_data = find_app("correio")
-
-        header = title
-        if period_label:
-            header = f"{title} • {period_label}"
 
         km_total = c.get("km_total", 0) or 0
         total_hours = c.get("total_hours", 0) or 0
         ganho_hora = c.get("ganho_por_hora", 0) or 0
         eficiencia = (c.get("saldo", 0) or 0) / km_total if km_total else 0
 
-        msg = "╔══════════════════════╗\n"
-        msg += f" 📊 {header}\n"
-        msg += "╚══════════════════════╝\n"
+        msg = "╔════════════════════════════╗\n"
+        msg += f" {title}\n"
+        msg += "╚════════════════════════════╝\n"
+        if period_label:
+            msg += f"\n Período: {period_label}\n"
         msg += app_block(shopee_name, shopee_data)
         msg += app_block(correios_name, correios_data)
 
-        msg += "\n 🏢 CONSOLIDADO DA OPERAÇÃO\n"
-        msg += "┌─────────────────────\n"
-        msg += f" 💰 Saldo Líquido: {LogicService.format_brl(c.get('saldo', 0))}\n"
-        msg += f" 📈 Ganhos Totais: {LogicService.format_brl(c.get('total_ganhos', 0))}\n"
-        msg += f" 📉 Gastos Totais: {LogicService.format_brl(c.get('total_gastos', 0))}\n"
-        msg += f" 🛣️ KM Total:      {LogicService.format_decimal(km_total)} km\n"
-        msg += f" ⏱️ Tempo Total:   {LogicService.format_decimal(total_hours)}h\n"
-        msg += f" 🕒 Ganho/Hora:    {LogicService.format_brl(ganho_hora)}/h\n"
-        msg += f" ⚙️ Eficiência:    {LogicService.format_brl(eficiencia)}/km\n"
-        msg += "└─────────────────────\n"
+        msg += "\n CONSOLIDADO DA OPERAÇÃO\n"
+        msg += "┌──────────────────────────\n"
+        msg += f" Saldo Líquido: {LogicService.format_brl(c.get('saldo', 0))}\n"
+        msg += f" Ganhos Totais: {LogicService.format_brl(c.get('total_ganhos', 0))}\n"
+        msg += f" Gastos Totais: {LogicService.format_brl(c.get('total_gastos', 0))}\n"
+        msg += f" KM Total:      {LogicService.format_decimal(km_total)} km\n"
+        msg += f"⏱️ Tempo Total:   {LogicService.format_decimal(total_hours)}h\n"
+        msg += f" Ganho/Hora:    {LogicService.format_brl(ganho_hora)}/h\n"
+        msg += f" Eficiência:    {LogicService.format_brl(eficiencia)}/km\n"
+        msg += "└──────────────────────────\n"
 
         if analyst_insight:
-            msg += "\n 🧐 ANÁLISES DA OPERAÇÃO\n\n"
+            msg += "\n VISÃO DO ANALISTA ESTRATÉGICO\n\n"
             msg += analyst_insight
 
         return msg

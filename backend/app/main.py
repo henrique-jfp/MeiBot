@@ -277,7 +277,7 @@ async def process_interpreted_data(user, interpreted):
         except Exception as e:
             print(f"AI insight failed (weekly): {e}")
             insight = None
-        return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL", insight)
+        return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL SOLICITADO", insight)
 
     if intencao == "resumo_mensal":
         events_curr = db.get_monthly_summary(user_id)
@@ -293,7 +293,7 @@ async def process_interpreted_data(user, interpreted):
         except Exception as e:
             print(f"AI insight failed (monthly): {e}")
             insight = None
-        return LogicService.format_summary(metrics_curr, "RESUMO MENSAL", insight)
+        return LogicService.format_summary(metrics_curr, "RESUMO MENSAL SOLICITADO", insight)
 
     if intencao == "iniciar":
         if active_op:

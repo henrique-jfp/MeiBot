@@ -165,16 +165,20 @@ class AIService:
         DADOS POR PLATAFORMA:
         {apps_str}
         
-        Responda exatamente neste formato, sem markdown, sem bullets e sem qualquer outra seção:
+        Responda exatamente neste formato, sem markdown e sem qualquer outra seção.
+        Cada análise deve ter no máximo 2 frases curtas. A recomendação deve ter uma única linha começando com "• ".
 
-        Analise da Shopee
+        Análise da Shopee
         Um parágrafo curto, natural e específico analisando a Shopee. Se não houver operação, diga isso claramente e sugira monitorar oportunidade. Não use frases genéricas repetidas.
 
-        Analise da operação dos Correios
+        Análise da Operação dos Correios
         Um parágrafo curto, natural e específico analisando os Correios. Se não houver KM ou tempo, alerte sobre falha de rastreamento. Evite linguagem robótica.
 
-        Analise Geral da empresa
+        Análise Geral da Empresa
         Um parágrafo curto sobre o resultado total, ganho/hora, eficiência por KM e principal ação para melhorar. Termine com uma orientação prática, como faria alguém olhando a operação de fora.
+
+        Recomendações Estratégicas
+        • Uma recomendação prática e direta para a próxima semana ou mês.
         
         Pode usar poucos emojis funcionais, como 📦, 💰, 📈, 📉, 🛣️ e ⏱️, mas sem exagerar.
         Use linguagem humana, variando a forma de começar as frases, e sem soar como template.
@@ -182,9 +186,9 @@ class AIService:
         response = self.model.generate_content(
             prompt,
             generation_config={
-                "temperature": 0.7,
+                "temperature": 0.45,
                 "top_p": 0.9,
-                "max_output_tokens": 350,
+                "max_output_tokens": 700,
             }
         )
         return response.text
