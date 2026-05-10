@@ -188,21 +188,28 @@ class LogicService:
             consolidado["km_total"] += km_val
             apps_data[app_name]["km"] += km_val
 
-            # Cálculo de horas por evento (se houver)
+            # Cálculo de horas por evento (suporte a ISO timestamp do banco)
             h_ini = ev.get("hora_inicio")
             h_fim = ev.get("hora_fim")
             if h_ini and h_fim:
                 try:
-                    # Tenta formato HH:MM
-                    if ":" in str(h_ini) and len(str(h_ini)) <= 5:
+                    # Tenta ISO format (banco de dados)
+                    if "T" in str(h_ini):
+                        t1 = datetime.datetime.fromisoformat(str(h_ini).replace('Z', '+00:00'))
+                        t2 = datetime.datetime.fromisoformat(str(h_fim).replace('Z', '+00:00'))
+                        diff = (t2 - t1).total_seconds()
+                        if diff > 0:
+                            apps_data[app_name]["horas"] += diff / 3600
+                    # Tenta formato HH:MM (IA / legado)
+                    elif ":" in str(h_ini) and len(str(h_ini)) <= 5:
                         fmt = "%H:%M"
-                        t1 = datetime.datetime.strptime(h_ini, fmt)
-                        t2 = datetime.datetime.strptime(h_fim, fmt)
+                        t1 = datetime.datetime.strptime(str(h_ini), fmt)
+                        t2 = datetime.datetime.strptime(str(h_fim), fmt)
                         diff = (t2 - t1).total_seconds()
                         if diff < 0: diff += 24 * 3600
                         apps_data[app_name]["horas"] += diff / 3600
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Erro ao calcular horas do evento: {e}")
 
         # Cálculo de Horas Totais (Soma das rotas individuais para ignorar repouso)
         total_worked_hours = 0
