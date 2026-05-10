@@ -12,13 +12,14 @@ load_dotenv()
 
 TARGET_ALIASES = ("rocinha", "roc")
 MIN_DETERMINISTIC_CONFIDENCE = 0.75
-IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 
 _genai_key = os.getenv("GEMINI_API_KEY")
 if _genai_key:
     genai.configure(api_key=_genai_key)
 
-_gemini_model = genai.GenerativeModel("gemini-1.5-flash") if _genai_key else None
+_gemini_model_name = os.getenv("ROUTES_GEMINI_MODEL", "gemini-2.5-flash")
+_gemini_model = genai.GenerativeModel(_gemini_model_name) if _genai_key else None
 
 
 def _build_vision_client():
@@ -274,19 +275,87 @@ def _parse_json_response(text):
     return json.loads(cleaned)
 
 
+def _normalize_ai_routes(parsed):
+    raw_routes = parsed if isinstance(parsed, list) else parsed.get("routes", [])
+    routes = []
+
+    for item in raw_routes if isinstance(raw_routes, list) else []:
+        if not isinstance(item, dict):
+            continue
+
+        gaiola = _clean_gaiola(item.get("gaiola") or item.get("Gaiola") or item.get("route"))
+        if not gaiola:
+            continue
+
+        dissecacao = item.get("dissecacao") or item.get("bairros") or {}
+        if not isinstance(dissecacao, dict):
+            dissecacao = {}
+
+        normalized_dissecacao = {}
+        for key, value in dissecacao.items():
+            if _has_target(key):
+                normalized_dissecacao["Rocinha"] = _parse_int(value)
+            else:
+                normalized_dissecacao[str(key)] = _parse_int(value)
+
+        bairro = item.get("bairro") or item.get("cluster") or item.get("Cluster")
+        if _has_target(bairro):
+            bairro = "Rocinha"
+
+        routes.append(
+            {
+                "gaiola": gaiola,
+                "bairro": bairro,
+                "pacotes_total": _parse_int(
+                    item.get("pacotes_total")
+                    or item.get("spr")
+                    or item.get("SPR")
+                    or item.get("pacotes")
+                ),
+                "dissecacao": normalized_dissecacao,
+            }
+        )
+
+    return routes
+
+
+def _confidence_for_routes(routes, source):
+    target_routes = [
+        route
+        for route in routes
+        if _has_target(route.get("bairro")) or "Rocinha" in route.get("dissecacao", {})
+    ]
+    if target_routes and any(route.get("dissecacao") for route in target_routes):
+        return 0.9
+    if target_routes:
+        return 0.8
+    if routes and source == "gemini_image_fallback":
+        return 0.6
+    if routes:
+        return 0.55
+    return 0.0
+
+
 def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
     if not _gemini_model:
         return {"routes": [], "confidence": 0.0, "source": "no_gemini"}
 
     prompt = (
-        "Extract delivery route rows as JSON only. Return this shape: "
-        '{"routes":[{"gaiola":"B-52","bairro":"Rocinha",'
-        '"pacotes_total":136,"dissecacao":{"Rocinha":50}}]}. '
-        "Use null for missing values and {} for missing dissecacao. "
-        "Do not explain."
+        "Voce esta lendo uma planilha de rotas em imagem. O layout tem colunas "
+        "GAIOLA, SPR, CLUSTER, BAIRROS, TIPO DE VEICULO e TRANSPORTADORA. "
+        "Extraia TODAS as linhas de rota visiveis. Responda somente JSON valido: "
+        '{"routes":[{"gaiola":"B-41","bairro":"Rocinha","pacotes_total":124,'
+        '"dissecacao":{"Rocinha":57,"Gavea":30}}]}. '
+        "Regras: gaiola pode ter sufixo como G-48NS; SPR e o total de pacotes; "
+        "CLUSTER vira bairro; BAIRROS contem a dissecacao por bairro. "
+        "Se BAIRROS tiver 'Rocinha: 5', coloque dissecacao.Rocinha=5, mesmo que "
+        "antes apareca 'Gavea: 93'. Se CLUSTER for Rocinha, bairro='Rocinha'. "
+        "Use null quando faltar numero e {} quando nao houver dissecacao. "
+        "Nao explique, nao use markdown."
     )
 
     try:
+        source = "gemini_ocr_fallback" if ocr_text else "gemini_image_fallback"
         if ocr_text:
             response = _gemini_model.generate_content(
                 [prompt, "OCR text:\n" + _compact_ocr_for_gemini(ocr_text)],
@@ -299,11 +368,11 @@ def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
             )
 
         parsed = _parse_json_response(response.text)
-        routes = parsed.get("routes", []) if isinstance(parsed, dict) else []
+        routes = _normalize_ai_routes(parsed)
         return {
             "routes": routes,
-            "confidence": 0.82 if routes else 0.0,
-            "source": "gemini_fallback",
+            "confidence": _confidence_for_routes(routes, source),
+            "source": source,
         }
     except Exception as exc:
         print(f"[ROUTE-CLAIM] Gemini fallback failed: {exc}")

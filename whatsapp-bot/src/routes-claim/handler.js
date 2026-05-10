@@ -180,6 +180,10 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     const picked = pickCandidate(candidates);
     groupState.candidates = picked.ordered;
     groupState.index = 0;
+    console.log(
+        `[ROUTE-CLAIM] Claiming route gaiola=${picked.selected.gaiola} ` +
+        `rocinha=${picked.selected.rocinha_pacotes ?? 'n/a'} total=${picked.selected.pacotes_total}`
+    );
     await sendClaimMessage(sock, groupJid, picked.selected);
     return true;
 }

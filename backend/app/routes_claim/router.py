@@ -21,6 +21,15 @@ async def parse_routes(request: Request):
 
     try:
         parsed = parse_route_sheet(file_bytes, mime_type)
+        print(
+            "[ROUTE-CLAIM] parse result "
+            f"mime={mime_type} bytes={len(file_bytes)} "
+            f"source={parsed.get('source')} "
+            f"confidence={parsed.get('confidence')} "
+            f"routes={len(parsed.get('routes') or [])} "
+            f"error={parsed.get('error')}"
+        )
         return parsed
     except Exception as exc:
+        print(f"[ROUTE-CLAIM] parse exception mime={mime_type} bytes={len(file_bytes)} error={exc}")
         return {"error": "parse_failed", "detail": str(exc)}
