@@ -21,45 +21,85 @@ class LogicService:
     @staticmethod
     def format_events_confirmation(eventos, title):
         if not eventos: return "Nenhum dado registrado."
-        res = f"✅ *{title}*\n\n"
-        for ev in eventos:
-            tipo_raw = str(ev.get("tipo", "evento")).upper()
+        
+        ganhos = [e for e in eventos if str(e.get("tipo")).upper() == "GANHO"]
+        gastos = [e for e in eventos if str(e.get("tipo")).upper() == "GASTO"]
+        
+        res = "✅ <b>Registro concluído</b>\n\n"
+        
+        # Bloco de Ganhos
+        for g in ganhos:
+            app = g.get("app", "Rota")
+            valor = g.get("valor", 0)
+            res += f"💰 <b>{app}</b> — R$ {valor:.2f}\n"
+        
+        # Bloco de Despesas
+        if gastos:
+            res += "\n💸 <b>Despesas</b>\n"
+            for gast in gastos:
+                desc = gast.get("app") or gast.get("descricao") or "Gasto"
+                # Icones amigáveis para gastos comuns
+                icon = "🧾"
+                if "combust" in desc.lower() or "gas" in desc.lower(): icon = "⛽"
+                elif "aliment" in desc.lower() or "comid" in desc.lower() or "coca" in desc.lower(): icon = "🍔"
+                elif "ajudante" in desc.lower(): icon = "👤"
+                
+                res += f"• {icon} {desc}: R$ {gast.get('valor', 0):.2f}\n"
+        
+        # Bloco de Entrega (pega dados do primeiro ganho que tiver pacotes/km)
+        for g in ganhos:
+            km = g.get("km")
+            pacotes = g.get("pacotes")
+            if km or pacotes:
+                res += "\n📦 <b>Entrega</b>\n"
+                parts = []
+                if km: parts.append(f"🚗 {float(km):.1f} km")
+                if pacotes: parts.append(f"📦 {int(pacotes)} pacotes")
+                res += " • ".join(parts) + "\n"
+                break
+        
+        # Bloco de Horários
+        for g in ganhos:
+            h_chegada = g.get("hora_chegada_galpao")
+            h_inicio = g.get("hora_inicio_rota") or g.get("hora_inicio")
+            h_fim = g.get("hora_fim_operacao") or g.get("hora_fim")
             
-            # Emoji por tipo
-            emoji = "💰" if tipo_raw == "GANHO" else "📉"
-            if tipo_raw == "GASTO": emoji = "💸"
-            if tipo_raw == "AJUSTE": emoji = "⚙️"
-            
-            app = ev.get("app", "Geral")
-            valor = ev.get("valor", 0)
-            km = ev.get("km")
-            pacotes = ev.get("pacotes")
-            h_inicio = ev.get("hora_inicio_rota") or ev.get("hora_inicio")
-            h_fim = ev.get("hora_fim_operacao") or ev.get("hora_fim")
+            if h_chegada or h_inicio or h_fim:
+                res += "\n🕒 "
+                times = []
+                if h_chegada: times.append(h_chegada)
+                if h_inicio: times.append(h_inicio)
+                if h_fim: times.append(h_fim)
+                res += " → ".join(times) + "\n"
+                
+                # Cálculos de Duração e Espera
+                stats = []
+                fmt = "%H:%M"
+                if h_inicio and h_fim:
+                    try:
+                        t1 = datetime.datetime.strptime(h_inicio, fmt)
+                        t2 = datetime.datetime.strptime(h_fim, fmt)
+                        diff = (t2 - t1).total_seconds()
+                        if diff < 0: diff += 24 * 3600
+                        h = int(diff // 3600)
+                        m = int((diff % 3600) // 60)
+                        stats.append(f"⏱️ {h}h{m}min")
+                    except: pass
+                
+                if h_chegada and h_inicio:
+                    try:
+                        t1 = datetime.datetime.strptime(h_chegada, fmt)
+                        t2 = datetime.datetime.strptime(h_inicio, fmt)
+                        diff = (t2 - t1).total_seconds()
+                        if diff < 0: diff += 24 * 3600
+                        espera = int(diff // 60)
+                        stats.append(f"💤 {espera} min")
+                    except: pass
+                
+                if stats:
+                    res += " • ".join(stats) + "\n"
+                break
 
-            res += f"{emoji} *{tipo_raw} ({app}):* R$ {valor:.2f}"
-
-            details = []
-            if km:
-                details.append(f"{float(km):.1f} km")
-            if pacotes:
-                details.append(f"{int(pacotes)} pacotes")
-            
-            if h_inicio and h_fim:
-                try:
-                    fmt = "%H:%M"
-                    t1 = datetime.datetime.strptime(h_inicio, fmt)
-                    t2 = datetime.datetime.strptime(h_fim, fmt)
-                    diff = (t2 - t1).total_seconds()
-                    if diff < 0: diff += 24 * 3600
-                    horas = diff / 3600
-                    details.append(f"{horas:.2f}h")
-                except Exception:
-                    pass
-
-            if details:
-                res += " (" + ", ".join(details) + ")"
-            res += "\n"
         return res
 
     @staticmethod
