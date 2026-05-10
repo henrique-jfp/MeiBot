@@ -27,10 +27,16 @@ function isWithinSchedule() {
     const { startMinutes, endMinutes, weekdaysOnly } = ROUTES_CONFIG.schedule;
 
     if (weekdaysOnly) {
-        const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-        const isWeekday = weekdays.includes(weekday);
-        const isSaturdayEarly = weekday === 'Sat' && minutesNow <= endMinutes;
-        if (!isWeekday && !isSaturdayEarly) {
+        // Nova Lógica de Madrugada (Domingo 23h até Sexta 04:30)
+        if (weekday === 'Sun') {
+            return minutesNow >= startMinutes;
+        } else if (['Mon', 'Tue', 'Wed', 'Thu'].includes(weekday)) {
+            // No meio da semana, vale a noite toda (antes das 4:30 ou depois das 23h)
+            return minutesNow >= startMinutes || minutesNow <= endMinutes;
+        } else if (weekday === 'Fri') {
+            return minutesNow <= endMinutes;
+        } else {
+            // Sábado (Não funciona nada)
             return false;
         }
     }
@@ -480,24 +486,30 @@ let monitorInterval = null;
 function startScheduleMonitor() {
     if (monitorInterval) clearInterval(monitorInterval);
     monitorInterval = setInterval(() => {
-        const { hour, minute } = getLocalTime();
+        const { weekday, hour, minute } = getLocalTime();
         const minutesNow = hour * 60 + minute;
         const { startMinutes, endMinutes } = ROUTES_CONFIG.schedule;
         
-        // At exatamente startMinutes (14:30)
+        // At exatamente startMinutes (23:00)
         if (minutesNow === startMinutes) {
-            if (!state.active) {
-                console.log('[ROUTE-CLAIM] Automático: Iniciando janela de rotas.');
-                state.active = true;
-                state.groups.clear(); // Limpa cache de processamento do dia anterior
+            // Liga apenas de Domingo a Quinta
+            if (['Sun', 'Mon', 'Tue', 'Wed', 'Thu'].includes(weekday)) {
+                if (!state.active) {
+                    console.log(`[ROUTE-CLAIM] Automático: Iniciando janela de rotas (${weekday}).`);
+                    state.active = true;
+                    state.groups.clear(); // Limpa cache de processamento
+                }
             }
         }
         
-        // At exatamente endMinutes (16:00)
+        // At exatamente endMinutes (04:30)
         if (minutesNow === endMinutes) {
-            if (state.active) {
-                console.log('[ROUTE-CLAIM] Automático: Encerrando janela de rotas.');
-                state.active = false;
+            // Desliga apenas de Segunda a Sexta
+            if (['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekday)) {
+                if (state.active) {
+                    console.log(`[ROUTE-CLAIM] Automático: Encerrando janela de rotas (${weekday}).`);
+                    state.active = false;
+                }
             }
         }
     }, 60000); // Verifica a cada minuto
