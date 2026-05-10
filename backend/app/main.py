@@ -1,11 +1,14 @@
-from fastapi import FastAPI, Request, BackgroundTasks
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from .ai_service import AIService
 from .db import DBService
 from .logic import LogicService
 from .routes_claim.router import router as routes_claim_router
 import base64
 import datetime
+import traceback
+import json
+import asyncio
 
 app = FastAPI()
 db = DBService()
@@ -14,419 +17,338 @@ ai = AIService()
 def override_data_ref_from_text(content: str, data_ref: str):
     text = (content or "").lower()
     today = datetime.date.today()
-    if "anteontem" in text:
-        return (today - datetime.timedelta(days=2)).isoformat()
-    if "ontem" in text:
-        return (today - datetime.timedelta(days=1)).isoformat()
-    if "hoje" in text:
-        return today.isoformat()
+    if "anteontem" in text: return (today - datetime.timedelta(days=2)).isoformat()
+    if "ontem" in text: return (today - datetime.timedelta(days=1)).isoformat()
+    if "hoje" in text: return today.isoformat()
     return data_ref
-
-def period_label(days: int):
-    end = datetime.date.today()
-    start = end - datetime.timedelta(days=days - 1)
-    return f"{start.strftime('%d/%m')} → {end.strftime('%d/%m')}"
 
 app.include_router(routes_claim_router)
 
 @app.post("/webhook")
-async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
+async def handle_webhook(request: Request):
     try:
         data = await request.json()
         whatsapp_number = data.get("from")
-        message_type = data.get("type") # 'text', 'image', 'audio'
+        message_type = data.get("type")
         content = data.get("content")
         
         user = db.get_user_by_whatsapp(whatsapp_number)
-        if not user:
-            user = db.create_user(whatsapp_number)
-        
-        if not user.get("id"):
-            return {"reply": "❌ Erro ao acessar o banco de dados. As tabelas foram criadas no Supabase?"}
+        if not user: user = db.create_user(whatsapp_number)
+        if not user.get("id"): return {"reply": "❌ Erro de banco de dados."}
 
         response_text = ""
-        
         if message_type == "text":
-            try:
-                interpreted = await ai.interpret_message(content)
-                interpreted["data_referencia"] = override_data_ref_from_text(
-                    content,
-                    interpreted.get("data_referencia")
-                )
-                print(f"DEBUG: AI Interpreted: {interpreted}")
-                response_text = await process_interpreted_data(user, interpreted)
-            except Exception as e:
-                print(f"AI interpret failed: {e}")
-                return {"reply": "⚠️ Estou com instabilidade para analisar agora. Tente novamente em alguns minutos."}
-            
+            interpreted = await ai.interpret_message(content)
+            interpreted["data_referencia"] = override_data_ref_from_text(content, interpreted.get("data_referencia"))
+            response_text = await process_interpreted_data(user, interpreted)
         elif message_type == "image":
-            try:
-                image_bytes = base64.b64decode(content)
-                interpreted = await ai.process_image(image_bytes, "image/jpeg")
-                print(f"DEBUG: Image AI Interpreted: {interpreted}")
-                response_text = await process_interpreted_data(user, interpreted)
-            except Exception as e:
-                print(f"AI image interpret failed: {e}")
-                return {"reply": "⚠️ Estou com instabilidade para analisar imagens agora. Tente novamente em alguns minutos."}
-            
+            image_bytes = base64.b64decode(content)
+            interpreted = await ai.process_image(image_bytes, "image/jpeg")
+            response_text = await process_interpreted_data(user, interpreted)
         elif message_type == "audio":
-            try:
-                audio_bytes = base64.b64decode(content)
-                transcription = await ai.transcribe_audio(audio_bytes)
-                print(f"DEBUG: Audio Transcription: {transcription}")
-                interpreted = await ai.interpret_message(transcription)
-                print(f"DEBUG: Audio AI Interpreted: {interpreted}")
-                response_text = await process_interpreted_data(user, interpreted)
-                response_text = f"🎙️ *Transcrição:* \"{transcription}\"\n\n{response_text}"
-            except Exception as e:
-                print(f"AI audio interpret failed: {e}")
-                return {"reply": "⚠️ Estou com instabilidade para analisar audio agora. Tente novamente em alguns minutos."}
+            audio_bytes = base64.b64decode(content)
+            transcription = await ai.transcribe_audio(audio_bytes)
+            interpreted = await ai.interpret_message(transcription)
+            response_text = await process_interpreted_data(user, interpreted)
+            response_text = f"🎙️ *Transcrição:* \"{transcription}\"\n\n{response_text}"
 
         return {"reply": response_text}
     except Exception as e:
-        print(f"CRITICAL ERROR in handle_webhook: {e}")
-        import traceback
         traceback.print_exc()
-        return {"reply": "⚠️ Estou com instabilidade para responder agora. Tente novamente em alguns minutos."}
+        return {"reply": "⚠️ Tive uma instabilidade momentânea. Tente novamente em alguns segundos."}
 
 async def process_interpreted_data(user, interpreted):
     intencao = interpreted.get("intencao")
     user_id = user["id"]
     data_ref = interpreted.get("data_referencia")
     eventos_brutos = interpreted.get("eventos", [])
+    whatsapp = user["whatsapp_number"]
     
-    # 1. Tratamento de Novas Intenções de Cadastro
     if intencao == "cadastrar_entregador":
         info = interpreted.get("entregador_info", {})
         res = db.add_entregador(user_id, info.get("nome"), info.get("valor_diaria"))
-        if res:
-            return f"✅ Entregador *{info.get('nome')}* cadastrado com diária de R$ {info.get('valor_diaria'):.2f}!"
-        return "❌ Erro ao cadastrar entregador."
+        return f"✅ Entregador *{info.get('nome')}* cadastrado!" if res else "❌ Erro."
 
-    # 2. Preparação da Operação (Dia atual ou retroativo)
-    if data_ref:
-        active_op = db.get_or_create_operation_by_date(user_id, data_ref)
-    else:
-        active_op = db.get_active_operation(user_id)
-        # Se não tem operação ativa, mas tem eventos para registrar, CRIA uma automaticamente
-        if not active_op and len(eventos_brutos) > 0:
-            print(f"DEBUG: Criando operação automática para o usuário {user_id}")
-            active_op = db.start_operation(user_id)
+    active_op = db.get_active_operation(user_id)
+    if not active_op and len(eventos_brutos) > 0:
+        active_op = db.start_operation(user_id)
 
-    # 3. Processamento de Eventos com Parametrização
     eventos_processados = []
-    
-    # Se ainda assim não tiver active_op (falha no banco), tenta criar uma de emergência
-    if not active_op or not active_op.get("id"):
-        today = datetime.date.today().isoformat()
-        active_op = db.get_or_create_operation_by_date(user_id, today)
     for ev in eventos_brutos:
-        if data_ref:
-            ev["data_referencia"] = data_ref
-
-        if ev.get("app") and not ev.get("tipo"):
-            ev["tipo"] = "ganho"
-
-        if data_ref:
-            op_inicio = ev.get("hora_chegada_galpao") or ev.get("hora_inicio_rota")
-            op_fim = ev.get("hora_fim_operacao")
-            if op_inicio or op_fim:
-                active_op = db.get_or_create_operation_by_date(user_id, data_ref, op_inicio, op_fim)
-
         app_info = db.get_app_by_name(ev.get("app")) if ev.get("app") else None
-
-        # Só calcula se o valor não tiver sido extraído pela IA ou for 0
         if app_info and (not ev.get("valor") or ev.get("valor") == 0):
             if app_info.get("tipo_remuneracao") == "pacote":
                 ev["valor"] = ev.get("pacotes", 0) * app_info["valor_base"]
             elif app_info.get("tipo_remuneracao") == "rota":
                 ev["valor"] = app_info["valor_base"]
-
-        # Sempre adiciona valor_extra se houver
-        if ev.get("valor_extra"):
-            ev["valor"] = (ev.get("valor") or 0) + ev["valor_extra"]
-
-        # Lançamento automático de repasse para entregador
-        if app_info and app_info.get("entregador_padrao_id"):
-            res_ent = db.supabase.table("entregadores").select("valor_diaria").eq("id", app_info["entregador_padrao_id"]).execute()
-            if res_ent.data:
-                valor_pagamento = res_ent.data[0]["valor_diaria"]
-                gasto_ent = {
-                    "tipo": "gasto", "categoria": "Essencial",
-                    "valor": valor_pagamento, "app": ev.get("app"),
-                    "descricao": "Pagamento entregador (Auto)"
-                }
-                db.add_event(user_id, active_op["id"], gasto_ent)
-                eventos_processados.append(gasto_ent)
-
-        # Mapeamento de KMs
-        # Se houver deslocamento, cria evento separado
-        if ev.get("km_deslocamento"):
-            desl_ev = {
-                "tipo": "ajuste", "sub_tipo": "deslocamento",
-                "km": ev["km_deslocamento"], "app": ev.get("app"),
-                "descricao": "Deslocamento até galpao"
-            }
-            db.add_event(user_id, active_op["id"], desl_ev)
-            eventos_processados.append(desl_ev)
-
-        # O evento principal de rota
-        if active_op and active_op.get("id"):
-            ev["km"] = ev.get("km_rota", ev.get("km", 0))
-            ev["hora_inicio"] = ev.get("hora_inicio_rota")
-            ev["hora_fim"] = ev.get("hora_fim_operacao")
-
+        if active_op:
             db.add_event(user_id, active_op["id"], ev)
             eventos_processados.append(ev)
-        else:
-            print("WARNING: Tentativa de registrar evento sem operacao ativa.")
 
     if intencao == "registro":
-        if not active_op:
-            return "Hmm, não entendi. Você quer iniciar uma operação ou registrar algo?"
-        if len(eventos_processados) > 0:
-            return LogicService.format_events_confirmation(eventos_processados, "DADOS REGISTRADOS")
-        return "Nenhum dado claro para registrar."
+        return LogicService.format_events_confirmation(eventos_processados, "DADOS REGISTRADOS") if eventos_processados else "Nada para registrar."
 
-    # --- RESTO DAS INTENÇÕES ---
-    if intencao == "listar_porteiros":
-        url = f"https://meibot.henriquedejesus.dev/porteiros/{user['whatsapp_number']}"
-        return f"📋 Aqui está o seu mapeamento completo de porteiros: {url}"
-
-    if intencao == "consultar_porteiro":
-        info = interpreted.get("porteiro_info", {})
-        res = db.get_porteiros_by_address(user_id, info.get("rua"), info.get("numero"))
-        if not res:
-            return f"Não encontrei nenhum porteiro mapeado para {info.get('rua')}, {info.get('numero')}."
-        
-        texto = f"🏢 *Porteiros em {info.get('rua')}, {info.get('numero')}:*\n"
-        for p in res:
-            texto += f"• {p['nome_porteiro']}"
-            if p.get('turno'): texto += f" ({p['turno']})"
-            if p.get('notas_predio'): texto += f"\n  📝 Nota: {p['notas_predio']}"
-            texto += "\n"
-        return texto
-
-    if intencao == "cadastrar_porteiro":
-        info = interpreted.get("porteiro_info", {})
-        res = db.add_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome"), info.get("turno"), info.get("notas"))
-        if res == "DUPLICATE":
-            return f"⚠️ O porteiro *{info.get('nome')}* já está mapeado para esse endereço."
-        elif res:
-            return f"✅ Porteiro *{info.get('nome')}* cadastrado com sucesso em {info.get('rua')}, {info.get('numero')}!"
-        return "❌ Tive um erro ao cadastrar o porteiro. Tente novamente."
-
-    if intencao == "corrigir_porteiro":
-        info = interpreted.get("porteiro_info", {})
-        rua = info.get("rua")
-        numero = info.get("numero")
-        nome_novo = info.get("nome")
-        nome_busca = info.get("nome_antigo")
-        
-        # 1. Tenta achar pelo endereço exato se só tiver um lá
-        if not nome_busca:
-            existentes = db.get_porteiros_by_address(user_id, rua, numero)
-            if len(existentes) == 1:
-                nome_busca = existentes[0]["nome_porteiro"]
-        
-        # 2. Se falhar, tenta achar o registro original pelo NOME do porteiro (caso o endereço esteja errado)
-        if not nome_busca and nome_novo:
-            # Busca no banco qualquer registro desse porteiro para este usuário
-            try:
-                res_nome = db.supabase.table("mapeamento_porteiros").select("*").eq("user_id", user_id).ilike("nome_porteiro", f"%{nome_novo}%").execute()
-                if res_nome.data:
-                    # Usa o endereço e nome do registro encontrado como base para a correção
-                    p_orig = res_nome.data[0]
-                    res = db.update_porteiro(user_id, p_orig["rua"], p_orig["numero"], p_orig["nome_porteiro"], nome_novo, info.get("turno"), info.get("notas"))
-                    # Se mandou rua/numero novos na correção, atualiza também
-                    if rua or numero:
-                        update_end = {}
-                        if rua: update_end["rua"] = rua
-                        if numero: update_end["numero"] = numero
-                        db.supabase.table("mapeamento_porteiros").update(update_end).eq("id", p_orig["id"]).execute()
-                    return f"✅ Cadastro de *{nome_novo}* corrigido e atualizado!"
-            except:
-                pass
-
-        res = db.update_porteiro(user_id, rua, numero, nome_busca or nome_novo, nome_novo, info.get("turno"), info.get("notas"))
-        if res:
-            return f"✅ Cadastro de porteiros em {rua}, {numero} atualizado!"
-        return f"❌ Não consegui localizar o porteiro para corrigir. Dica: Diga o nome que foi cadastrado errado."
-
-    active_op = db.get_active_operation(user_id)
-    
     if intencao == "resumo_diario":
         target_date = data_ref or datetime.date.today().isoformat()
         events_curr = db.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", target_date).lt("timestamp", (datetime.datetime.fromisoformat(target_date) + datetime.timedelta(days=1)).isoformat()).execute().data
         ops_curr = db.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).eq("data", target_date).execute().data
-        
         metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
-        return LogicService.format_summary(metrics_curr, f"RESUMO DO DIA {target_date}")
+        return await ai.generate_daily_insight(metrics_curr["consolidado"], None)
 
-    if intencao == "resumo_semanal":
-        events_curr = db.get_weekly_summary(user_id)
-        ops_curr = db.get_operations_for_period(user_id, 7)
-        metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
-        metrics_curr["period_label"] = period_label(7)
-        
-        events_prev = db.get_previous_weekly_summary(user_id)
-        metrics_prev = LogicService.calculate_metrics(events_prev, None)
-        
-        try:
-            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev["consolidado"], "Semana Atual", metrics_curr.get("apps"))
-        except Exception as e:
-            print(f"AI insight failed (weekly): {e}")
-            insight = None
-        return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL SOLICITADO", insight)
+    if intencao in ["resumo_semanal", "resumo_mensal"]:
+        url = f"https://meibot.henriquedejesus.dev/dashboard/{whatsapp}"
+        return f"📊 *Automação Ativada!*\n\nOs relatórios agora são gerados de forma 100% automática! Todo sábado às 21h (e no último dia do mês), nossa inteligência artificial processa seus dados e cria o arquivo.\n\nVocê pode consultar as análises agrupadas por mês a qualquer momento no seu painel:\n🔗 {url}"
 
-    if intencao == "resumo_mensal":
-        events_curr = db.get_monthly_summary(user_id)
-        ops_curr = db.get_operations_for_period(user_id, 30)
-        metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
-        metrics_curr["period_label"] = period_label(30)
-        
-        events_prev = db.get_previous_monthly_summary(user_id)
-        metrics_prev = LogicService.calculate_metrics(events_prev, None)
-        
-        try:
-            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev["consolidado"], "Mês Atual", metrics_curr.get("apps"))
-        except Exception as e:
-            print(f"AI insight failed (monthly): {e}")
-            insight = None
-        return LogicService.format_summary(metrics_curr, "RESUMO MENSAL SOLICITADO", insight)
-
-    if intencao == "iniciar":
-        if active_op:
-            return "Você já tem uma operação ativa! Vamos trabalhar!"
-        db.start_operation(user_id)
-        return "🚀 Operação iniciada! Boa sorte nas entregas, parceiro!"
-        
     if intencao == "encerrar":
-        if not active_op:
-            return "Nenhuma operação ativa encontrada."
-        db.end_operation(active_op["id"])
-        
-        today = datetime.date.today()
-        # Verifica se amanhã muda o mês (último dia do mês)
-        is_last_day_of_month = (today + datetime.timedelta(days=1)).month != today.month
-        is_first_day_of_month = today.day == 1
-        is_saturday = today.weekday() == 5
+        if active_op: db.end_operation(active_op["id"])
+        return f"🚀 Operação encerrada com sucesso! Bom descanso."
 
-        if is_last_day_of_month or is_first_day_of_month:
-            events_curr = db.get_monthly_summary(user_id)
-            ops_curr = db.get_operations_for_period(user_id, 30)
-            metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
-            metrics_curr["period_label"] = period_label(30)
-            events_prev = db.get_previous_monthly_summary(user_id)
-            metrics_prev = LogicService.calculate_metrics(events_prev, None)
-            
-            try:
-                insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev["consolidado"], "Mês", metrics_curr.get("apps"))
-            except Exception as e:
-                print(f"AI insight failed (month close): {e}")
-                insight = None
-            title = "RESUMO MENSAL ACUMULADO" if is_last_day_of_month else "RESUMO DO MÊS ENCERRADO"
-            return LogicService.format_summary(metrics_curr, title, insight)
-            
-        elif is_saturday:
-            events_curr = db.get_weekly_summary(user_id)
-            ops_curr = db.get_operations_for_period(user_id, 7)
-            metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
-            metrics_curr["period_label"] = period_label(7)
-            events_prev = db.get_previous_weekly_summary(user_id)
-            metrics_prev = LogicService.calculate_metrics(events_prev, None)
-            
-            try:
-                insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev["consolidado"], "Semana", metrics_curr.get("apps"))
-            except Exception as e:
-                print(f"AI insight failed (week close): {e}")
-                insight = None
-            return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL ACUMULADO", insight)
-        else:
-            return "🚀 Operação encerrada com sucesso! Bom descanso, parceiro. No sábado te envio o resumão da semana completa! 👊"
-        
     if intencao == "pergunta":
         events_db = db.get_all_time_summary(user_id)
-        context = str(events_db)
-        return await ai.answer_question(context, interpreted.get("pergunta", ""))
+        return await ai.answer_question(str(events_db), interpreted.get("pergunta", ""))
 
-    # intencao == "registro" para o dia atual
-    if not active_op:
-        if len(eventos) > 0:
-            active_op = db.start_operation(user_id)
-            for ev in eventos:
-                db.add_event(user_id, active_op["id"], ev)
-            return LogicService.format_events_confirmation(eventos, "OPERAÇÃO INICIADA")
-        else:
-            return "Hmm, não entendi. Você quer iniciar uma operação ou registrar algum ganho/gasto?"
-    
-    for ev in eventos:
-        db.add_event(user_id, active_op["id"], ev)
-    
-    if len(eventos) > 0:
-        return LogicService.format_events_confirmation(eventos, "DADOS REGISTRADOS")
-    else:
-        return "Hmm, não entendi o que era pra registrar."
+    return "Não entendi o que você quis dizer."
 
-@app.get("/porteiros/{whatsapp_number}", response_class=HTMLResponse)
-async def list_porteiros_page(whatsapp_number: str):
+@app.get("/api/dashboard/{whatsapp_number}")
+async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
     user = db.get_user_by_whatsapp(whatsapp_number)
-    if not user:
-        return "<h1>Usuário não encontrado</h1>"
+    if not user: return JSONResponse({"error": "User not found"}, status_code=404)
+    user_id = user["id"]
     
-    porteiros = db.get_all_porteiros(user["id"])
+    if analysis_id:
+        res = db.supabase.table("historico_analises").select("*").eq("id", analysis_id).execute()
+        if res.data:
+            analysis = res.data[0]
+            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "created_at": analysis["created_at"]}
+
+    history = db.get_analysis_history(user_id, limit=30)
+    if history:
+        latest = history[0]
+        return {
+            "user": user,
+            "metrics": latest["metrics"],
+            "insight": latest["insight"],
+            "history": history,
+            "created_at": latest["created_at"]
+        }
     
-    # Agrupar por rua
-    ruas = {}
-    for p in porteiros:
-        rua = p["rua"]
-        if rua not in ruas:
-            ruas[rua] = []
-        ruas[rua].append(p)
+    ev_week = db.get_weekly_summary(user_id)
+    op_week = db.get_operations_for_period(user_id, 7)
+    metrics_week = LogicService.calculate_metrics_grouped(ev_week, op_week)
+    return {
+        "user": user,
+        "metrics": metrics_week,
+        "insight": "Seu primeiro relatório automatizado será gerado neste sábado às 21h. Aguarde!",
+        "history": []
+    }
 
-    html_content = f"""
-    <html>
-        <head>
-            <title>MeiBot - Mapeamento de Porteiros</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body {{ font-family: sans-serif; background: #f4f4f9; color: #333; padding: 20px; }}
-                h1 {{ color: #25D366; text-align: center; }}
-                .rua-container {{ background: #fff; margin-bottom: 20px; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-                .rua-nome {{ font-weight: bold; font-size: 1.2em; border-bottom: 2px solid #25D366; margin-bottom: 10px; color: #128C7E; }}
-                .item {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
-                .item:last-child {{ border-bottom: none; }}
-                .numero {{ font-weight: bold; color: #444; }}
-                .nome {{ color: #128C7E; }}
-                .nota {{ font-size: 0.9em; color: #666; font-style: italic; margin-top: 4px; }}
-                .turno {{ font-size: 0.8em; background: #e1f5fe; color: #01579b; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }}
-            </style>
-        </head>
-        <body>
-            <h1>📋 Meu Mapeamento</h1>
-    """
-
-    if not ruas:
-        html_content += "<p style='text-align:center'>Nenhum porteiro cadastrado ainda.</p>"
-    else:
-        for rua in sorted(ruas.keys()):
-            html_content += f"<div class='rua-container'><div class='rua-nome'>📍 {rua}</div>"
-            # Ordena por número (convertendo para int se possível para ordem numérica correta)
-            sorted_items = sorted(ruas[rua], key=lambda x: int(''.join(filter(str.isdigit, x['numero']))) if any(c.isdigit() for c in x['numero']) else x['numero'])
-            
-            for p in sorted_items:
-                html_content += f"""
-                <div class='item'>
-                    <span class='numero'>nº {p['numero']}</span>: 
-                    <span class='nome'>{p['nome_porteiro']}</span>
-                    {f"<span class='turno'>{p['turno']}</span>" if p['turno'] else ""}
-                    {f"<div class='nota'>📝 {p['notas_predio']}</div>" if p['notas_predio'] else ""}
+@app.get("/dashboard/{whatsapp_number}", response_class=HTMLResponse)
+async def dashboard_page(whatsapp_number: str):
+    html = """
+    <!DOCTYPE html>
+    <html lang="pt-br">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <title>MeiBot Dashboard</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+            body { font-family: 'Inter', sans-serif; background-color: #f9fafb; overflow-x: hidden; }
+            .card-gradient { background: linear-gradient(135deg, #128C7E 0%, #075E54 100%); }
+            .history-item { transition: all 0.2s; }
+            .history-item:active { transform: scale(0.98); }
+            ::-webkit-scrollbar { width: 4px; height: 4px; }
+            ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        </style>
+    </head>
+    <body class="flex flex-col md:flex-row min-h-screen">
+        <!-- Sidebar Responsiva -->
+        <aside class="w-full md:w-72 bg-white border-b md:border-b-0 md:border-r border-gray-200 p-4 md:p-6 flex-shrink-0 z-50 sticky top-0 md:h-screen md:overflow-y-auto">
+            <div class="flex items-center justify-between md:justify-start md:gap-3 mb-4 md:mb-10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg shadow-green-100 text-white"> 
+                        <i class="fa-solid fa-robot"></i> 
+                    </div>
+                    <span class="font-bold text-xl text-gray-800">MeiBot <span class="text-green-600">Pro</span></span>
                 </div>
-                """
-            html_content += "</div>"
+            </div>
+            
+            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Pasta de Arquivos</h4>
+            <nav id="history-list" class="flex md:flex-col gap-3 md:gap-4 overflow-x-auto md:overflow-visible pb-2 md:pb-0 snap-x"></nav>
+        </aside>
 
-    html_content += "</body></html>"
-    return html_content
+        <!-- Main Content -->
+        <main class="flex-grow p-4 md:p-10 space-y-6 md:space-y-8 w-full max-w-7xl mx-auto">
+            <header class="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-6 gap-4">
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Painel de Performance</h2>
+                    <p id="txt-periodo" class="text-gray-400 text-sm font-medium">Carregando dados...</p>
+                </div>
+                <div class="bg-gray-100 p-3 rounded-2xl w-full md:w-auto">
+                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Conta Comigo Logística</p>
+                    <p class="text-xs font-bold text-gray-700 uppercase tracking-tighter">ID: """ + whatsapp_number + """</p>
+                </div>
+            </header>
+
+            <!-- Cards Financeiros: Responsivos (2 colunas mobile, 6 colunas desktop) -->
+            <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <p class="text-gray-400 text-[10px] font-bold uppercase mb-1">Bruto</p>
+                    <p id="txt-bruto" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <p class="text-red-400 text-[10px] font-bold uppercase mb-1">Essenciais</p>
+                    <p id="txt-essencial" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <p class="text-orange-400 text-[10px] font-bold uppercase mb-1 truncate">Não Essenc.</p>
+                    <p id="txt-nao-essencial" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+                </div>
+                <div class="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-green-500">
+                    <p class="text-green-600 text-[10px] font-bold uppercase mb-1">Líquido</p>
+                    <p id="txt-saldo" class="text-base md:text-xl font-black text-green-600 truncate">---</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <p class="text-blue-500 text-[10px] font-bold uppercase mb-1">R$ / KM</p>
+                    <p id="txt-eficiencia" class="text-base md:text-xl font-black text-blue-600 truncate">---</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <p class="text-purple-500 text-[10px] font-bold uppercase mb-1">Tempo</p>
+                    <p id="txt-tempo" class="text-base md:text-xl font-black text-purple-600 truncate">---</p>
+                </div>
+            </div>
+
+            <!-- Gráfico e Detalhes -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-gray-100 w-full overflow-hidden">
+                    <h3 class="font-bold text-gray-800 text-xs md:text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column text-green-500"></i> Faturamento por Plataforma
+                    </h3>
+                    <div class="relative w-full h-[200px] md:h-[250px]">
+                        <canvas id="chartApps"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-gray-100 w-full">
+                    <h3 class="font-bold text-gray-800 text-xs md:text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-blue-500"></i> Metas e Tempos
+                    </h3>
+                    <div id="list-apps" class="space-y-5 md:space-y-6"></div>
+                </div>
+            </div>
+
+            <!-- VISÃO DO ANALISTA: Destaque Especial -->
+            <div class="card-gradient p-8 md:p-12 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
+                <i class="fa-solid fa-quote-left absolute top-6 left-6 text-white/5 text-8xl md:text-9xl"></i>
+                <div class="relative z-10">
+                    <h3 class="text-lg md:text-xl font-bold mb-6 md:mb-8 flex items-center gap-3"> 
+                        <span class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                            <i class="fa-solid fa-user-tie text-white"></i> 
+                        </span>
+                        Visão do Analista Estratégico 
+                    </h3>
+                    <div id="txt-insight" class="text-white/90 leading-relaxed whitespace-pre-line text-sm md:text-lg italic font-light"></div>
+                </div>
+            </div>
+        </main>
+
+        <script>
+            let myChart = null;
+            async function loadDashboard(analysisId = null) {
+                try {
+                    let url = '/api/dashboard/""" + whatsapp_number + """';
+                    if (analysisId) url += '?analysis_id=' + analysisId;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (data.error) return;
+
+                    const c = data.metrics.consolidado;
+                    const apps = data.metrics.apps;
+
+                    // Header
+                    document.getElementById('txt-periodo').innerText = 'Relatório de: ' + new Date(data.created_at || new Date()).toLocaleDateString('pt-BR');
+                    
+                    // Cards
+                    document.getElementById('txt-bruto').innerText = 'R$ ' + c.total_ganhos.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                    document.getElementById('txt-essencial').innerText = 'R$ ' + (c.gastos_essenciais || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                    document.getElementById('txt-nao-essencial').innerText = 'R$ ' + (c.gastos_nao_essenciais || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                    document.getElementById('txt-saldo').innerText = 'R$ ' + c.saldo.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                    document.getElementById('txt-eficiencia').innerText = 'R$ ' + (c.total_ganhos / (c.km_total || 1)).toFixed(2);
+                    document.getElementById('txt-tempo').innerText = (c.total_hours || 0).toFixed(1) + 'h';
+                    document.getElementById('txt-insight').innerText = data.insight;
+
+                    // Detalhamento de Apps
+                    const listContainer = document.getElementById('list-apps');
+                    listContainer.innerHTML = '';
+                    const appNames = Object.keys(apps);
+                    const appGanhos = [];
+                    appNames.forEach(name => {
+                        const app = apps[name];
+                        appGanhos.push(app.ganhos);
+                        const rkm = (app.ganhos / (app.km || 1)).toFixed(2);
+                        const div = document.createElement('div');
+                        div.className = 'border-l-4 border-green-500 pl-4 py-1';
+                        div.innerHTML = `<div class="flex justify-between font-black text-sm text-gray-800"><span>${name}</span><span class="text-green-600">R$ ${app.ganhos.toFixed(2)}</span></div><div class="text-[10px] text-gray-400 uppercase font-black tracking-tight mt-1">${app.km.toFixed(1)}km • R$ ${rkm}/km • ${app.horas.toFixed(1)}h</div>`;
+                        listContainer.appendChild(div);
+                    });
+
+                    // AGRUPAMENTO MENSAL NA SIDEBAR
+                    if (data.history) {
+                        const histList = document.getElementById('history-list');
+                        histList.innerHTML = '';
+                        
+                        const grouped = {};
+                        data.history.forEach(h => {
+                            const date = new Date(h.created_at);
+                            const monthKey = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+                            if(!grouped[monthKey]) grouped[monthKey] = [];
+                            grouped[monthKey].push(h);
+                        });
+
+                        for(const [month, items] of Object.entries(grouped)) {
+                            const monthWrapper = document.createElement('div');
+                            monthWrapper.className = 'min-w-[150px] md:min-w-0 md:mb-8 flex-shrink-0 snap-start';
+                            monthWrapper.innerHTML = `<h5 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 bg-gray-50 px-2 py-1 rounded-md inline-block border border-gray-100">${month}</h5>`;
+                            
+                            const itemsList = document.createElement('div');
+                            itemsList.className = 'flex flex-col gap-2 md:pl-2 md:border-l-2 md:border-gray-100';
+                            
+                            items.forEach(h => {
+                                const active = analysisId === h.id || (!analysisId && h.id === data.history[0].id);
+                                const btn = document.createElement('div');
+                                btn.className = `history-item p-3 rounded-2xl border shadow-sm transition-all text-left ${active ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-100 text-gray-700'}`;
+                                btn.innerHTML = `<p class="text-[10px] font-black uppercase tracking-tighter">${h.periodo_tipo}</p><p class="text-[9px] ${active ? 'text-green-100' : 'text-gray-400'} font-bold">${new Date(h.created_at).toLocaleDateString('pt-BR')}</p>`;
+                                btn.onclick = () => { loadDashboard(h.id); if(window.innerWidth < 768) window.scrollTo({top: 400, behavior: 'smooth'}); };
+                                itemsList.appendChild(btn);
+                            });
+                            
+                            monthWrapper.appendChild(itemsList);
+                            histList.appendChild(monthWrapper);
+                        }
+                    }
+
+                    // Chart
+                    if (myChart) myChart.destroy();
+                    const ctx = document.getElementById('chartApps').getContext('2d');
+                    myChart = new Chart(ctx, { 
+                        type: 'bar', 
+                        data: { labels: appNames, datasets: [{ label: 'Bruto', data: appGanhos, backgroundColor: '#128C7E', borderRadius: 12, barThickness: window.innerWidth < 768 ? 20 : 35 }] }, 
+                        options: { 
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } }, 
+                            scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6', borderDash: [5, 5] }, ticks: { font: { size: 10, weight: 'bold' } } }, x: { grid: { display: false }, ticks: { font: { size: 10, weight: 'bold' } } } } 
+                        } 
+                    });
+                } catch (e) { console.error(e); }
+            }
+            loadDashboard();
+        </script>
+    </body>
+    </html>
+    """
+    return html
 
 if __name__ == "__main__":
     import uvicorn

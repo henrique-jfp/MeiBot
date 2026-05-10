@@ -276,3 +276,40 @@ class DBService:
         except Exception as e:
             print(f"Error getting all porteiros: {e}")
             return []
+
+    # --- HISTÓRICO DE ANÁLISES ---
+
+    def save_analysis(self, user_id: str, periodo_tipo: str, metrics: dict, insight: str):
+        """
+        Salva uma análise (semanal ou mensal) para persistência histórica.
+        periodo_tipo: 'semanal' ou 'mensal'
+        """
+        try:
+            import datetime
+            data = {
+                "user_id": user_id,
+                "periodo_tipo": periodo_tipo,
+                "metrics": metrics,
+                "insight": insight,
+                "created_at": datetime.datetime.now().isoformat()
+            }
+            # Tenta inserir na tabela historico_analises. 
+            # Nota: A tabela deve existir no Supabase.
+            response = self.supabase.table("historico_analises").insert(data).execute()
+            return response.data
+        except Exception as e:
+            print(f"Error saving analysis to DB: {e}")
+            return None
+
+    def get_analysis_history(self, user_id: str, limit: int = 10):
+        try:
+            response = self.supabase.table("historico_analises")\
+                .select("*")\
+                .eq("user_id", user_id)\
+                .order("created_at", desc=True)\
+                .limit(limit)\
+                .execute()
+            return response.data
+        except Exception as e:
+            print(f"Error getting analysis history: {e}")
+            return []
