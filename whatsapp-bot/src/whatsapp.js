@@ -110,9 +110,16 @@ async function connectToWhatsApp() {
                      "";
 
         // Se a mensagem for uma resposta do próprio bot, ignora
-        const startsWithBotEmoji = /^[✅❌⚠️📊🚀⛽📈🎙️📋🏢]/.test(text);
+        const startsWithBotEmoji = /^[✅❌⚠️📊🚀⛽📈🎙️📋🏢╔┌]/.test(text.trim());
         const isLongAnalysis = text.length > 400;
-        const containsBotKeywords = text.includes('Análise estratégica') || text.includes('Visão do Analista') || text.includes('Saldo Líquido') || text.includes('instabilidade');
+        const containsBotKeywords = text.includes('Análise estratégica') || 
+                                    text.includes('Visão do Analista') || 
+                                    text.includes('VISÃO DO ANALISTA') ||
+                                    text.includes('Saldo Líquido') || 
+                                    text.includes('SALDO LÍQUIDO') ||
+                                    text.includes('instabilidade') ||
+                                    text.includes('RESUMO SEMANAL') ||
+                                    text.includes('CONSOLIDADO DA OPERAÇÃO');
         const isRouteClaimNotification = /^Rota confirmada:/i.test(text.trim());
 
         if (startsWithBotEmoji || isLongAnalysis || containsBotKeywords || isRouteClaimNotification) {
