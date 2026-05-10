@@ -77,13 +77,15 @@ async function handleCommand(sock, msg) {
                  msg.message?.ephemeralMessage?.message?.conversation ||
                  '';
                  
-    const remoteJid = msg.key.remoteJid;
-    console.log(`[DEBUG-COMMAND] Recebido em ${remoteJid}: "${text}"`);
-
     if (!text) return false;
 
+    // --- FILTRO DE AUTO-COMANDO (Ignora respostas do próprio bot) ---
+    if (/^[✅❌🔄🔄]/.test(text.trim()) || text.includes('confirmada:')) {
+        return false;
+    }
+
     const command = normalizeText(text);
-    console.log(`[DEBUG-COMMAND] Comando normalizado: "${command}"`);
+    const remoteJid = msg.key.remoteJid;
 
     if (command === 'reativar rotas') {
         state.groups.clear();
@@ -214,12 +216,29 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     const groupState = getGroupState(groupJid);
     const messageId = msg.key.id;
 
-    if (!state.active || groupState.locked) return true;
+    if (!state.active) {
+        console.log(`[DEBUG-ROUTE] Ignorado: Sistema desativado. Grupo: ${groupName}`);
+        return true;
+    }
+    if (groupState.locked) {
+        console.log(`[DEBUG-ROUTE] Ignorado: Grupo já possui rota confirmada. Grupo: ${groupName}`);
+        return true;
+    }
     if (messageId && groupState.processedMessageIds.has(messageId)) return true;
-    if (groupState.lastClaimId) return true;
+    if (groupState.lastClaimId) {
+        console.log(`[DEBUG-ROUTE] Ignorado: Já existe um claim pendente neste grupo. Grupo: ${groupName}`);
+        return true;
+    }
     if (groupState.inFlight) return true;
-    if (!isAuthorizedSender(msg)) return true;
+    
+    if (!isAuthorizedSender(msg)) {
+        console.log(`[DEBUG-ROUTE] Ignorado: Remetente não autorizado. Grupo: ${groupName}`);
+        return true;
+    }
+
     if (!isTest && ROUTES_CONFIG.schedule.enabledInProd && !isWithinSchedule()) {
+        const { hour, minute } = getLocalTime();
+        console.log(`[DEBUG-ROUTE] Ignorado: Fora do horário (Agora: ${hour}:${minute}). Grupo: ${groupName}`);
         return true;
     }
 
@@ -227,6 +246,9 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     const mimeType = mediaInfo?.mimeType || null;
 
     if (!mediaInfo || !mimeType || !ROUTES_CONFIG.allowedMimeTypes.includes(mimeType)) {
+        if (msg.message?.imageMessage || msg.message?.documentMessage) {
+            console.log(`[DEBUG-ROUTE] Ignorado: MimeType não permitido (${mimeType}). Grupo: ${groupName}`);
+        }
         return true;
     }
 
@@ -234,13 +256,17 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     if (messageId) groupState.processedMessageIds.add(messageId);
 
     try {
+        console.log(`[DEBUG-ROUTE] Analisando imagem/documento no grupo: ${groupName}...`);
         const innerMessage = getInnerMessage(msg.message);
         const buffer = await downloadMediaMessage(
             { key: msg.key, message: innerMessage },
             'buffer',
             {}
         );
-        if (!buffer) return true;
+        if (!buffer) {
+            console.log(`[DEBUG-ROUTE] Erro: Falha ao baixar mídia. Grupo: ${groupName}`);
+            return true;
+        }
 
         const payload = {
             mime_type: mimeType,
@@ -248,30 +274,36 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
         };
 
         const parsed = await parseRouteSheet(payload);
-        if (
-            parsed.error ||
-            !parsed.routes ||
-            parsed.routes.length === 0 ||
-            (typeof parsed.confidence === 'number' && parsed.confidence < ROUTES_CONFIG.minConfidence)
-        ) {
-            console.log('[ROUTE-CLAIM] No confident routes parsed.');
+        if (parsed.error) {
+            console.log(`[DEBUG-ROUTE] Erro na API: ${parsed.error}. Grupo: ${groupName}`);
+            return true;
+        }
+
+        if (!parsed.routes || parsed.routes.length === 0) {
+            console.log(`[DEBUG-ROUTE] Nenhuma rota extraída pela IA. Grupo: ${groupName}`);
+            return true;
+        }
+
+        if (typeof parsed.confidence === 'number' && parsed.confidence < ROUTES_CONFIG.minConfidence) {
+            console.log(`[DEBUG-ROUTE] Confiança baixa (${parsed.confidence}). Grupo: ${groupName}`);
             return true;
         }
 
         const candidates = buildCandidates(parsed.routes);
         if (candidates.length === 0) {
-            console.log('[ROUTE-CLAIM] No Rocinha routes found.');
+            console.log(`[DEBUG-ROUTE] Nenhuma rota para Rocinha encontrada na lista. Grupo: ${groupName}`);
             return true;
         }
 
         const picked = pickCandidate(candidates);
         const claimSignature = `${picked.selected.gaiola}:${picked.selected.rocinha_pacotes ?? ''}:${picked.selected.pacotes_total ?? ''}`;
         const now = Date.now();
+        
         if (
             groupState.lastClaimSignature === claimSignature &&
             now - groupState.lastClaimAt < 10 * 60 * 1000
         ) {
-            console.log(`[ROUTE-CLAIM] Duplicate claim suppressed signature=${claimSignature}`);
+            console.log(`[DEBUG-ROUTE] Duplicata suprimida: ${claimSignature}. Grupo: ${groupName}`);
             return true;
         }
 
@@ -279,11 +311,15 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
         groupState.index = 0;
         groupState.lastClaimSignature = claimSignature;
         groupState.lastClaimAt = now;
+        
         console.log(
-            `[ROUTE-CLAIM] Claiming route gaiola=${picked.selected.gaiola} ` +
-            `rocinha=${picked.selected.rocinha_pacotes ?? 'n/a'} total=${picked.selected.pacotes_total}`
+            `[ROUTE-CLAIM] Capturando rota gaiola=${picked.selected.gaiola} ` +
+            `rocinha=${picked.selected.rocinha_pacotes ?? 'n/a'} total=${picked.selected.pacotes_total} no grupo: ${groupName}`
         );
         await sendClaimMessage(sock, groupJid, picked.selected);
+        return true;
+    } catch (err) {
+        console.error(`[DEBUG-ROUTE] Erro fatal no processamento: ${err.message}`);
         return true;
     } finally {
         groupState.inFlight = false;
@@ -417,16 +453,21 @@ async function handleIncomingMessage(sock, msg) {
     if (!isGroup) {
         const handled = await handleCommand(sock, msg);
         if (handled) return true;
-        // Se for privado mas não for comando, o módulo de rotas ignora
         return false;
     }
 
     // Daqui pra baixo é apenas para GRUPOS
     const groupName = await getGroupName(sock, remoteJid);
-    if (!groupName) return false;
+    if (!groupName) {
+        return false;
+    }
 
     const isTest = isTestGroup(groupName);
-    if (!shouldHandleGroup(groupName, isTest)) return false;
+    if (!shouldHandleGroup(groupName, isTest)) {
+        // Log silenciado para não poluir, mas disponível para debug se necessário
+        // console.log(`[DEBUG-ROUTE] Ignorado: Grupo não listado na Prod ou Test (${groupName})`);
+        return false;
+    }
 
     const textHandled = await handleTextReply(sock, msg);
     if (textHandled) return true;
