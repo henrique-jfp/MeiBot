@@ -9,7 +9,55 @@ class LogicService:
             tipo = ev.get("tipo", "evento").upper()
             app = ev.get("app", "")
             valor = ev.get("valor", 0)
-            res += f"• {tipo} ({app}): R$ {valor:.2f}\n"
+            km = ev.get("km_rota", ev.get("km"))
+            pacotes = ev.get("pacotes")
+            h_chegada = ev.get("hora_chegada_galpao")
+            h_inicio = ev.get("hora_inicio_rota") or ev.get("hora_inicio")
+            h_fim = ev.get("hora_fim_operacao") or ev.get("hora_fim")
+
+            res += f"• {tipo} ({app}): R$ {valor:.2f}"
+
+            details = []
+            if km:
+                details.append(f"{float(km):.1f} km")
+            if pacotes:
+                details.append(f"{int(pacotes)} pacotes")
+            if h_chegada:
+                details.append(f"chegada {h_chegada}")
+            if h_inicio:
+                details.append(f"inicio {h_inicio}")
+            if h_fim:
+                details.append(f"fim {h_fim}")
+
+            if h_inicio and h_fim:
+                try:
+                    fmt = "%H:%M"
+                    t1 = datetime.datetime.strptime(h_inicio, fmt)
+                    t2 = datetime.datetime.strptime(h_fim, fmt)
+                    diff = (t2 - t1).total_seconds()
+                    if diff < 0:
+                        diff += 24 * 3600
+                    horas = diff / 3600
+                    details.append(f"duracao {horas:.2f}h")
+                except Exception:
+                    pass
+
+            if h_chegada and h_inicio:
+                try:
+                    fmt = "%H:%M"
+                    t1 = datetime.datetime.strptime(h_chegada, fmt)
+                    t2 = datetime.datetime.strptime(h_inicio, fmt)
+                    diff = (t2 - t1).total_seconds()
+                    if diff < 0:
+                        diff += 24 * 3600
+                    espera = diff / 60
+                    details.append(f"espera {int(espera)} min")
+                except Exception:
+                    pass
+
+            if details:
+                res += " (" + ", ".join(details) + ")"
+            res += "\n"
         return res
 
     @staticmethod
@@ -23,7 +71,7 @@ class LogicService:
             "total_ajustes": 0,
             "km_total": 0,
             "saldo": 0,
-            "total_horas": 0,
+            "total_hours": 0,
             "ganho_por_hora": 0,
             "custo_por_km": 0,
             "total_operacoes": len(operations) if operations else 0
@@ -104,23 +152,48 @@ class LogicService:
     @staticmethod
     def format_summary_3_blocks(metrics: dict, title: str = "RESUMO DA OPERAÇÃO", analyst_insight: str = None):
         c = metrics["consolidado"]
-        
+        apps = metrics.get("apps") or {}
+
+        def find_app(match_text: str):
+            match_text = match_text.lower()
+            for name, data in apps.items():
+                if name and match_text in name.lower():
+                    return name, data
+            return match_text.title(), {"ganhos": 0, "gastos": 0, "km": 0}
+
+        def app_block(label: str, data: dict):
+            saldo = (data.get("ganhos", 0) or 0) - (data.get("gastos", 0) or 0)
+            msg_block = f"{label}\n"
+            msg_block += f"💰 *Saldo Líquido:* R$ {saldo:.2f}\n"
+            msg_block += f"📈 *Ganhos:* R$ {data.get('ganhos', 0):.2f}\n"
+            msg_block += f"📉 *Gastos:* R$ {data.get('gastos', 0):.2f}\n"
+            msg_block += f"🛣️ *KM Total:* {data.get('km', 0):.1f} km\n"
+            return msg_block
+
+        shopee_name, shopee_data = find_app("shopee")
+        correios_name, correios_data = find_app("correio")
+
         msg = f"📊 *{title}*\n"
         msg += "--------------------------\n"
+        msg += app_block(f"🏬 *{shopee_name}*", shopee_data)
+        msg += "--------------------------\n"
+        msg += app_block(f"🏤 *{correios_name}*", correios_data)
+        msg += "--------------------------\n"
+
+        msg += "🏢 *Consolidado*\n"
         msg += f"💰 *Saldo Líquido:* R$ {c['saldo']:.2f}\n"
         msg += f"📈 *Ganhos:* R$ {c['total_ganhos']:.2f}\n"
         msg += f"📉 *Gastos:* R$ {c['total_gastos']:.2f}\n"
-        msg += "--------------------------\n"
         msg += f"🛣️ *KM Total:* {c['km_total']:.1f} km\n"
-        
+
         if c.get("total_hours"):
             msg += f"⏱️ *Tempo Total:* {c['total_hours']:.1f}h\n"
             msg += f"🕒 *Ganho/Hora:* R$ {c.get('ganho_por_hora', 0):.2f}/h\n"
 
         if analyst_insight:
-            msg += "\n\n🧐 *Visão do Analista:*\n"
+            msg += "\n🧐 *Visão do Analista:*\n"
             msg += f"_{analyst_insight}_"
-            
+
         return msg
 
     @staticmethod

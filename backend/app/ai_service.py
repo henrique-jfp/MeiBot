@@ -1,3 +1,4 @@
+import datetime
 import google.generativeai as genai
 import os
 import json
@@ -35,8 +36,10 @@ class AIService:
             self.vision_client = None
 
     async def interpret_message(self, text: str):
+        today = datetime.date.today().isoformat()
         prompt = f"""
         Você é um assistente de logística para entregadores. Interprete a mensagem e retorne um JSON.
+        Data atual: {today}
         
         Intenções Válidas:
         - 'iniciar': Quando o entregador quer começar o dia ou a operação.
@@ -54,7 +57,7 @@ class AIService:
 
         Campos do JSON:
         - intencao: Uma das intenções acima.
-        - data_referencia: YYYY-MM-DD (se o usuário falar "ontem", "anteontem", "dia 05", etc).
+        - data_referencia: YYYY-MM-DD (se o usuário falar "ontem", "anteontem", "dia 05", etc). Use o ANO atual quando não for informado.
         - pergunta: O texto da pergunta (se intencao for 'pergunta').
         - entregador_info: {{'nome': str, 'valor_diaria': float}}
         - porteiro_info: {{'rua': str, 'numero': str, 'nome': str, 'nome_antigo': str, 'turno': str, 'notas': str}}
@@ -64,7 +67,7 @@ class AIService:
         "fiz uma rota hoje na loggi 150 reais 40km 30 pacotes" -> intencao: 'registro', eventos: [{{'app': 'Loggi', 'tipo': 'ganho', 'valor': 150, 'km_rota': 40, 'pacotes': 30}}]
         "quanto ganhei na semana?" -> intencao: 'resumo_semanal'
         "resumo da semana" -> intencao: 'resumo_semanal'
-        "resumo de ontem" -> intencao: 'resumo_diario', data_referencia: 'YYYY-MM-DD' (data de ontem)
+        "resumo de ontem" -> intencao: 'resumo_diario', data_referencia: 'YYYY-MM-DD' (data de ontem baseada em {today})
         
         Texto do usuário: "{text}"
         """

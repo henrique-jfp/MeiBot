@@ -11,6 +11,17 @@ app = FastAPI()
 db = DBService()
 ai = AIService()
 
+def override_data_ref_from_text(content: str, data_ref: str):
+    text = (content or "").lower()
+    today = datetime.date.today()
+    if "anteontem" in text:
+        return (today - datetime.timedelta(days=2)).isoformat()
+    if "ontem" in text:
+        return (today - datetime.timedelta(days=1)).isoformat()
+    if "hoje" in text:
+        return today.isoformat()
+    return data_ref
+
 app.include_router(routes_claim_router)
 
 @app.post("/webhook")
@@ -31,31 +42,47 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         response_text = ""
         
         if message_type == "text":
-            interpreted = await ai.interpret_message(content)
-            print(f"DEBUG: AI Interpreted: {interpreted}")
-            response_text = await process_interpreted_data(user, interpreted)
+            try:
+                interpreted = await ai.interpret_message(content)
+                interpreted["data_referencia"] = override_data_ref_from_text(
+                    content,
+                    interpreted.get("data_referencia")
+                )
+                print(f"DEBUG: AI Interpreted: {interpreted}")
+                response_text = await process_interpreted_data(user, interpreted)
+            except Exception as e:
+                print(f"AI interpret failed: {e}")
+                return {"reply": "⚠️ Estou com instabilidade para analisar agora. Tente novamente em alguns minutos."}
             
         elif message_type == "image":
-            image_bytes = base64.b64decode(content)
-            interpreted = await ai.process_image(image_bytes, "image/jpeg")
-            print(f"DEBUG: Image AI Interpreted: {interpreted}")
-            response_text = await process_interpreted_data(user, interpreted)
+            try:
+                image_bytes = base64.b64decode(content)
+                interpreted = await ai.process_image(image_bytes, "image/jpeg")
+                print(f"DEBUG: Image AI Interpreted: {interpreted}")
+                response_text = await process_interpreted_data(user, interpreted)
+            except Exception as e:
+                print(f"AI image interpret failed: {e}")
+                return {"reply": "⚠️ Estou com instabilidade para analisar imagens agora. Tente novamente em alguns minutos."}
             
         elif message_type == "audio":
-            audio_bytes = base64.b64decode(content)
-            transcription = await ai.transcribe_audio(audio_bytes)
-            print(f"DEBUG: Audio Transcription: {transcription}")
-            interpreted = await ai.interpret_message(transcription)
-            print(f"DEBUG: Audio AI Interpreted: {interpreted}")
-            response_text = await process_interpreted_data(user, interpreted)
-            response_text = f"🎙️ *Transcrição:* \"{transcription}\"\n\n{response_text}"
+            try:
+                audio_bytes = base64.b64decode(content)
+                transcription = await ai.transcribe_audio(audio_bytes)
+                print(f"DEBUG: Audio Transcription: {transcription}")
+                interpreted = await ai.interpret_message(transcription)
+                print(f"DEBUG: Audio AI Interpreted: {interpreted}")
+                response_text = await process_interpreted_data(user, interpreted)
+                response_text = f"🎙️ *Transcrição:* \"{transcription}\"\n\n{response_text}"
+            except Exception as e:
+                print(f"AI audio interpret failed: {e}")
+                return {"reply": "⚠️ Estou com instabilidade para analisar audio agora. Tente novamente em alguns minutos."}
 
         return {"reply": response_text}
     except Exception as e:
         print(f"CRITICAL ERROR in handle_webhook: {e}")
         import traceback
         traceback.print_exc()
-        return {"reply": f"❌ Ops! Tive um erro interno: {str(e)}"}
+        return {"reply": "⚠️ Estou com instabilidade para responder agora. Tente novamente em alguns minutos."}
 
 async def process_interpreted_data(user, interpreted):
     intencao = interpreted.get("intencao")
@@ -91,8 +118,17 @@ async def process_interpreted_data(user, interpreted):
     for ev in eventos_brutos:
         if data_ref:
             ev["data_referencia"] = data_ref
-        db.add_event(user_id, active_op["id"], ev)
-        eventos_processados.append(ev)
+
+        if ev.get("app") and not ev.get("tipo"):
+            ev["tipo"] = "ganho"
+
+        if data_ref:
+            op_inicio = ev.get("hora_chegada_galpao") or ev.get("hora_inicio_rota")
+            op_fim = ev.get("hora_fim_operacao")
+            if op_inicio or op_fim:
+                active_op = db.get_or_create_operation_by_date(user_id, data_ref, op_inicio, op_fim)
+
+        app_info = db.get_app_by_name(ev.get("app")) if ev.get("app") else None
 
         # Só calcula se o valor não tiver sido extraído pela IA ou for 0
         if app_info and (not ev.get("valor") or ev.get("valor") == 0):
@@ -106,39 +142,39 @@ async def process_interpreted_data(user, interpreted):
             ev["valor"] = (ev.get("valor") or 0) + ev["valor_extra"]
 
         # Lançamento automático de repasse para entregador
-        if app_info and app_info.get("entregador_padrao_id"):                # Busca valor da diária do entregador padrão
-                res_ent = db.supabase.table("entregadores").select("valor_diaria").eq("id", app_info["entregador_padrao_id"]).execute()
-                if res_ent.data:
-                    valor_pagamento = res_ent.data[0]["valor_diaria"]
-                    gasto_ent = {
-                        "tipo": "gasto", "categoria": "Essencial", 
-                        "valor": valor_pagamento, "app": ev.get("app"),
-                        "descricao": f"Pagamento entregador (Auto)"
-                    }
-                    db.add_event(user_id, active_op["id"], gasto_ent)
-                    eventos_processados.append(gasto_ent)
+        if app_info and app_info.get("entregador_padrao_id"):
+            res_ent = db.supabase.table("entregadores").select("valor_diaria").eq("id", app_info["entregador_padrao_id"]).execute()
+            if res_ent.data:
+                valor_pagamento = res_ent.data[0]["valor_diaria"]
+                gasto_ent = {
+                    "tipo": "gasto", "categoria": "Essencial",
+                    "valor": valor_pagamento, "app": ev.get("app"),
+                    "descricao": "Pagamento entregador (Auto)"
+                }
+                db.add_event(user_id, active_op["id"], gasto_ent)
+                eventos_processados.append(gasto_ent)
 
         # Mapeamento de KMs
         # Se houver deslocamento, cria evento separado
         if ev.get("km_deslocamento"):
             desl_ev = {
-                "tipo": "ajuste", "sub_tipo": "deslocamento", 
+                "tipo": "ajuste", "sub_tipo": "deslocamento",
                 "km": ev["km_deslocamento"], "app": ev.get("app"),
-                "descricao": "Deslocamento até galpão"
+                "descricao": "Deslocamento até galpao"
             }
             db.add_event(user_id, active_op["id"], desl_ev)
             eventos_processados.append(desl_ev)
-        
+
         # O evento principal de rota
         if active_op and active_op.get("id"):
             ev["km"] = ev.get("km_rota", ev.get("km", 0))
             ev["hora_inicio"] = ev.get("hora_inicio_rota")
             ev["hora_fim"] = ev.get("hora_fim_operacao")
-            
+
             db.add_event(user_id, active_op["id"], ev)
             eventos_processados.append(ev)
         else:
-            print("WARNING: Tentativa de registrar evento sem operação ativa.")
+            print("WARNING: Tentativa de registrar evento sem operacao ativa.")
 
     if intencao == "registro":
         if not active_op:
@@ -230,7 +266,11 @@ async def process_interpreted_data(user, interpreted):
         events_prev = db.get_previous_weekly_summary(user_id)
         metrics_prev = LogicService.calculate_metrics(events_prev, None)
         
-        insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Semana Atual")
+        try:
+            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Semana Atual")
+        except Exception as e:
+            print(f"AI insight failed (weekly): {e}")
+            insight = None
         return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL SOLICITADO", insight)
 
     if intencao == "resumo_mensal":
@@ -241,7 +281,11 @@ async def process_interpreted_data(user, interpreted):
         events_prev = db.get_previous_monthly_summary(user_id)
         metrics_prev = LogicService.calculate_metrics(events_prev, None)
         
-        insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Mês Atual")
+        try:
+            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Mês Atual")
+        except Exception as e:
+            print(f"AI insight failed (monthly): {e}")
+            insight = None
         return LogicService.format_summary(metrics_curr, "RESUMO MENSAL SOLICITADO", insight)
 
     if intencao == "iniciar":
@@ -268,7 +312,11 @@ async def process_interpreted_data(user, interpreted):
             events_prev = db.get_previous_monthly_summary(user_id)
             metrics_prev = LogicService.calculate_metrics(events_prev, None)
             
-            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Mês")
+            try:
+                insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Mês")
+            except Exception as e:
+                print(f"AI insight failed (month close): {e}")
+                insight = None
             title = "RESUMO MENSAL ACUMULADO" if is_last_day_of_month else "RESUMO DO MÊS ENCERRADO"
             return LogicService.format_summary(metrics_curr, title, insight)
             
@@ -279,7 +327,11 @@ async def process_interpreted_data(user, interpreted):
             events_prev = db.get_previous_weekly_summary(user_id)
             metrics_prev = LogicService.calculate_metrics(events_prev, None)
             
-            insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Semana")
+            try:
+                insight = await ai.generate_analyst_insight(metrics_curr["consolidado"], metrics_prev, "Semana")
+            except Exception as e:
+                print(f"AI insight failed (week close): {e}")
+                insight = None
             return LogicService.format_summary(metrics_curr, "RESUMO SEMANAL ACUMULADO", insight)
         else:
             return "🚀 Operação encerrada com sucesso! Bom descanso, parceiro. No sábado te envio o resumão da semana completa! 👊"

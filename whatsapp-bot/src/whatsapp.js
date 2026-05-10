@@ -67,6 +67,7 @@ async function connectToWhatsApp() {
         const remoteJid = msg.key.remoteJid;
         const fromMe = msg.key.fromMe;
         const myId = sock.user?.id?.split(':')[0];
+        const myLid = sock.user?.lid?.split(':')[0];
 
         if (!remoteJid || !myId) {
             return;
@@ -90,7 +91,7 @@ async function connectToWhatsApp() {
         // --- TRAVA DE SEGURANÇA ESTRITA (SELF-ONLY) ---
         // Só processa se o remoteJid contiver o seu próprio ID.
         // Isso garante que se você mandar mensagem para outra pessoa, o bot não responda.
-        const isSelfChat = remoteJid.includes(myId);
+        const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
         
         // Só responde se for no chat comigo mesmo E se a mensagem veio de MIM (para evitar loops)
         if (!isSelfChat || !fromMe) {
@@ -107,9 +108,9 @@ async function connectToWhatsApp() {
                      "";
 
         // Se a mensagem for uma resposta do próprio bot, ignora
-        const startsWithBotEmoji = /^[✅❌📊🚀⛽📈🎙️📋🏢]/.test(text);
+        const startsWithBotEmoji = /^[✅❌⚠️📊🚀⛽📈🎙️📋🏢]/.test(text);
         const isLongAnalysis = text.length > 400;
-        const containsBotKeywords = text.includes('Análise estratégica') || text.includes('Visão do Analista') || text.includes('Saldo Líquido');
+        const containsBotKeywords = text.includes('Análise estratégica') || text.includes('Visão do Analista') || text.includes('Saldo Líquido') || text.includes('instabilidade');
 
         if (startsWithBotEmoji || isLongAnalysis || containsBotKeywords) {
             return;
