@@ -68,8 +68,8 @@ def _parse_int(value):
 def _clean_gaiola(value):
     if not value:
         return None
-    match = re.search(r"\b([A-Z])\s*[-–]?\s*(\d{1,3})\b", value.upper())
-    return f"{match.group(1)}-{match.group(2)}" if match else None
+    match = re.search(r"\b([A-Z])\s*[-–]?\s*(\d{1,3})([A-Z]{0,3})\b", value.upper())
+    return f"{match.group(1)}-{match.group(2)}{match.group(3) or ''}" if match else None
 
 
 def _route_lines(ocr_text):
@@ -78,13 +78,66 @@ def _route_lines(ocr_text):
         line = re.sub(r"\s+", " ", raw_line).strip()
         if not line:
             continue
-        if re.search(r"\b[A-Z]\s*[-–]?\s*\d{1,3}\b", line.upper()):
+        if re.search(r"\b[A-Z]\s*[-–]?\s*\d{1,3}[A-Z]{0,3}\b", line.upper()):
             lines.append(line)
     return lines
 
 
+def _route_rows_from_vision_response(response):
+    words = []
+    for page in response.full_text_annotation.pages:
+        for block in page.blocks:
+            for paragraph in block.paragraphs:
+                for word in paragraph.words:
+                    text = "".join(symbol.text for symbol in word.symbols).strip()
+                    vertices = word.bounding_box.vertices
+                    xs = [vertex.x for vertex in vertices]
+                    ys = [vertex.y for vertex in vertices]
+                    if not text or not xs or not ys:
+                        continue
+                    words.append(
+                        {
+                            "text": text,
+                            "x": sum(xs) / len(xs),
+                            "y": sum(ys) / len(ys),
+                            "height": max(ys) - min(ys),
+                        }
+                    )
+
+    if not words:
+        return []
+
+    median_height = sorted(word["height"] for word in words)[len(words) // 2]
+    tolerance = max(8, median_height * 0.75)
+    rows = []
+
+    for word in sorted(words, key=lambda item: item["y"]):
+        for row in rows:
+            if abs(row["y"] - word["y"]) <= tolerance:
+                row["words"].append(word)
+                row["y"] = sum(item["y"] for item in row["words"]) / len(row["words"])
+                break
+        else:
+            rows.append({"y": word["y"], "words": [word]})
+
+    row_texts = []
+    for row in sorted(rows, key=lambda item: item["y"]):
+        ordered = sorted(row["words"], key=lambda item: item["x"])
+        text = " ".join(item["text"] for item in ordered)
+        if re.search(r"\b[A-Z]\s*[-–]?\s*\d{1,3}[A-Z]{0,3}\b", text.upper()):
+            row_texts.append(text)
+
+    return row_texts
+
+
 def _extract_rocinha_count(line):
     normalized = _normalize(line)
+    colon_matches = []
+    for pattern in (r"\brocinha\b\s*[:=-]\s*(\d{1,4})", r"\broc\b\s*[:=-]\s*(\d{1,4})"):
+        colon_matches.extend(re.findall(pattern, normalized))
+    if colon_matches:
+        return _parse_int(colon_matches[-1])
+
     if "dissec" in normalized:
         tail = re.split(r"dissec\w*", normalized, maxsplit=1)[-1]
         for pattern in (r"\brocinha\b\D{0,12}(\d{1,4})", r"\broc\b\D{0,12}(\d{1,4})"):
@@ -121,9 +174,30 @@ def _extract_total_packages(line):
     return max(numbers) if numbers else None
 
 
+def _extract_cluster(line, gaiola):
+    cleaned = line
+    if gaiola:
+        compact = gaiola.replace("-", r"\s*[-–]?\s*")
+        cleaned = re.sub(rf"\b{compact}\b", " ", cleaned, count=1, flags=re.IGNORECASE)
+
+    cleaned = re.sub(r"\b\d{1,4}\b", " ", cleaned, count=1)
+    vehicle_split = re.split(r"\b(?:ROTA\s+MISTA|PASSEIO|MOTO)\b", cleaned, flags=re.IGNORECASE)
+    cleaned = vehicle_split[0]
+    pieces = re.split(r"\s{2,}|;", cleaned)
+    for piece in pieces:
+        piece = piece.strip(" :-")
+        if piece and not re.fullmatch(r"\d+", piece):
+            return piece
+    return None
+
+
 def _parse_routes_from_text(ocr_text):
+    return _parse_routes_from_lines(_route_lines(ocr_text), "vision_parser")
+
+
+def _parse_routes_from_lines(lines, source):
     routes = []
-    for line in _route_lines(ocr_text):
+    for line in lines:
         gaiola = _clean_gaiola(line)
         if not gaiola:
             continue
@@ -131,11 +205,12 @@ def _parse_routes_from_text(ocr_text):
         has_target = _has_target(line)
         rocinha_count = _extract_rocinha_count(line) if has_target else None
         dissecacao = {"Rocinha": rocinha_count} if rocinha_count is not None else {}
+        cluster = _extract_cluster(line, gaiola)
 
         routes.append(
             {
                 "gaiola": gaiola,
-                "bairro": "Rocinha" if has_target else None,
+                "bairro": "Rocinha" if has_target else cluster,
                 "pacotes_total": _extract_total_packages(line),
                 "dissecacao": dissecacao,
             }
@@ -159,21 +234,24 @@ def _parse_routes_from_text(ocr_text):
     return {
         "routes": routes,
         "confidence": confidence,
-        "source": "vision_parser",
+        "source": source,
     }
 
 
 def _extract_text_with_vision(file_bytes):
     if not _vision_client:
-        return ""
+        return "", []
 
     image = vision.Image(content=file_bytes)
     response = _vision_client.document_text_detection(image=image)
     if response.error.message:
         print(f"[ROUTE-CLAIM] Vision OCR error: {response.error.message}")
-        return ""
+        return "", []
 
-    return response.full_text_annotation.text if response.full_text_annotation else ""
+    if not response.full_text_annotation:
+        return "", []
+
+    return response.full_text_annotation.text, _route_rows_from_vision_response(response)
 
 
 def _compact_ocr_for_gemini(ocr_text):
@@ -181,7 +259,7 @@ def _compact_ocr_for_gemini(ocr_text):
     for line in ocr_text.splitlines():
         normalized = _normalize(line)
         if (
-            re.search(r"\b[a-z]\s*[-–]?\s*\d{1,3}\b", normalized)
+            re.search(r"\b[a-z]\s*[-–]?\s*\d{1,3}[a-z]{0,3}\b", normalized)
             or _has_target(line)
             or any(token in normalized for token in ("pacote", "total", "dissec"))
         ):
@@ -237,7 +315,11 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
     deterministic = {"routes": [], "confidence": 0.0, "source": "unsupported"}
 
     if mime_type in IMAGE_MIME_TYPES:
-        ocr_text = _extract_text_with_vision(file_bytes)
+        ocr_text, ocr_rows = _extract_text_with_vision(file_bytes)
+        if ocr_rows:
+            deterministic = _parse_routes_from_lines(ocr_rows, "vision_geometry_parser")
+            if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
+                return deterministic
         if ocr_text:
             deterministic = _parse_routes_from_text(ocr_text)
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
