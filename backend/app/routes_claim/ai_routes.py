@@ -23,12 +23,19 @@ except ImportError:
     print("[ROUTE-CLAIM] pdf2image or Pillow not installed. PDF support will be disabled.")
     PDF_SUPPORT_AVAILABLE = False
 
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
+except ImportError:
+    print("[ROUTE-CLAIM] pdfplumber not installed.")
+    PDFPLUMBER_AVAILABLE = False
+
 load_dotenv()
 
 TARGET_ALIASES = ("rocinha", "roc")
 MIN_DETERMINISTIC_CONFIDENCE = 0.75
 IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-PARSER_VERSION = "routes-claim-2026-05-10-ocr-first-v4"
+PARSER_VERSION = "routes-claim-2026-05-10-pdfplumber-v1"
 ROUTES_ENABLE_GEMINI_OCR_FALLBACK = os.getenv("ROUTES_ENABLE_GEMINI_OCR_FALLBACK", "false").lower() == "true"
 ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK = os.getenv("ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK", "false").lower() == "true"
 VISION_STATUS = {
@@ -227,8 +234,8 @@ def _extract_cluster(line, gaiola):
     return None
 
 
-def _parse_routes_from_text(ocr_text):
-    return _parse_routes_from_lines(_route_lines(ocr_text), "vision_parser")
+def _parse_routes_from_text(ocr_text, source="vision_parser"):
+    return _parse_routes_from_lines(_route_lines(ocr_text), source)
 
 
 def _parse_routes_from_lines(lines, source):
@@ -272,6 +279,23 @@ def _parse_routes_from_lines(lines, source):
         "confidence": confidence,
         "source": source,
     }
+
+
+def _extract_text_with_pdfplumber(file_bytes):
+    if not PDFPLUMBER_AVAILABLE:
+        return ""
+    
+    try:
+        text_lines = []
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text(layout=True)
+                if page_text:
+                    text_lines.append(page_text)
+        return "\n".join(text_lines)
+    except Exception as exc:
+        print(f"[ROUTE-CLAIM] pdfplumber error: {exc}")
+        return ""
 
 
 def _extract_text_with_vision(file_bytes):
@@ -429,17 +453,29 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
     ocr_text = ""
     ocr_rows = []
 
-    # Suporte para PDF: Converte a primeira página em imagem JPEG antes de processar
+    # Fluxo Prioritário para PDF: pdfplumber (Direto no texto)
+    if mime_type == "application/pdf" and PDFPLUMBER_AVAILABLE:
+        pdf_text = _extract_text_with_pdfplumber(file_bytes)
+        if pdf_text:
+            pdf_parsed = _parse_routes_from_text(pdf_text, source="pdfplumber_parser")
+            if pdf_parsed["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
+                pdf_parsed["parser_version"] = PARSER_VERSION
+                return pdf_parsed
+            print(f"[ROUTE-CLAIM] pdfplumber confidence low ({pdf_parsed['confidence']}), falling back to image/vision")
+
+    # Fallback para PDF ou fluxo de Imagem: OCR via Google Vision
+    img_bytes = file_bytes
+    actual_mime = mime_type
+
     if mime_type == "application/pdf" and PDF_SUPPORT_AVAILABLE:
         try:
-            # Converte apenas a primeira página do PDF
-            images = convert_from_bytes(file_bytes, first_page=1, last_page=1, fmt="jpeg")
+            images = convert_from_bytes(file_bytes, first_page=1, last_page=1, fmt="jpeg", dpi=300)
             if images:
                 img_byte_arr = io.BytesIO()
                 images[0].save(img_byte_arr, format="JPEG")
-                file_bytes = img_byte_arr.getvalue()
-                mime_type = "image/jpeg"  # A partir daqui, tratamos como imagem
-                print("[ROUTE-CLAIM] PDF converted to JPEG successfully for OCR processing")
+                img_bytes = img_byte_arr.getvalue()
+                actual_mime = "image/jpeg"
+                print("[ROUTE-CLAIM] PDF converted to JPEG (300 DPI) for Vision fallback")
         except Exception as exc:
             print(f"[ROUTE-CLAIM] PDF conversion failed: {exc}")
 
@@ -454,8 +490,8 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
         "ocr_rows": 0,
     }
 
-    if mime_type in IMAGE_MIME_TYPES:
-        ocr_text, ocr_rows = _extract_text_with_vision(file_bytes)
+    if actual_mime in IMAGE_MIME_TYPES:
+        ocr_text, ocr_rows = _extract_text_with_vision(img_bytes)
         if ocr_rows:
             deterministic = _parse_routes_from_lines(ocr_rows, "vision_geometry_parser")
             deterministic["parser_version"] = PARSER_VERSION
@@ -463,10 +499,16 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
             deterministic["vision_reason"] = VISION_STATUS["reason"]
             deterministic["ocr_text_len"] = len(ocr_text or "")
             deterministic["ocr_rows"] = len(ocr_rows)
+            
+            if deterministic["confidence"] < MIN_DETERMINISTIC_CONFIDENCE and ocr_rows:
+                print(f"[ROUTE-CLAIM] Low confidence ({deterministic['confidence']}). First 3 rows: {ocr_rows[:3]}")
+                if _has_target(ocr_text or ""):
+                    print("[ROUTE-CLAIM] Target keyword found in raw text but not associated with routes.")
+
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
                 return deterministic
         if ocr_text:
-            deterministic = _parse_routes_from_text(ocr_text)
+            deterministic = _parse_routes_from_text(ocr_text, source="vision_parser")
             deterministic["parser_version"] = PARSER_VERSION
             deterministic["vision_available"] = VISION_STATUS["available"]
             deterministic["vision_reason"] = VISION_STATUS["reason"]
@@ -481,7 +523,7 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
     )
     if not should_use_gemini:
         deterministic["source"] = (
-            "ocr_parse_failed_gemini_disabled"
+            f"ocr_parse_failed_gemini_disabled (source={deterministic.get('source')})"
             if ocr_text or ocr_rows
             else "no_ocr_gemini_disabled"
         )
@@ -489,7 +531,7 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
         deterministic["ocr_rows"] = len(ocr_rows)
         return deterministic
 
-    fallback = _fallback_with_gemini(file_bytes, mime_type, ocr_text)
+    fallback = _fallback_with_gemini(img_bytes, actual_mime, ocr_text)
     fallback["parser_version"] = PARSER_VERSION
     fallback["vision_available"] = VISION_STATUS["available"]
     fallback["vision_reason"] = VISION_STATUS["reason"]

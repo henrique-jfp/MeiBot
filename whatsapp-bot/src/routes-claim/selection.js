@@ -19,9 +19,11 @@ function includesTargetNeighborhood(value) {
     return ROUTES_CONFIG.targetNeighborhoodAliases.some(alias => {
         const target = normalizeText(alias);
         if (!target) return false;
+        // Se for um alias curto (ex: 'roc'), exige borda de palavra para evitar falsos positivos
         if (target.length <= 3) {
             return new RegExp(`\\b${target}\\b`).test(normalized);
         }
+        // Para 'rocinha', aceita se estiver contido na string (flexível para ruído de OCR)
         return normalized.includes(target);
     });
 }

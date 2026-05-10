@@ -106,12 +106,18 @@ function hasConfirmToken(text) {
     return ROUTES_CONFIG.confirmTokens.some(token => normalized.includes(token));
 }
 
-async function notifyPrivateConfirmation(sock, candidate) {
-    const myId = sock.user?.id?.split(':')[0];
-    if (!myId || !candidate?.gaiola) return;
+async function notifyPrivateConfirmation(sock, candidate, userJid) {
+    if (!userJid || !candidate?.gaiola) return;
+    
+    // Limpa o ID de qualquer sufixo ou metadados de conexão (:77, etc)
+    const pureId = userJid.split('@')[0].split(':')[0];
+    const suffix = userJid.includes('@lid') ? '@lid' : '@s.whatsapp.net';
+    const finalJid = pureId + suffix;
+
+    console.log(`[ROUTE-CLAIM] Enviando confirmação privada para: ${finalJid}`);
 
     try {
-        await sock.sendMessage(`${myId}@s.whatsapp.net`, {
+        await sock.sendMessage(finalJid, {
             text: `Rota confirmada: ${candidate.gaiola}`
         });
     } catch (error) {
@@ -172,6 +178,7 @@ async function sendClaimMessage(sock, groupJid, candidate) {
     const result = await sock.sendMessage(groupJid, { text: claimText });
     const groupState = getGroupState(groupJid);
     groupState.lastClaimId = result?.key?.id || null;
+    console.log(`[ROUTE-CLAIM] Mensagem de Claim enviada. ID: ${groupState.lastClaimId}`);
     return result;
 }
 
@@ -214,7 +221,12 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     if (messageId) groupState.processedMessageIds.add(messageId);
 
     try {
-        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        const innerMessage = getInnerMessage(msg.message);
+        const buffer = await downloadMediaMessage(
+            { key: msg.key, message: innerMessage },
+            'buffer',
+            {}
+        );
         if (!buffer) return true;
 
         const payload = {
@@ -268,17 +280,16 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     }
 }
 
-function findGroupStateByClaim(messageKey) {
-    const remoteJid = messageKey?.remoteJid;
+function findGroupStateByClaimId(messageId, remoteJid = null) {
     if (remoteJid && state.groups.has(remoteJid)) {
         const groupState = getGroupState(remoteJid);
-        if (messageKey.id === groupState.lastClaimId) {
+        if (messageId === groupState.lastClaimId) {
             return { groupJid: remoteJid, groupState };
         }
     }
 
     for (const [groupJid, groupState] of state.groups.entries()) {
-        if (messageKey?.id === groupState.lastClaimId) {
+        if (messageId === groupState.lastClaimId) {
             return { groupJid, groupState };
         }
     }
@@ -288,7 +299,7 @@ function findGroupStateByClaim(messageKey) {
 
 async function handleReaction(sock, reaction) {
     const messageKey = reaction.key;
-    const claim = findGroupStateByClaim(messageKey);
+    const claim = findGroupStateByClaimId(messageKey?.id, messageKey?.remoteJid);
     if (!claim) return false;
 
     const { groupJid, groupState } = claim;
@@ -296,7 +307,51 @@ async function handleReaction(sock, reaction) {
     const emoji = reaction.reaction?.text || reaction.reaction || '';
     if (isConfirmEmoji(emoji)) {
         groupState.locked = true;
-        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index]);
+        const participant = reaction.key?.participant || reaction.key?.remoteJid;
+        console.log(`[ROUTE-CLAIM] Reação de confirmação detectada (${emoji}) de ${participant}`);
+        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index], participant);
+        return true;
+    }
+
+    if (isDenyEmoji(emoji)) {
+        groupState.index += 1;
+        if (groupState.index < groupState.candidates.length) {
+            await sendClaimMessage(sock, groupJid, groupState.candidates[groupState.index]);
+        } else {
+            groupState.candidates = [];
+            groupState.lastClaimId = null;
+            groupState.lastClaimSignature = null;
+            groupState.lastClaimAt = 0;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+async function handleReactionMessage(sock, msg) {
+    const reactionMessage = msg.message?.reactionMessage;
+    if (!reactionMessage) return false;
+    
+    const messageId = reactionMessage.key?.id;
+    const remoteJid = msg.key.remoteJid;
+    const participant = msg.key.participant || msg.key.remoteJid;
+
+    console.log(`[DEBUG] reactionMessage detectada! Emoji: ${reactionMessage.text}, Para mensagem: ${messageId}`);
+
+    const claim = findGroupStateByClaimId(messageId, remoteJid);
+    if (!claim) {
+        console.log(`[DEBUG] Nenhuma claim encontrada para o ID ${messageId}`);
+        return false;
+    }
+
+    const { groupJid, groupState } = claim;
+    const emoji = reactionMessage.text || '';
+
+    if (isConfirmEmoji(emoji)) {
+        groupState.locked = true;
+        console.log(`[ROUTE-CLAIM] Reação de confirmação em upsert detectada (${emoji})`);
+        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index], participant);
         return true;
     }
 
@@ -329,7 +384,9 @@ async function handleTextReply(sock, msg) {
 
     if (hasConfirmToken(text)) {
         groupState.locked = true;
-        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index]);
+        const participant = msg.key.participant || msg.key.remoteJid;
+        console.log(`[ROUTE-CLAIM] Resposta de confirmação detectada de ${participant}`);
+        await notifyPrivateConfirmation(sock, groupState.candidates[groupState.index], participant);
         return true;
     }
 
@@ -337,6 +394,18 @@ async function handleTextReply(sock, msg) {
 }
 
 async function handleIncomingMessage(sock, msg) {
+    // Adicionando log de debug para inspecionar mensagens em grupos
+    if (msg.key.remoteJid.endsWith('@g.us')) {
+        const msgType = Object.keys(msg.message || {})[0];
+        if (msgType === 'reactionMessage') {
+             console.log(`[DEBUG] Reação no grupo ${msg.key.remoteJid} para msg ${msg.message.reactionMessage.key.id}`);
+        }
+    }
+
+    if (msg.message?.reactionMessage) {
+        return await handleReactionMessage(sock, msg);
+    }
+
     const remoteJid = msg.key.remoteJid;
     const isGroup = remoteJid.endsWith('@g.us');
     const myId = sock.user?.id?.split(':')[0];

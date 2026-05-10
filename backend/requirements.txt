@@ -10,3 +10,4 @@ httpx
 python-multipart
 pdf2image
 Pillow
+pdfplumber
