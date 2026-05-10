@@ -2,7 +2,7 @@ const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { ROUTES_CONFIG } = require('./config');
 const { parseRouteSheet } = require('./routeApi');
 const { buildCandidates, pickCandidate, normalizeText } = require('./selection');
-const { state } = require('./state');
+const { state, getGroupState } = require('./state');
 
 function getLocalTime() {
     const parts = new Intl.DateTimeFormat('en-US', {
@@ -76,11 +76,7 @@ async function handleCommand(msg, myJid) {
 
     const command = normalizeText(text);
     if (command === 'reativar rotas') {
-        state.locked = false;
-        state.candidates = [];
-        state.index = 0;
-        state.lastClaimId = null;
-        state.lastClaimJid = null;
+        state.groups.clear();
         return true;
     }
 
@@ -113,8 +109,8 @@ function hasConfirmToken(text) {
 async function sendClaimMessage(sock, groupJid, candidate) {
     const claimText = `${ROUTES_CONFIG.claimTextPrefix} ${candidate.gaiola}`;
     const result = await sock.sendMessage(groupJid, { text: claimText });
-    state.lastClaimId = result?.key?.id || null;
-    state.lastClaimJid = groupJid;
+    const groupState = getGroupState(groupJid);
+    groupState.lastClaimId = result?.key?.id || null;
     return result;
 }
 
@@ -123,8 +119,22 @@ function shouldHandleGroup(name, isTest) {
     return isProdGroup(name);
 }
 
+function isAuthorizedSender(msg) {
+    const authorized = ROUTES_CONFIG.authorizedSenders || [];
+    if (authorized.length === 0) return true;
+
+    const sender = msg.key.participant || msg.key.remoteJid || '';
+    const normalizedSender = normalizeText(sender.split('@')[0]);
+    return authorized.some(item => normalizedSender === normalizeText(item).split('@')[0]);
+}
+
 async function handleRouteImage(sock, msg, groupName, isTest) {
-    if (!state.active || state.locked) return false;
+    const groupJid = msg.key.remoteJid;
+    const groupState = getGroupState(groupJid);
+
+    if (!state.active || groupState.locked) return true;
+    if (groupState.lastClaimId) return true;
+    if (!isAuthorizedSender(msg)) return true;
     if (!isTest && ROUTES_CONFIG.schedule.enabledInProd && !isWithinSchedule()) {
         return true;
     }
@@ -142,7 +152,7 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     }
 
     if (!buffer || !mimeType || !ROUTES_CONFIG.allowedMimeTypes.includes(mimeType)) {
-        return false;
+        return true;
     }
 
     const payload = {
@@ -151,9 +161,14 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     };
 
     const parsed = await parseRouteSheet(payload);
-    if (parsed.error || !parsed.routes || parsed.routes.length === 0) {
-        console.log('[ROUTE-CLAIM] No routes parsed, passing to main bot.');
-        return false;
+    if (
+        parsed.error ||
+        !parsed.routes ||
+        parsed.routes.length === 0 ||
+        (typeof parsed.confidence === 'number' && parsed.confidence < ROUTES_CONFIG.minConfidence)
+    ) {
+        console.log('[ROUTE-CLAIM] No confident routes parsed.');
+        return true;
     }
 
     const candidates = buildCandidates(parsed.routes);
@@ -163,36 +178,50 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     }
 
     const picked = pickCandidate(candidates);
-    state.candidates = picked.ordered;
-    state.index = 0;
-    await sendClaimMessage(sock, msg.key.remoteJid, picked.selected);
+    groupState.candidates = picked.ordered;
+    groupState.index = 0;
+    await sendClaimMessage(sock, groupJid, picked.selected);
     return true;
 }
 
-async function handleReaction(sock, reaction) {
-    if (!state.lastClaimId || !state.lastClaimJid) return false;
+function findGroupStateByClaim(messageKey) {
+    const remoteJid = messageKey?.remoteJid;
+    if (remoteJid && state.groups.has(remoteJid)) {
+        const groupState = getGroupState(remoteJid);
+        if (messageKey.id === groupState.lastClaimId) {
+            return { groupJid: remoteJid, groupState };
+        }
+    }
 
+    for (const [groupJid, groupState] of state.groups.entries()) {
+        if (messageKey?.id === groupState.lastClaimId) {
+            return { groupJid, groupState };
+        }
+    }
+
+    return null;
+}
+
+async function handleReaction(sock, reaction) {
     const messageKey = reaction.key;
-    if (!messageKey || messageKey.id !== state.lastClaimId) return false;
+    const claim = findGroupStateByClaim(messageKey);
+    if (!claim) return false;
+
+    const { groupJid, groupState } = claim;
 
     const emoji = reaction.reaction?.text || reaction.reaction || '';
     if (isConfirmEmoji(emoji)) {
-        const myId = sock.user?.id?.split(':')[0];
-        if (myId) {
-            await sock.sendMessage(`${myId}@s.whatsapp.net`, {
-                text: `✅ Rota confirmada: ${state.candidates[state.index]?.gaiola || 'desconhecida'}`
-            });
-        }
-        state.locked = true;
+        groupState.locked = true;
         return true;
     }
 
     if (isDenyEmoji(emoji)) {
-        state.index += 1;
-        if (state.index < state.candidates.length) {
-            await sendClaimMessage(sock, state.lastClaimJid, state.candidates[state.index]);
+        groupState.index += 1;
+        if (groupState.index < groupState.candidates.length) {
+            await sendClaimMessage(sock, groupJid, groupState.candidates[groupState.index]);
         } else {
-            state.candidates = [];
+            groupState.candidates = [];
+            groupState.lastClaimId = null;
         }
         return true;
     }
@@ -201,22 +230,18 @@ async function handleReaction(sock, reaction) {
 }
 
 async function handleTextReply(sock, msg) {
-    if (!state.lastClaimId || !state.lastClaimJid) return false;
+    const groupJid = msg.key.remoteJid;
+    const groupState = getGroupState(groupJid);
+    if (!groupState.lastClaimId) return false;
 
     const context = msg.message?.extendedTextMessage?.contextInfo;
-    if (!context || context.stanzaId !== state.lastClaimId) return false;
+    if (!context || context.stanzaId !== groupState.lastClaimId) return false;
 
     const text = msg.message?.extendedTextMessage?.text || '';
     if (!text) return false;
 
     if (hasConfirmToken(text)) {
-        const myId = sock.user?.id?.split(':')[0];
-        if (myId) {
-            await sock.sendMessage(`${myId}@s.whatsapp.net`, {
-                text: `✅ Rota confirmada: ${state.candidates[state.index]?.gaiola || 'desconhecida'}`
-            });
-        }
-        state.locked = true;
+        groupState.locked = true;
         return true;
     }
 

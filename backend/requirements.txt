@@ -3,6 +3,7 @@ uvicorn
 python-dotenv
 supabase
 google-generativeai
+google-cloud-vision
 groq
 pydantic
 httpx

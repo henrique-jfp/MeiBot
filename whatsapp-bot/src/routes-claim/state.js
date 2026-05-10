@@ -1,11 +1,20 @@
 const state = {
     active: true,
-    locked: false,
-    lastClaimId: null,
-    lastClaimJid: null,
-    candidates: [],
-    index: 0,
+    groups: new Map(),
     groupCache: new Map()
 };
 
-module.exports = { state };
+function getGroupState(groupJid) {
+    if (!state.groups.has(groupJid)) {
+        state.groups.set(groupJid, {
+            locked: false,
+            lastClaimId: null,
+            candidates: [],
+            index: 0
+        });
+    }
+
+    return state.groups.get(groupJid);
+}
+
+module.exports = { state, getGroupState };

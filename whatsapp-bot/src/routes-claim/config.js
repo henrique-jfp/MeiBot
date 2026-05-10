@@ -10,6 +10,11 @@ const ROUTES_CONFIG = {
         endMinutes: 4 * 60 + 30,
         weekdaysOnly: true
     },
+    minConfidence: 0.75,
+    targetNeighborhoodAliases: ['rocinha', 'roc'],
+    preferredGaiolas: [],
+    blockedGaiolas: [],
+    authorizedSenders: [],
     confirmTokens: ['valeu', 'confirmado', 'ok', 'fechado'],
     confirmEmojis: ['✅', '✔️', '👍', '💚'],
     denyEmojis: ['❌', '✖️', '✕', 'X'],

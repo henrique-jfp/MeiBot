@@ -1,46 +1,250 @@
-import os
 import json
+import os
+import re
+import unicodedata
+
 import google.generativeai as genai
 from dotenv import load_dotenv
+from google.cloud import vision
+from google.oauth2 import service_account
 
 load_dotenv()
 
-# Configure Gemini for route parsing
+TARGET_ALIASES = ("rocinha", "roc")
+MIN_DETERMINISTIC_CONFIDENCE = 0.75
+IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
 _genai_key = os.getenv("GEMINI_API_KEY")
 if _genai_key:
     genai.configure(api_key=_genai_key)
 
-_gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+_gemini_model = genai.GenerativeModel("gemini-1.5-flash") if _genai_key else None
+
+
+def _build_vision_client():
+    creds_json = os.getenv("GOOGLE_VISION_CREDENTIALS_JSON")
+    if not creds_json:
+        return None
+
+    try:
+        creds_dict = json.loads(creds_json)
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        credentials = service_account.Credentials.from_service_account_info(creds_dict)
+        return vision.ImageAnnotatorClient(credentials=credentials)
+    except Exception as exc:
+        print(f"[ROUTE-CLAIM] Vision unavailable: {exc}")
+        return None
+
+
+_vision_client = _build_vision_client()
+
+
+def _normalize(value):
+    if value is None:
+        return ""
+    text = unicodedata.normalize("NFD", str(value))
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    return re.sub(r"\s+", " ", text.lower()).strip()
+
+
+def _has_target(text):
+    normalized = _normalize(text)
+    return any(
+        re.search(rf"\b{re.escape(alias)}\b", normalized)
+        if len(alias) <= 3
+        else alias in normalized
+        for alias in TARGET_ALIASES
+    )
+
+
+def _parse_int(value):
+    if value is None:
+        return None
+    match = re.search(r"\d+", str(value).replace(".", ""))
+    return int(match.group(0)) if match else None
+
+
+def _clean_gaiola(value):
+    if not value:
+        return None
+    match = re.search(r"\b([A-Z])\s*[-–]?\s*(\d{1,3})\b", value.upper())
+    return f"{match.group(1)}-{match.group(2)}" if match else None
+
+
+def _route_lines(ocr_text):
+    lines = []
+    for raw_line in ocr_text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        if re.search(r"\b[A-Z]\s*[-–]?\s*\d{1,3}\b", line.upper()):
+            lines.append(line)
+    return lines
+
+
+def _extract_rocinha_count(line):
+    normalized = _normalize(line)
+    if "dissec" in normalized:
+        tail = re.split(r"dissec\w*", normalized, maxsplit=1)[-1]
+        for pattern in (r"\brocinha\b\D{0,12}(\d{1,4})", r"\broc\b\D{0,12}(\d{1,4})"):
+            match = re.search(pattern, tail)
+            if match:
+                return _parse_int(match.group(1))
+
+    patterns = (
+        r"\brocinha\b\D{0,12}(\d{1,4})",
+        r"\broc\b\D{0,12}(\d{1,4})",
+        r"(\d{1,4})\D{0,12}\brocinha\b",
+        r"(\d{1,4})\D{0,12}\broc\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, normalized)
+        if match:
+            return _parse_int(match.group(1))
+    return None
+
+
+def _extract_total_packages(line):
+    normalized = _normalize(line)
+    total_patterns = (
+        r"(?:total|pacotes|pct|pcts|qtd)\D{0,8}(\d{1,4})",
+        r"(\d{1,4})\D{0,8}(?:pacotes|pct|pcts)",
+    )
+    for pattern in total_patterns:
+        match = re.search(pattern, normalized)
+        if match:
+            return _parse_int(match.group(1))
+
+    numbers = [_parse_int(item) for item in re.findall(r"\b\d{1,4}\b", line)]
+    numbers = [item for item in numbers if item is not None]
+    return max(numbers) if numbers else None
+
+
+def _parse_routes_from_text(ocr_text):
+    routes = []
+    for line in _route_lines(ocr_text):
+        gaiola = _clean_gaiola(line)
+        if not gaiola:
+            continue
+
+        has_target = _has_target(line)
+        rocinha_count = _extract_rocinha_count(line) if has_target else None
+        dissecacao = {"Rocinha": rocinha_count} if rocinha_count is not None else {}
+
+        routes.append(
+            {
+                "gaiola": gaiola,
+                "bairro": "Rocinha" if has_target else None,
+                "pacotes_total": _extract_total_packages(line),
+                "dissecacao": dissecacao,
+            }
+        )
+
+    target_routes = [
+        route
+        for route in routes
+        if _has_target(route.get("bairro")) or "Rocinha" in route.get("dissecacao", {})
+    ]
+
+    if target_routes and any(route.get("dissecacao") for route in target_routes):
+        confidence = 0.9
+    elif target_routes:
+        confidence = 0.8
+    elif routes:
+        confidence = 0.55
+    else:
+        confidence = 0.0
+
+    return {
+        "routes": routes,
+        "confidence": confidence,
+        "source": "vision_parser",
+    }
+
+
+def _extract_text_with_vision(file_bytes):
+    if not _vision_client:
+        return ""
+
+    image = vision.Image(content=file_bytes)
+    response = _vision_client.document_text_detection(image=image)
+    if response.error.message:
+        print(f"[ROUTE-CLAIM] Vision OCR error: {response.error.message}")
+        return ""
+
+    return response.full_text_annotation.text if response.full_text_annotation else ""
+
+
+def _compact_ocr_for_gemini(ocr_text):
+    relevant = []
+    for line in ocr_text.splitlines():
+        normalized = _normalize(line)
+        if (
+            re.search(r"\b[a-z]\s*[-–]?\s*\d{1,3}\b", normalized)
+            or _has_target(line)
+            or any(token in normalized for token in ("pacote", "total", "dissec"))
+        ):
+            relevant.append(line.strip())
+
+    compact = "\n".join(line for line in relevant if line)
+    return compact[:6000]
+
+
+def _parse_json_response(text):
+    cleaned = text.replace("```json", "").replace("```", "").strip()
+    return json.loads(cleaned)
+
+
+def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
+    if not _gemini_model:
+        return {"routes": [], "confidence": 0.0, "source": "no_gemini"}
+
+    prompt = (
+        "Extract delivery route rows as JSON only. Return this shape: "
+        '{"routes":[{"gaiola":"B-52","bairro":"Rocinha",'
+        '"pacotes_total":136,"dissecacao":{"Rocinha":50}}]}. '
+        "Use null for missing values and {} for missing dissecacao. "
+        "Do not explain."
+    )
+
+    try:
+        if ocr_text:
+            response = _gemini_model.generate_content(
+                [prompt, "OCR text:\n" + _compact_ocr_for_gemini(ocr_text)],
+                generation_config={"response_mime_type": "application/json"},
+            )
+        else:
+            response = _gemini_model.generate_content(
+                [prompt, {"mime_type": mime_type, "data": file_bytes}],
+                generation_config={"response_mime_type": "application/json"},
+            )
+
+        parsed = _parse_json_response(response.text)
+        routes = parsed.get("routes", []) if isinstance(parsed, dict) else []
+        return {
+            "routes": routes,
+            "confidence": 0.82 if routes else 0.0,
+            "source": "gemini_fallback",
+        }
+    except Exception as exc:
+        print(f"[ROUTE-CLAIM] Gemini fallback failed: {exc}")
+        return {"routes": [], "confidence": 0.0, "source": "gemini_fallback_failed"}
 
 
 def parse_route_sheet(file_bytes: bytes, mime_type: str):
-    prompt = """
-    You are reading a route sheet from a delivery group.
-    Extract ONLY the fields below for each route line you can read:
-    - gaiola (format like A-1, B-52, F-53)
-    - bairro (main neighborhood column)
-    - pacotes_total (total packages for the route)
-    - dissecacao (if present, map of neighborhood -> packages)
+    ocr_text = ""
+    deterministic = {"routes": [], "confidence": 0.0, "source": "unsupported"}
 
-    Return ONLY JSON in this format:
-    {
-      "routes": [
-        {
-          "gaiola": "B-52",
-          "bairro": "Rocinha",
-          "pacotes_total": 136,
-          "dissecacao": {"Rocinha": 50, "Gavea": 32}
-        }
-      ]
-    }
+    if mime_type in IMAGE_MIME_TYPES:
+        ocr_text = _extract_text_with_vision(file_bytes)
+        if ocr_text:
+            deterministic = _parse_routes_from_text(ocr_text)
+            if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
+                return deterministic
 
-    If a field is missing, use null. If dissecacao is not present, use an empty object.
-    """
+    fallback = _fallback_with_gemini(file_bytes, mime_type, ocr_text)
+    if fallback["routes"]:
+        return fallback
 
-    response = _gemini_model.generate_content([
-        prompt,
-        {"mime_type": mime_type, "data": file_bytes}
-    ])
-
-    text = response.text.replace('```json', '').replace('```', '').strip()
-    return json.loads(text)
+    return deterministic

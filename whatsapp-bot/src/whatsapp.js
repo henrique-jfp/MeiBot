@@ -73,16 +73,18 @@ async function connectToWhatsApp() {
             return;
         }
 
+        try {
+            const handledRouteControl = await routeClaim.handleIncomingMessage(sock, msg);
+            if (handledRouteControl) return;
+        } catch (err) {
+            console.error('[ROUTE-CLAIM] Error:', err.message);
+        }
+
         // LOG DE ENTRADA (Apenas para depuração interna)
         console.log(`[RAW-MSG] From: ${remoteJid} | fromMe: ${fromMe}`);
 
         // --- GATEWAY DE GRUPOS E COMANDOS DE ROTA ---
         if (remoteJid.endsWith('@g.us')) {
-            try {
-                await routeClaim.handleIncomingMessage(sock, msg);
-            } catch (err) {
-                console.error('[ROUTE-CLAIM] Error:', err.message);
-            }
             // INDEPENDENTE do resultado, se é grupo, o bot morre aqui.
             // Nunca deixa passar para o processamento de IA geral.
             return;
