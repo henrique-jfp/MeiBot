@@ -55,8 +55,8 @@ class AIService:
         - 'cadastrar_entregador': Para cadastrar um novo entregador (nome, valor diária).
         - 'listar_porteiros': Para listar os porteiros mapeados.
         - 'consultar_porteiro': Para buscar porteiros de um endereço específico.
-        - cadastrar_porteiro: Para mapear um novo porteiro em um endereço.
-        - corrigir_porteiro: Para atualizar informações de um porteiro já cadastrado.
+        - 'cadastrar_porteiro': Para mapear um novo porteiro em um endereço.
+        - 'corrigir_porteiro': Para atualizar informações de um porteiro já cadastrado.
 
         Regras de Negócio Pessoais (OBRIGATÓRIO):
         - Se o app for 'Shopee': Valor bruto = 305.00, KM = 60. 
@@ -71,6 +71,7 @@ class AIService:
         - intencao: Uma das intenções acima.
         - data_referencia: YYYY-MM-DD (obrigatório se mencionado data ou "ontem", "anteontem", "dia X").
         - pergunta: O texto da pergunta (se intencao for 'pergunta').
+        - porteiro_info: objeto {{'rua': str, 'numero': str, 'nome': str, 'turno': str, 'notas': str, 'nome_antigo': str}} (obrigatório para intenções de porteiro).
         - eventos: lista de objetos {{'app': str, 'tipo': 'ganho'|'gasto', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'categoria': str, 'descricao': str}}
         
         Texto do usuário: "{text}"

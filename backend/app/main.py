@@ -150,6 +150,49 @@ async def process_interpreted_data(user, interpreted):
         events_db = db.get_all_time_summary(user_id)
         return await ai.answer_question(str(events_db), interpreted.get("pergunta", ""))
 
+    # --- MAPEAMENTO DE PORTEIROS ---
+    if intencao == "cadastrar_porteiro":
+        info = interpreted.get("porteiro_info", {})
+        res = db.add_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome"), info.get("turno"), info.get("notas"))
+        if res == "DUPLICATE":
+            return f"⚠️ O porteiro *{info.get('nome')}* já está mapeado para este endereço."
+        return f"✅ Porteiro *{info.get('nome')}* mapeado com sucesso em {info.get('rua')}, {info.get('numero')}!" if res else "❌ Erro ao cadastrar porteiro."
+
+    if intencao == "consultar_porteiro":
+        info = interpreted.get("porteiro_info", {})
+        porteiros = db.get_porteiros_by_address(user_id, info.get("rua"), info.get("numero"))
+        if not porteiros:
+            return f"🔍 Nenhum porteiro encontrado para {info.get('rua')}, {info.get('numero')}."
+        
+        res = f"🏢 *Porteiros em {info.get('rua')}, {info.get('numero')}*\n\n"
+        for p in porteiros:
+            turno = f" ({p['turno']})" if p.get("turno") else ""
+            res += f"• *{p['nome_porteiro']}*{turno}\n"
+            if p.get("notas_predio"):
+                res += f"  📝 Notas: {p['notas_predio']}\n"
+        return res
+
+    if intencao == "listar_porteiros":
+        porteiros = db.get_all_porteiros(user_id)
+        if not porteiros:
+            return "📭 Você ainda não mapeou nenhum porteiro."
+        
+        res = "📋 *Seu Mapeamento de Porteiros*\n\n"
+        current_address = ""
+        for p in porteiros:
+            addr = f"{p['rua']}, {p['numero']}"
+            if addr != current_address:
+                res += f"\n📍 *{addr}*\n"
+                current_address = addr
+            turno = f" ({p['turno']})" if p.get("turno") else ""
+            res += f"  • {p['nome_porteiro']}{turno}\n"
+        return res
+
+    if intencao == "corrigir_porteiro":
+        info = interpreted.get("porteiro_info", {})
+        res = db.update_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome_antigo"), info.get("nome"), info.get("turno"), info.get("notas"))
+        return f"✅ Informações do porteiro atualizadas!" if res else "❌ Não consegui atualizar as informações. Verifique se o nome antigo está correto."
+
     return "Não entendi o que você quis dizer."
 
 @app.get("/api/dashboard/{whatsapp_number}")

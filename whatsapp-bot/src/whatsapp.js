@@ -112,12 +112,12 @@ async function connectToWhatsApp() {
             return;
         }
         
-        // --- TRAVA DE SEGURANÇA ESTRITA (Permite Chat Próprio e Mensagens Recebidas) ---
+        // --- TRAVA DE SEGURANÇA ESTRITA (SOMENTE Chat Próprio) ---
         const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
         console.log(`[DEBUG-UPSERT] isSelfChat: ${isSelfChat} | myId: ${myId} | myLid: ${myLid}`);
 
-        if (fromMe && !isSelfChat) {
-            console.log(`[DEBUG-UPSERT] Ignorado: fromMe e não é SelfChat.`);
+        if (!isSelfChat) {
+            console.log(`[DEBUG-UPSERT] Ignorado: Não é SelfChat.`);
             return;
         }
 
