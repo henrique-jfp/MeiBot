@@ -180,16 +180,29 @@ async def process_interpreted_data(user, interpreted):
         if not porteiros:
             return "📭 Você ainda não mapeou nenhum porteiro."
         
-        res = "📋 *Seu Mapeamento de Porteiros*\n\n"
-        current_address = ""
+        res = "📋 *MEU MAPEAMENTO ESTRATÉGICO*\n"
+        
+        # Agrupamento por Rua
+        grouped = {}
         for p in porteiros:
-            addr = f"{p['rua']}, {p['numero']}"
-            if addr != current_address:
-                res += f"\n📍 *{addr}*\n"
-                current_address = addr
-            turno = f" ({p['turno']})" if p.get("turno") else ""
-            res += f"  • {p['nome_porteiro']}{turno}\n"
-        res += f"\nVocê também pode ver e organizar seu mapeamento pelo dashboard:\n🔗 {url_dashboard}"
+            rua = p['rua'].strip().title()
+            if rua not in grouped:
+                grouped[rua] = []
+            grouped[rua].append(p)
+            
+        for rua, items in grouped.items():
+            res += f"\n──────────────\n"
+            res += f"🏢 *{rua.upper()}*\n"
+            res += f"──────────────\n"
+            
+            for p in items:
+                turno = f" *({p['turno']})*" if p.get("turno") else ""
+                res += f"📍 *N° {p['numero']}*: {p['nome_porteiro']}{turno}\n"
+                if p.get("notas_predio"):
+                    res += f"└─ 📓 _\"{p['notas_predio']}\"_\n"
+        
+        res += f"\n────────────────\n"
+        res += f"🖥️ *DASHBOARD COMPLETO:*\n🔗 {url_dashboard}"
         return res
 
     if intencao == "corrigir_porteiro":
