@@ -201,13 +201,22 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
     if not user: return JSONResponse({"error": "User not found"}, status_code=404)
     user_id = user["id"]
     
+    porteiros = db.get_all_porteiros(user_id)
+    history = db.get_analysis_history(user_id, limit=30)
+
     if analysis_id:
         res = db.supabase.table("historico_analises").select("*").eq("id", analysis_id).execute()
         if res.data:
             analysis = res.data[0]
-            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "created_at": analysis["created_at"]}
+            return {
+                "user": user, 
+                "metrics": analysis["metrics"], 
+                "insight": analysis["insight"], 
+                "created_at": analysis["created_at"],
+                "history": history,
+                "porteiros": porteiros
+            }
 
-    history = db.get_analysis_history(user_id, limit=30)
     if history:
         latest = history[0]
         return {
@@ -215,17 +224,20 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
             "metrics": latest["metrics"],
             "insight": latest["insight"],
             "history": history,
-            "created_at": latest["created_at"]
+            "created_at": latest["created_at"],
+            "porteiros": porteiros
         }
     
     ev_week = db.get_weekly_summary(user_id)
     op_week = db.get_operations_for_period(user_id, 7)
     metrics_week = LogicService.calculate_metrics_grouped(ev_week, op_week)
+    
     return {
         "user": user,
         "metrics": metrics_week,
         "insight": "Seu primeiro relatório automatizado será gerado neste sábado às 21h. Aguarde!",
-        "history": []
+        "history": [],
+        "porteiros": porteiros
     }
 
 @app.get("/dashboard/{whatsapp_number}", response_class=HTMLResponse)
@@ -248,6 +260,7 @@ async def dashboard_page(whatsapp_number: str):
             .history-item:active { transform: scale(0.98); }
             ::-webkit-scrollbar { width: 4px; height: 4px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+            .tab-active { border-bottom: 3px solid #128C7E; color: #128C7E; }
         </style>
     </head>
     <body class="flex flex-col md:flex-row min-h-screen">
@@ -262,6 +275,18 @@ async def dashboard_page(whatsapp_number: str):
                 </div>
             </div>
             
+            <div class="mb-8">
+                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Navegação</h4>
+                <div class="flex flex-col gap-2">
+                    <button onclick="showSection('performance')" class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 text-gray-700 font-bold text-sm transition-all hover:bg-gray-100">
+                        <i class="fa-solid fa-chart-line text-green-600"></i> Performance
+                    </button>
+                    <button onclick="showSection('porteiros')" class="flex items-center gap-3 p-3 rounded-xl bg-white text-gray-700 font-bold text-sm transition-all hover:bg-gray-100 border border-gray-100">
+                        <i class="fa-solid fa-building-user text-blue-500"></i> Porteiros
+                    </button>
+                </div>
+            </div>
+
             <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Pasta de Arquivos</h4>
             <nav id="history-list" class="flex md:flex-col gap-3 md:gap-4 overflow-x-auto md:overflow-visible pb-2 md:pb-0 snap-x"></nav>
         </aside>
@@ -270,7 +295,7 @@ async def dashboard_page(whatsapp_number: str):
         <main class="flex-grow p-4 md:p-10 space-y-6 md:space-y-8 w-full max-w-7xl mx-auto">
             <header class="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-6 gap-4">
                 <div>
-                    <h2 class="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Painel de Performance</h2>
+                    <h2 class="text-2xl md:text-3xl font-black text-gray-800 tracking-tight" id="main-title">Painel de Performance</h2>
                     <p id="txt-periodo" class="text-gray-400 text-sm font-medium">Carregando dados...</p>
                 </div>
                 <div class="bg-gray-100 p-3 rounded-2xl w-full md:w-auto">
@@ -279,69 +304,134 @@ async def dashboard_page(whatsapp_number: str):
                 </div>
             </header>
 
-            <!-- Cards Financeiros: Responsivos (2 colunas mobile, 6 colunas desktop) -->
-            <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                    <p class="text-gray-400 text-[10px] font-bold uppercase mb-1">Bruto</p>
-                    <p id="txt-bruto" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
-                </div>
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                    <p class="text-red-400 text-[10px] font-bold uppercase mb-1">Essenciais</p>
-                    <p id="txt-essencial" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
-                </div>
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                    <p class="text-orange-400 text-[10px] font-bold uppercase mb-1 truncate">Não Essenc.</p>
-                    <p id="txt-nao-essencial" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
-                </div>
-                <div class="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-green-500">
-                    <p class="text-green-600 text-[10px] font-bold uppercase mb-1">Líquido</p>
-                    <p id="txt-saldo" class="text-base md:text-xl font-black text-green-600 truncate">---</p>
-                </div>
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                    <p class="text-blue-500 text-[10px] font-bold uppercase mb-1">R$ / KM</p>
-                    <p id="txt-eficiencia" class="text-base md:text-xl font-black text-blue-600 truncate">---</p>
-                </div>
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                    <p class="text-purple-500 text-[10px] font-bold uppercase mb-1">Tempo</p>
-                    <p id="txt-tempo" class="text-base md:text-xl font-black text-purple-600 truncate">---</p>
-                </div>
-            </div>
-
-            <!-- Gráfico e Detalhes -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-2 bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-gray-100 w-full overflow-hidden">
-                    <h3 class="font-bold text-gray-800 text-xs md:text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
-                        <i class="fa-solid fa-chart-column text-green-500"></i> Faturamento por Plataforma
-                    </h3>
-                    <div class="relative w-full h-[200px] md:h-[250px]">
-                        <canvas id="chartApps"></canvas>
+            <!-- SECTION: PERFORMANCE -->
+            <div id="section-performance" class="space-y-6 md:space-y-8">
+                <!-- Cards Financeiros: Responsivos (2 colunas mobile, 6 colunas desktop) -->
+                <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <p class="text-gray-400 text-[10px] font-bold uppercase mb-1">Bruto</p>
+                        <p id="txt-bruto" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <p class="text-red-400 text-[10px] font-bold uppercase mb-1">Essenciais</p>
+                        <p id="txt-essencial" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <p class="text-orange-400 text-[10px] font-bold uppercase mb-1 truncate">Não Essenc.</p>
+                        <p id="txt-nao-essencial" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+                    </div>
+                    <div class="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-green-500">
+                        <p class="text-green-600 text-[10px] font-bold uppercase mb-1">Líquido</p>
+                        <p id="txt-saldo" class="text-base md:text-xl font-black text-green-600 truncate">---</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <p class="text-blue-500 text-[10px] font-bold uppercase mb-1">R$ / KM</p>
+                        <p id="txt-eficiencia" class="text-base md:text-xl font-black text-blue-600 truncate">---</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <p class="text-purple-500 text-[10px] font-bold uppercase mb-1">Tempo</p>
+                        <p id="txt-tempo" class="text-base md:text-xl font-black text-purple-600 truncate">---</p>
                     </div>
                 </div>
-                <div class="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-gray-100 w-full">
-                    <h3 class="font-bold text-gray-800 text-xs md:text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
-                        <i class="fa-solid fa-list-check text-blue-500"></i> Metas e Tempos
-                    </h3>
-                    <div id="list-apps" class="space-y-5 md:space-y-6"></div>
+
+                <!-- Gráfico e Detalhes -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-gray-100 w-full overflow-hidden">
+                        <h3 class="font-bold text-gray-800 text-xs md:text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
+                            <i class="fa-solid fa-chart-column text-green-500"></i> Faturamento por Plataforma
+                        </h3>
+                        <div class="relative w-full h-[200px] md:h-[250px]">
+                            <canvas id="chartApps"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-gray-100 w-full">
+                        <h3 class="font-bold text-gray-800 text-xs md:text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-blue-500"></i> Metas e Tempos
+                        </h3>
+                        <div id="list-apps" class="space-y-5 md:space-y-6"></div>
+                    </div>
+                </div>
+
+                <!-- VISÃO DO ANALISTA: Destaque Especial -->
+                <div class="card-gradient p-8 md:p-12 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
+                    <i class="fa-solid fa-quote-left absolute top-6 left-6 text-white/5 text-8xl md:text-9xl"></i>
+                    <div class="relative z-10">
+                        <h3 class="text-lg md:text-xl font-bold mb-6 md:mb-8 flex items-center gap-3"> 
+                            <span class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                <i class="fa-solid fa-user-tie text-white"></i> 
+                            </span>
+                            Visão do Analista Estratégico 
+                        </h3>
+                        <div id="txt-insight" class="text-white/90 leading-relaxed whitespace-pre-line text-sm md:text-lg italic font-light"></div>
+                    </div>
                 </div>
             </div>
 
-            <!-- VISÃO DO ANALISTA: Destaque Especial -->
-            <div class="card-gradient p-8 md:p-12 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
-                <i class="fa-solid fa-quote-left absolute top-6 left-6 text-white/5 text-8xl md:text-9xl"></i>
-                <div class="relative z-10">
-                    <h3 class="text-lg md:text-xl font-bold mb-6 md:mb-8 flex items-center gap-3"> 
-                        <span class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                            <i class="fa-solid fa-user-tie text-white"></i> 
-                        </span>
-                        Visão do Analista Estratégico 
+            <!-- SECTION: PORTEIROS -->
+            <div id="section-porteiros" class="hidden space-y-6">
+                <div class="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
+                    <h3 class="font-bold text-gray-800 text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot text-blue-500"></i> Mapeamento de Porteiros
                     </h3>
-                    <div id="txt-insight" class="text-white/90 leading-relaxed whitespace-pre-line text-sm md:text-lg italic font-light"></div>
+                    <div id="porteiros-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <p class="text-gray-400 italic">Carregando mapeamento...</p>
+                    </div>
                 </div>
             </div>
         </main>
 
         <script>
             let myChart = null;
+            let dashboardData = null;
+
+            function showSection(section) {
+                document.getElementById('section-performance').classList.add('hidden');
+                document.getElementById('section-porteiros').classList.add('hidden');
+                document.getElementById('section-' + section).classList.remove('hidden');
+                document.getElementById('main-title').innerText = section === 'performance' ? 'Painel de Performance' : 'Mapeamento de Porteiros';
+                
+                if (section === 'porteiros') renderPorteiros();
+            }
+
+            function renderPorteiros() {
+                const container = document.getElementById('porteiros-list');
+                if (!dashboardData || !dashboardData.porteiros || dashboardData.porteiros.length === 0) {
+                    container.innerHTML = '<p class="text-gray-400 italic col-span-full">Nenhum porteiro mapeado ainda. Cadastre via WhatsApp!</p>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                // Agrupar por endereço
+                const grouped = {};
+                dashboardData.porteiros.forEach(p => {
+                    const addr = p.rua + ', ' + p.numero;
+                    if (!grouped[addr]) grouped[addr] = [];
+                    grouped[addr].push(p);
+                });
+
+                for (const addr in grouped) {
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-50 p-6 rounded-2xl border border-gray-100';
+                    let porteirosHtml = '';
+                    grouped[addr].forEach(p => {
+                        porteirosHtml += `
+                            <div class="mt-4 border-t border-gray-200 pt-4">
+                                <p class="font-bold text-gray-800">${p.nome_porteiro} ${p.turno ? '<span class="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full ml-2 uppercase font-black">' + p.turno + '</span>' : ''}</p>
+                                ${p.notas_predio ? '<p class="text-xs text-gray-500 mt-1 italic">"'+p.notas_predio+'"</p>' : ''}
+                            </div>
+                        `;
+                    });
+                    card.innerHTML = `
+                        <div class="flex items-center gap-3 text-blue-600 mb-2">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span class="font-black text-xs uppercase tracking-tight">${addr}</span>
+                        </div>
+                        ${porteirosHtml}
+                    `;
+                    container.appendChild(card);
+                }
+            }
+
             async function loadDashboard(analysisId = null) {
                 try {
                     let url = '/api/dashboard/""" + whatsapp_number + """';
@@ -350,6 +440,7 @@ async def dashboard_page(whatsapp_number: str):
                     const data = await response.json();
                     if (data.error) return;
 
+                    dashboardData = data;
                     const c = data.metrics.consolidado;
                     const apps = data.metrics.apps;
 
@@ -402,9 +493,9 @@ async def dashboard_page(whatsapp_number: str):
                             itemsList.className = 'flex flex-col gap-2 md:pl-2 md:border-l-2 md:border-gray-100';
                             
                             items.forEach(h => {
-                                const active = analysisId === h.id || (!analysisId && h.id === data.history[0].id);
+                                const active = analysisId === h.id || (!analysisId && h.id === data.history[0]?.id);
                                 const btn = document.createElement('div');
-                                btn.className = `history-item p-3 rounded-2xl border shadow-sm transition-all text-left ${active ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-100 text-gray-700'}`;
+                                btn.className = `history-item p-3 rounded-2xl border shadow-sm transition-all text-left cursor-pointer ${active ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-100 text-gray-700'}`;
                                 btn.innerHTML = `<p class="text-[10px] font-black uppercase tracking-tighter">${h.periodo_tipo}</p><p class="text-[9px] ${active ? 'text-green-100' : 'text-gray-400'} font-bold">${new Date(h.created_at).toLocaleDateString('pt-BR')}</p>`;
                                 btn.onclick = () => { loadDashboard(h.id); if(window.innerWidth < 768) window.scrollTo({top: 400, behavior: 'smooth'}); };
                                 itemsList.appendChild(btn);
