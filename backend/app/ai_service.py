@@ -53,10 +53,15 @@ class AIService:
         - 'resumo_mensal': Para ver o resumo dos últimos 30 dias.
         - 'pergunta': Quando o entregador faz uma pergunta sobre seus ganhos ou dados históricos.
         - 'cadastrar_entregador': Para cadastrar um novo entregador (nome, valor diária).
-        - 'listar_porteiros': Para listar os porteiros mapeados.
+        - 'listar_porteiros': Para listar os porteiros mapeados ou quando o usuário pede "porteiros", "meus porteiros", "lista de porteiros".
         - 'consultar_porteiro': Para buscar porteiros de um endereço específico.
         - 'cadastrar_porteiro': Para mapear um novo porteiro em um endereço.
         - 'corrigir_porteiro': Para atualizar informações de um porteiro já cadastrado.
+        - 'pedir_link_dashboard': Quando o usuário pede o link do dashboard, mapa de porteiros, ou painel.
+
+        Regras de Negócio Pessoais (OBRIGATÓRIO):
+        - Se o usuário disser apenas "Porteiro" ou "Porteiros", use intencao: 'listar_porteiros'.
+        - Se o usuário pedir o link do mapa ou dashboard, use intencao: 'pedir_link_dashboard'.
 
         Regras de Negócio Pessoais (OBRIGATÓRIO):
         - Se o app for 'Shopee': Valor bruto = 305.00, KM = 60. 

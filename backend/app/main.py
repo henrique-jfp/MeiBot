@@ -197,6 +197,9 @@ async def process_interpreted_data(user, interpreted):
         res = db.update_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome_antigo"), info.get("nome"), info.get("turno"), info.get("notas"))
         return f"✅ Informações do porteiro atualizadas!\n\n🔗 {url_dashboard}" if res else "❌ Não consegui atualizar as informações. Verifique se o nome antigo está correto."
 
+    if intencao == "pedir_link_dashboard":
+        return f"📊 *Seu Painel de Performance e Mapa de Porteiros*:\n\n🔗 {url_dashboard}"
+
     return "Não entendi o que você quis dizer."
 
 @app.get("/api/dashboard/{whatsapp_number}")
