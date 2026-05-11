@@ -62,6 +62,7 @@ class AIService:
         Regras de Negócio Pessoais (OBRIGATÓRIO):
         - Se o usuário disser apenas "Porteiro" ou "Porteiros", use intencao: 'listar_porteiros'.
         - Se o usuário pedir o link do mapa ou dashboard, use intencao: 'pedir_link_dashboard'.
+        - Se a mensagem contiver um endereço (rua e número) e um nome de pessoa associado a "porteiro", use SEMPRE 'cadastrar_porteiro'.
 
         Regras de Negócio Pessoais (OBRIGATÓRIO):
         - Se o app for 'Shopee': Valor bruto = 305.00, KM = 60. 

@@ -185,21 +185,32 @@ async def process_interpreted_data(user, interpreted):
         # Agrupamento por Rua
         grouped = {}
         for p in porteiros:
-            rua = p['rua'].strip().title()
+            rua_raw = p.get('rua') or "Rua Não Informada"
+            rua = rua_raw.strip().title()
             if rua not in grouped:
                 grouped[rua] = []
             grouped[rua].append(p)
             
-        for rua, items in grouped.items():
-            res += f"\n──────────────\n"
-            res += f"🏢 *{rua.upper()}*\n"
-            res += f"──────────────\n"
+        # Ordenar ruas alfabeticamente
+        for rua in sorted(grouped.keys()):
+            items = grouped[rua]
+            res += f"\n┏━━━━━━━━━━━━━━┓\n"
+            res += f"┃ 🏢 *{rua.upper()}* \n"
+            res += f"┗━━━━━━━━━━━━━━┛\n"
             
+            # Ordenar por número
+            try:
+                items.sort(key=lambda x: int(''.join(filter(str.isdigit, x.get('numero', '0'))) or 0))
+            except:
+                pass
+
             for p in items:
                 turno = f" *({p['turno']})*" if p.get("turno") else ""
-                res += f"📍 *N° {p['numero']}*: {p['nome_porteiro']}{turno}\n"
+                num = p.get('numero') or "?"
+                nome = p.get('nome_porteiro') or "Porteiro Desconhecido"
+                res += f"🔹 *N° {num}*: {nome}{turno}\n"
                 if p.get("notas_predio"):
-                    res += f"└─ 📓 _\"{p['notas_predio']}\"_\n"
+                    res += f"   ╰─ 📓 _\"{p['notas_predio']}\"_\n"
         
         res += f"\n────────────────\n"
         res += f"🖥️ *DASHBOARD COMPLETO:*\n🔗 {url_dashboard}"
