@@ -105,9 +105,12 @@ async function connectToWhatsApp() {
             return;
         }
         
-        // --- TRAVA DE SEGURANÇA ESTRITA (SELF-ONLY) ---
+        // --- TRAVA DE SEGURANÇA ESTRITA (Permite Chat Próprio e Mensagens Recebidas) ---
         const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
-        if (!isSelfChat || !fromMe) {
+        
+        // Se a mensagem foi enviada por mim, só processamos se for no chat comigo mesmo (Message Yourself)
+        // Se a mensagem foi recebida de outra pessoa (fromMe: false), processamos normalmente
+        if (fromMe && !isSelfChat) {
             return;
         }
 
