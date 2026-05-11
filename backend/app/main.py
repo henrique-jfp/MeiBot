@@ -182,11 +182,17 @@ async def process_interpreted_data(user, interpreted):
         
         res = "📋 *MEU MAPEAMENTO ESTRATÉGICO*\n"
         
-        # Agrupamento por Rua
+        # Agrupamento e Normalização por Rua
         grouped = {}
         for p in porteiros:
             rua_raw = p.get('rua') or "Rua Não Informada"
             rua = rua_raw.strip().title()
+            
+            # Normalização para Paissandu/Paisandu
+            rua_norm = rua.upper()
+            if "PAISANDU" in rua_norm or "PAISSANDU" in rua_norm:
+                rua = "Paissandu"
+            
             if rua not in grouped:
                 grouped[rua] = []
             grouped[rua].append(p)
@@ -432,35 +438,71 @@ async def dashboard_page(whatsapp_number: str):
                 }
 
                 container.innerHTML = '';
-                // Agrupar por endereço
+                
+                // Normalização e Agrupamento por RUA
                 const grouped = {};
                 dashboardData.porteiros.forEach(p => {
-                    const addr = p.rua + ', ' + p.numero;
-                    if (!grouped[addr]) grouped[addr] = [];
-                    grouped[addr].push(p);
+                    let rua = (p.rua || "Sem Rua").trim().toUpperCase();
+                    // Normalização simples para Paissandu/Paisandu
+                    if (rua.includes("PAISANDU") || rua.includes("PAISSANDU")) rua = "PAISSANDU";
+                    
+                    if (!grouped[rua]) grouped[rua] = [];
+                    grouped[rua].push(p);
                 });
 
-                for (const addr in grouped) {
-                    const card = document.createElement('div');
-                    card.className = 'bg-gray-50 p-6 rounded-2xl border border-gray-100';
+                // Ordenar ruas
+                const streetNames = Object.keys(grouped).sort();
+
+                streetNames.forEach(rua => {
+                    const streetCard = document.createElement('div');
+                    streetCard.className = 'bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full md:col-span-1 mb-4 h-fit';
+                    
+                    // Ordenar porteiros por número dentro da rua
+                    const items = grouped[rua].sort((a, b) => {
+                        const nA = parseInt(a.numero.replace(/\D/g, '')) || 0;
+                        const nB = parseInt(b.numero.replace(/\D/g, '')) || 0;
+                        return nA - nB;
+                    });
+
                     let porteirosHtml = '';
-                    grouped[addr].forEach(p => {
+                    items.forEach(p => {
                         porteirosHtml += `
-                            <div class="mt-4 border-t border-gray-200 pt-4">
-                                <p class="font-bold text-gray-800">${p.nome_porteiro} ${p.turno ? '<span class="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full ml-2 uppercase font-black">' + p.turno + '</span>' : ''}</p>
-                                ${p.notas_predio ? '<p class="text-xs text-gray-500 mt-1 italic">"'+p.notas_predio+'"</p>' : ''}
+                            <div class="py-4 border-b border-gray-50 last:border-0">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div>
+                                        <p class="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">N° ${p.numero}</p>
+                                        <p class="font-bold text-gray-800 text-sm">${p.nome_porteiro} ${p.turno ? '<span class="text-[9px] bg-green-100 text-green-600 px-2 py-0.5 rounded-full ml-1 uppercase font-black">' + p.turno + '</span>' : ''}</p>
+                                    </div>
+                                    <div class="w-8 h-8 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+                                        <i class="fa-solid fa-user-shield text-xs"></i>
+                                    </div>
+                                </div>
+                                ${p.notas_predio ? `
+                                    <div class="mt-2 bg-blue-50/50 p-3 rounded-xl border border-blue-100/50">
+                                        <p class="text-[10px] text-blue-400 font-bold uppercase mb-1"><i class="fa-solid fa-notebook mr-1"></i> Notas do Prédio</p>
+                                        <p class="text-xs text-gray-600 italic leading-relaxed">"${p.notas_predio}"</p>
+                                    </div>
+                                ` : ''}
                             </div>
                         `;
                     });
-                    card.innerHTML = `
-                        <div class="flex items-center gap-3 text-blue-600 mb-2">
-                            <i class="fa-solid fa-location-dot"></i>
-                            <span class="font-black text-xs uppercase tracking-tight">${addr}</span>
+
+                    streetCard.innerHTML = `
+                        <div class="flex items-center gap-3 mb-6 bg-blue-600 p-4 rounded-2xl text-white shadow-lg shadow-blue-100">
+                            <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                <i class="fa-solid fa-map-location-dot"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-black text-xs uppercase tracking-tighter">${rua}</h4>
+                                <p class="text-[9px] opacity-70 font-bold uppercase tracking-widest">${items.length} Prédio(s) Mapeado(s)</p>
+                            </div>
                         </div>
-                        ${porteirosHtml}
+                        <div class="space-y-2">
+                            ${porteirosHtml}
+                        </div>
                     `;
-                    container.appendChild(card);
-                }
+                    container.appendChild(streetCard);
+                });
             }
 
             async function loadDashboard(analysisId = null) {
