@@ -80,7 +80,12 @@ async function connectToWhatsApp() {
         const myId = sock.user?.id?.split(':')[0];
         const myLid = sock.user?.lid?.split(':')[0];
 
-        if (!remoteJid || !myId) return;
+        console.log(`[DEBUG-UPSERT] Nova mensagem de ${remoteJid} | fromMe: ${fromMe} | myId: ${myId}`);
+
+        if (!remoteJid || !myId) {
+            console.log('[DEBUG-UPSERT] Cancelado: remoteJid ou myId ausentes.');
+            return;
+        }
 
         // --- PRIORIDADE 1: COMANDOS (Sempre processar, ignora filtros de tempo) ---
         try {
@@ -97,20 +102,22 @@ async function connectToWhatsApp() {
         const messageTimestamp = msg.messageTimestamp;
         const now = Math.floor(Date.now() / 1000);
         if (messageTimestamp && (now - messageTimestamp) > 60) {
+            console.log(`[DEBUG-UPSERT] Ignorado: Mensagem antiga (${now - messageTimestamp}s).`);
             return;
         }
 
         // --- GATEWAY DE GRUPOS ---
         if (remoteJid.endsWith('@g.us')) {
+            console.log(`[DEBUG-UPSERT] Ignorado: Gateway de grupos barrou ${remoteJid}`);
             return;
         }
         
         // --- TRAVA DE SEGURANÇA ESTRITA (Permite Chat Próprio e Mensagens Recebidas) ---
         const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
-        
-        // Se a mensagem foi enviada por mim, só processamos se for no chat comigo mesmo (Message Yourself)
-        // Se a mensagem foi recebida de outra pessoa (fromMe: false), processamos normalmente
+        console.log(`[DEBUG-UPSERT] isSelfChat: ${isSelfChat} | myId: ${myId} | myLid: ${myLid}`);
+
         if (fromMe && !isSelfChat) {
+            console.log(`[DEBUG-UPSERT] Ignorado: fromMe e não é SelfChat.`);
             return;
         }
 
@@ -125,7 +132,12 @@ async function connectToWhatsApp() {
         const messageId = msg.key.id;
         const textHash = text.trim().substring(0, 100);
         
-        if (processedMessages.has(messageId) || (textHash && processedTexts.has(textHash))) {
+        if (processedMessages.has(messageId)) {
+            console.log(`[DEBUG-UPSERT] Ignorado: ID duplicado (${messageId}).`);
+            return;
+        }
+        if (textHash && processedTexts.has(textHash)) {
+            console.log(`[DEBUG-UPSERT] Ignorado: Texto duplicado.`);
             return;
         }
         
@@ -141,7 +153,7 @@ async function connectToWhatsApp() {
             processedTexts.delete(firstItem);
         }
 
-        console.log(`[MSG] Processando: ${remoteJid} | fromMe: ${fromMe}`);
+        console.log(`[MSG] Iniciando processamento IA: ${remoteJid}`);
 
         // --- TRAVA DE LOOP (Detecção de respostas do Bot ou do Próprio Usuário) ---
         const startsWithBotEmoji = /^[✅❌⚠️📊🔄🚀⛽📈🎙️📋🏢╔┌]/.test(text.trim());
