@@ -138,20 +138,9 @@ async function connectToWhatsApp() {
             processedTexts.delete(firstItem);
         }
 
-        // --- SILÊNCIO TOTAL SE DESATIVADO ---
-        if (!routeClaim.state?.active) {
-            return; 
-        }
-
-        // --- TRAVA DE LOOP (Detecção de respostas do Bot ou do Próprio Usuário) ---
-        // Se a mensagem vem de mim (fromMe), ignoramos para o backend de IA.
-        // Já capturamos os comandos Henrique no topo do arquivo.
-        if (fromMe) {
-            return;
-        }
-
         console.log(`[MSG] Processando: ${remoteJid} | fromMe: ${fromMe}`);
 
+        // --- TRAVA DE LOOP (Detecção de respostas do Bot ou do Próprio Usuário) ---
         const startsWithBotEmoji = /^[✅❌⚠️📊🔄🚀⛽📈🎙️📋🏢╔┌]/.test(text.trim());
         const isBotMessage = text.includes('Análise estratégica') || 
                              text.includes('Visão do Analista') || 
