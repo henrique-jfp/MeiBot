@@ -151,12 +151,14 @@ async def process_interpreted_data(user, interpreted):
         return await ai.answer_question(str(events_db), interpreted.get("pergunta", ""))
 
     # --- MAPEAMENTO DE PORTEIROS ---
+    url_dashboard = f"https://meibot.henriquedejesus.dev/dashboard/{whatsapp}"
+
     if intencao == "cadastrar_porteiro":
         info = interpreted.get("porteiro_info", {})
         res = db.add_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome"), info.get("turno"), info.get("notas"))
         if res == "DUPLICATE":
             return f"⚠️ O porteiro *{info.get('nome')}* já está mapeado para este endereço."
-        return f"✅ Porteiro *{info.get('nome')}* mapeado com sucesso em {info.get('rua')}, {info.get('numero')}!" if res else "❌ Erro ao cadastrar porteiro."
+        return f"✅ Porteiro *{info.get('nome')}* mapeado com sucesso em {info.get('rua')}, {info.get('numero')}!\n\nVocê pode ver o mapa completo aqui:\n🔗 {url_dashboard}" if res else "❌ Erro ao cadastrar porteiro."
 
     if intencao == "consultar_porteiro":
         info = interpreted.get("porteiro_info", {})
@@ -170,6 +172,7 @@ async def process_interpreted_data(user, interpreted):
             res += f"• *{p['nome_porteiro']}*{turno}\n"
             if p.get("notas_predio"):
                 res += f"  📝 Notas: {p['notas_predio']}\n"
+        res += f"\n🔗 {url_dashboard}"
         return res
 
     if intencao == "listar_porteiros":
@@ -186,12 +189,13 @@ async def process_interpreted_data(user, interpreted):
                 current_address = addr
             turno = f" ({p['turno']})" if p.get("turno") else ""
             res += f"  • {p['nome_porteiro']}{turno}\n"
+        res += f"\nVocê também pode ver e organizar seu mapeamento pelo dashboard:\n🔗 {url_dashboard}"
         return res
 
     if intencao == "corrigir_porteiro":
         info = interpreted.get("porteiro_info", {})
         res = db.update_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome_antigo"), info.get("nome"), info.get("turno"), info.get("notas"))
-        return f"✅ Informações do porteiro atualizadas!" if res else "❌ Não consegui atualizar as informações. Verifique se o nome antigo está correto."
+        return f"✅ Informações do porteiro atualizadas!\n\n🔗 {url_dashboard}" if res else "❌ Não consegui atualizar as informações. Verifique se o nome antigo está correto."
 
     return "Não entendi o que você quis dizer."
 
