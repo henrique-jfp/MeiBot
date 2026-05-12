@@ -432,6 +432,7 @@ async def dashboard_page(whatsapp_number: str):
                             <i class="fa-solid fa-clock text-slate-300"></i>
                         </div>
                         <p id="txt-tempo" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
+                        <p id="txt-tempo-avg" class="text-xs text-slate-500 mt-1">---</p>
                     </div>
 
                     <div class="card min-w-[170px] p-4 md:p-5 border-t-4 border-t-amber-500">
@@ -440,13 +441,14 @@ async def dashboard_page(whatsapp_number: str):
                             <i class="fa-solid fa-warehouse text-amber-300"></i>
                         </div>
                         <p id="txt-tempo-espera" class="text-xl md:text-2xl font-bold text-amber-700">---</p>
+                        <p id="txt-tempo-espera-avg" class="text-xs text-slate-500 mt-1">---</p>
                     </div>
                 </div>
 
                 <!-- Gráficos e Apps -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-2 card p-6">
-                        <h3 class="font-semibold text-slate-800 text-sm mb-6 flex items-center gap-2">
+                        <h3 id="chart-title" class="font-semibold text-slate-800 text-sm mb-6 flex items-center gap-2">
                             <i class="fa-solid fa-chart-bar text-teal-600"></i> Distribuição de Ganhos
                         </h3>
                         <div class="relative w-full h-[250px]">
@@ -625,11 +627,16 @@ async def dashboard_page(whatsapp_number: str):
                     document.getElementById('txt-eficiencia').innerText = 'R$ ' + (c.total_ganhos / (c.km_total || 1)).toFixed(2) + '/km';
                     document.getElementById('txt-tempo').innerText = (c.total_hours || 0).toFixed(1) + 'h';
                     document.getElementById('txt-tempo-espera').innerText = (c.tempo_espera_galpao || 0).toFixed(1) + 'h';
+                    const daysWorked = c.days_worked || 0;
+                    const avgHours = (c.avg_hours_per_day || (daysWorked ? (c.total_hours || 0) / daysWorked : 0));
+                    const avgWait = (c.avg_wait_per_day || (daysWorked ? (c.tempo_espera_galpao || 0) / daysWorked : 0));
+                    document.getElementById('txt-tempo-avg').innerText = daysWorked ? `Media: ${avgHours.toFixed(1)}h/dia (${daysWorked} dias)` : 'Media: --';
+                    document.getElementById('txt-tempo-espera-avg').innerText = daysWorked ? `Media: ${avgWait.toFixed(1)}h/dia (${daysWorked} dias)` : 'Media: --';
                     document.getElementById('txt-insight').innerText = data.insight;
 
                     const listContainer = document.getElementById('list-apps');
                     listContainer.innerHTML = '';
-                    const appNames = Object.keys(apps);
+                    const appNames = Object.keys(apps).filter(name => name !== 'Outros');
                     const appGanhos = [];
                     appNames.forEach(name => {
                         const app = apps[name];
@@ -686,14 +693,42 @@ async def dashboard_page(whatsapp_number: str):
                         }
                     }
 
+                    const chartTitle = document.getElementById('chart-title');
+                    let chartLabels = appNames;
+                    let chartValues = appGanhos;
+                    let chartMode = 'apps';
+
+                    if (data.history && data.history.length) {
+                        const refDate = new Date(data.created_at || new Date());
+                        const refMonth = refDate.getMonth();
+                        const refYear = refDate.getFullYear();
+                        const weekly = data.history
+                            .filter(h => h.periodo_tipo === 'semanal')
+                            .filter(h => {
+                                const d = new Date(h.created_at);
+                                return d.getMonth() === refMonth && d.getFullYear() === refYear;
+                            })
+                            .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+                        if (weekly.length) {
+                            chartMode = 'weekly';
+                            chartLabels = weekly.map(h => new Date(h.created_at).toLocaleDateString('pt-BR'));
+                            chartValues = weekly.map(h => (h.metrics?.consolidado?.total_ganhos || 0));
+                        }
+                    }
+
+                    chartTitle.innerHTML = chartMode === 'weekly'
+                        ? '<i class="fa-solid fa-chart-bar text-teal-600"></i> Resumo Semanal do Mes'
+                        : '<i class="fa-solid fa-chart-bar text-teal-600"></i> Distribuicao de Ganhos';
+
                     if (myChart) myChart.destroy();
                     const ctx = document.getElementById('chartApps').getContext('2d');
                     myChart = new Chart(ctx, { 
                         type: 'bar', 
                         data: { 
-                            labels: appNames, 
+                            labels: chartLabels, 
                             datasets: [{ 
-                                data: appGanhos, 
+                                data: chartValues, 
                                 backgroundColor: '#0f766e',
                                 borderRadius: 6,
                                 barThickness: window.innerWidth < 768 ? 24 : 40 

@@ -125,10 +125,26 @@ class LogicService:
             "saldo": 0,
             "total_hours": 0,
             "tempo_espera_galpao": 0,
+            "days_worked": 0,
+            "avg_hours_per_day": 0,
+            "avg_wait_per_day": 0,
             "ganho_por_hora": 0,
             "custo_por_km": 0,
             "total_operacoes": len(operations) if operations else 0
         }
+
+        def parse_date(value):
+            if not value:
+                return None
+            try:
+                if isinstance(value, datetime.date):
+                    return value
+                text = str(value).replace('Z', '+00:00')
+                if 'T' in text:
+                    return datetime.datetime.fromisoformat(text).date()
+                return datetime.date.fromisoformat(text)
+            except Exception:
+                return None
 
         def add_duration_hours(start_val, end_val):
             if not start_val or not end_val:
@@ -234,6 +250,19 @@ class LogicService:
                 except Exception as e:
                     print(f"Erro ao calcular horas do evento: {e}")
 
+        days_set = set()
+        if operations:
+            for op in operations:
+                op_date = parse_date(op.get("data")) or parse_date(op.get("hora_inicio"))
+                if op_date:
+                    days_set.add(op_date)
+        else:
+            for ev in events:
+                ev_date = parse_date(ev.get("timestamp")) or parse_date(ev.get("hora_inicio"))
+                if ev_date:
+                    days_set.add(ev_date)
+        consolidado["days_worked"] = len(days_set)
+
         # Cálculo de Horas Totais (Soma das rotas individuais para ignorar repouso)
         total_worked_hours = 0
         for app_name in apps_data:
@@ -243,6 +272,10 @@ class LogicService:
         consolidado["saldo"] = consolidado["total_ganhos"] - consolidado["total_gastos"]
         if consolidado.get("total_hours", 0) > 0:
             consolidado["ganho_por_hora"] = consolidado["saldo"] / consolidado["total_hours"]
+
+        if consolidado.get("days_worked", 0) > 0:
+            consolidado["avg_hours_per_day"] = consolidado["total_hours"] / consolidado["days_worked"]
+            consolidado["avg_wait_per_day"] = consolidado["tempo_espera_galpao"] / consolidado["days_worked"]
         
         if consolidado["km_total"] > 0:
             consolidado["custo_por_km"] = consolidado["total_gastos"] / consolidado["km_total"]
