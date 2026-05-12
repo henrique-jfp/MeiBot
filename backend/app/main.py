@@ -124,6 +124,21 @@ async def process_interpreted_data(user, interpreted):
                 eventos_processados.append(gasto_ent)
 
         if active_op:
+            h_chegada = ev.get("hora_chegada_galpao")
+            h_inicio_rota = ev.get("hora_inicio_rota")
+            if h_chegada and h_inicio_rota:
+                wait_event = {
+                    "tipo": "registro",
+                    "sub_tipo": "espera_galpao",
+                    "hora_inicio": h_chegada,
+                    "hora_fim": h_inicio_rota,
+                    "descricao": "Espera no galpao"
+                }
+                if data_ref:
+                    wait_event["data_referencia"] = data_ref
+                db.add_event(user_id, active_op["id"], wait_event)
+                eventos_processados.append(wait_event)
+
             if data_ref: ev["data_referencia"] = data_ref
             db.add_event(user_id, active_op["id"], ev)
             eventos_processados.append(ev)
@@ -290,20 +305,36 @@ async def dashboard_page(whatsapp_number: str):
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-            body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; overflow-x: hidden; }
+            @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+            :root {
+                --ink: #0f172a;
+                --line: #e2e8f0;
+                --brand: #0f766e;
+                --brand-strong: #115e59;
+                --accent: #f59e0b;
+                --surface: #ffffff;
+            }
+            body {
+                font-family: 'Space Grotesk', sans-serif;
+                background: radial-gradient(1200px 600px at 20% -10%, #d1fae5 0%, transparent 60%),
+                            radial-gradient(900px 500px at 100% 0%, #fef3c7 0%, transparent 55%),
+                            #f8fafc;
+                color: var(--ink);
+                overflow-x: hidden;
+            }
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
             .history-item { transition: all 0.2s ease-in-out; }
-            .history-item:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+            .history-item:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgb(15 23 42 / 0.08); }
             .history-item:active { transform: translateY(0); }
+            .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 18px -14px rgb(15 23 42 / 0.25); }
         </style>
     </head>
-    <body class="flex flex-col md:flex-row min-h-screen">
+    <body class="flex flex-col lg:flex-row min-h-screen">
         <!-- Sidebar -->
-        <aside class="w-full md:w-72 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-5 md:p-6 flex-shrink-0 z-50 sticky top-0 md:h-screen md:overflow-y-auto">
+        <aside class="w-full lg:w-80 bg-white/90 backdrop-blur border-b lg:border-b-0 lg:border-r border-slate-200 p-5 lg:p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
             <div class="flex items-center gap-3 mb-8">
-                <div class="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-200 text-white"> 
+                <div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center shadow-md shadow-teal-200 text-white"> 
                     <i class="fa-solid fa-bolt"></i> 
                 </div>
                 <div>
@@ -312,10 +343,10 @@ async def dashboard_page(whatsapp_number: str):
                 </div>
             </div>
             
-            <div class="mb-8">
+            <div class="mb-6">
                 <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Navegação</p>
-                <div class="flex flex-col gap-1.5">
-                    <button onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-sm transition-colors border border-indigo-100">
+                <div class="flex flex-row lg:flex-col gap-2">
+                    <button onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100">
                         <i class="fa-solid fa-chart-pie w-4"></i> Performance
                     </button>
                     <button onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200">
@@ -325,7 +356,7 @@ async def dashboard_page(whatsapp_number: str):
             </div>
 
             <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Histórico</p>
-            <nav id="history-list" class="flex md:flex-col gap-3 md:gap-2.5 overflow-x-auto md:overflow-visible pb-2 md:pb-0 snap-x"></nav>
+            <nav id="history-list" class="flex lg:flex-col gap-3 lg:gap-2.5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 snap-x"></nav>
         </aside>
 
         <!-- Main Content -->
@@ -349,8 +380,8 @@ async def dashboard_page(whatsapp_number: str):
             <!-- SECTION: PERFORMANCE -->
             <div id="section-performance" class="space-y-6">
                 <!-- Cards Financeiros -->
-                <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 xl:grid-cols-7 md:gap-4">
+                    <div class="card min-w-[170px] p-4 md:p-5">
                         <div class="flex justify-between items-start mb-2">
                             <p class="text-slate-500 text-xs font-semibold uppercase">Faturamento</p>
                             <i class="fa-solid fa-arrow-trend-up text-slate-300"></i>
@@ -358,7 +389,7 @@ async def dashboard_page(whatsapp_number: str):
                         <p id="txt-bruto" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <div class="card min-w-[170px] p-4 md:p-5">
                         <div class="flex justify-between items-start mb-2">
                             <p class="text-slate-500 text-xs font-semibold uppercase">Essenciais</p>
                             <i class="fa-solid fa-gas-pump text-slate-300"></i>
@@ -366,65 +397,73 @@ async def dashboard_page(whatsapp_number: str):
                         <p id="txt-essencial" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <div class="card min-w-[170px] p-4 md:p-5">
                         <div class="flex justify-between items-start mb-2">
                             <p class="text-slate-500 text-xs font-semibold uppercase">Não Essenciais</p>
                             <i class="fa-solid fa-burger text-slate-300"></i>
                         </div>
-                        <p id="txt-nao-essencial" class="text-xl md:text-2xl font-bold text-orange-600">---</p>
+                        <p id="txt-nao-essencial" class="text-xl md:text-2xl font-bold text-amber-600">---</p>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-indigo-200 border-t-4 border-t-indigo-600">
+                    <div class="card min-w-[170px] p-4 md:p-5 border-t-4 border-t-teal-600">
                         <div class="flex justify-between items-start mb-2">
-                            <p class="text-indigo-600 text-xs font-bold uppercase">Saldo Líquido</p>
-                            <i class="fa-solid fa-wallet text-indigo-300"></i>
+                            <p class="text-teal-700 text-xs font-bold uppercase">Saldo Líquido</p>
+                            <i class="fa-solid fa-wallet text-teal-300"></i>
                         </div>
-                        <p id="txt-saldo" class="text-xl md:text-2xl font-bold text-indigo-700">---</p>
+                        <p id="txt-saldo" class="text-xl md:text-2xl font-bold text-teal-700">---</p>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <div class="card min-w-[170px] p-4 md:p-5">
                         <div class="flex justify-between items-start mb-2">
                             <p class="text-slate-500 text-xs font-semibold uppercase">Eficiência</p>
                             <i class="fa-solid fa-gauge-high text-slate-300"></i>
                         </div>
                         <p id="txt-eficiencia" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
                     </div>
-                    
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+
+                    <div class="card min-w-[170px] p-4 md:p-5">
                         <div class="flex justify-between items-start mb-2">
                             <p class="text-slate-500 text-xs font-semibold uppercase">Tempo Total</p>
                             <i class="fa-solid fa-clock text-slate-300"></i>
                         </div>
                         <p id="txt-tempo" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
                     </div>
+
+                    <div class="card min-w-[170px] p-4 md:p-5 border-t-4 border-t-amber-500">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-amber-700 text-xs font-bold uppercase">Espera no Galpão</p>
+                            <i class="fa-solid fa-warehouse text-amber-300"></i>
+                        </div>
+                        <p id="txt-tempo-espera" class="text-xl md:text-2xl font-bold text-amber-700">---</p>
+                    </div>
                 </div>
 
                 <!-- Gráficos e Apps -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div class="lg:col-span-2 card p-6">
                         <h3 class="font-semibold text-slate-800 text-sm mb-6 flex items-center gap-2">
-                            <i class="fa-solid fa-chart-bar text-indigo-500"></i> Distribuição de Ganhos
+                            <i class="fa-solid fa-chart-bar text-teal-600"></i> Distribuição de Ganhos
                         </h3>
                         <div class="relative w-full h-[250px]">
                             <canvas id="chartApps"></canvas>
                         </div>
                     </div>
                     
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div class="card p-6">
                         <h3 class="font-semibold text-slate-800 text-sm mb-6 flex items-center gap-2">
-                            <i class="fa-solid fa-layer-group text-indigo-500"></i> Detalhamento por App
+                            <i class="fa-solid fa-layer-group text-teal-600"></i> Detalhamento por App
                         </h3>
                         <div id="list-apps" class="space-y-4"></div>
                     </div>
                 </div>
 
                 <!-- Visão do Analista (Clean) -->
-                <div class="bg-indigo-50 p-6 md:p-8 rounded-xl border border-indigo-100 shadow-sm relative overflow-hidden">
-                    <div class="absolute -right-4 -top-4 text-indigo-100 opacity-50">
+                <div class="bg-teal-50 p-6 md:p-8 rounded-xl border border-teal-100 shadow-sm relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 text-teal-100 opacity-50">
                         <i class="fa-solid fa-quote-right text-9xl"></i>
                     </div>
                     <div class="relative z-10">
-                        <h3 class="text-indigo-800 font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2"> 
+                        <h3 class="text-teal-800 font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2"> 
                             <i class="fa-solid fa-robot"></i> Análise Estratégica
                         </h3>
                         <div id="txt-insight" class="text-slate-700 leading-relaxed whitespace-pre-line text-sm md:text-base font-medium"></div>
@@ -458,7 +497,7 @@ async def dashboard_page(whatsapp_number: str):
                 
                 const activeBtn = Array.from(btns).find(b => b.getAttribute('onclick').includes(section));
                 if(activeBtn) {
-                    activeBtn.className = "flex items-center gap-3 p-2.5 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-sm transition-colors border border-indigo-100";
+                    activeBtn.className = "flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100";
                 }
 
                 if (section === 'porteiros') renderPorteiros();
@@ -467,35 +506,68 @@ async def dashboard_page(whatsapp_number: str):
             function renderPorteiros() {
                 const container = document.getElementById('porteiros-list');
                 if (!dashboardData || !dashboardData.porteiros || dashboardData.porteiros.length === 0) {
-                    container.innerHTML = '<div class="col-span-full bg-white p-8 rounded-xl border border-slate-200 text-center"><p class="text-slate-500">Nenhum porteiro mapeado ainda.</p></div>';
+                    container.innerHTML = '<div class="col-span-full card p-8 text-center"><p class="text-slate-500">Nenhum porteiro mapeado ainda.</p></div>';
                     return;
                 }
 
                 container.innerHTML = '';
+                const normalizeStreetKey = (value) => {
+                    const text = (value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+                    if (!text) return 'SEM RUA';
+                    if (text.includes('PAISANDU') || text.includes('PAISSANDU')) return 'PAISSANDU';
+                    return text;
+                };
+                const normalizeStreetLabel = (value) => {
+                    const text = (value || '').trim().replace(/\s+/g, ' ');
+                    if (!text) return 'Sem Rua';
+                    const upper = text.toUpperCase();
+                    if (upper.includes('PAISANDU') || upper.includes('PAISSANDU')) return 'Paissandu';
+                    const smallWords = ['de', 'da', 'do', 'das', 'dos', 'e'];
+                    return text
+                        .toLowerCase()
+                        .replace(/\b\w/g, (m) => m.toUpperCase())
+                        .split(' ')
+                        .map(word => smallWords.includes(word.toLowerCase()) ? word.toLowerCase() : word)
+                        .join(' ');
+                };
                 const grouped = {};
                 dashboardData.porteiros.forEach(p => {
-                    let rua = (p.rua || "Sem Rua").trim().toUpperCase();
-                    if (rua.includes("PAISANDU") || rua.includes("PAISSANDU")) rua = "PAISSANDU";
-                    if (!grouped[rua]) grouped[rua] = [];
-                    grouped[rua].push(p);
+                    const ruaKey = normalizeStreetKey(p.rua || "Sem Rua");
+                    if (!grouped[ruaKey]) grouped[ruaKey] = [];
+                    grouped[ruaKey].push(p);
                 });
 
                 Object.keys(grouped).sort().forEach(rua => {
                     const streetCard = document.createElement('div');
-                    streetCard.className = 'bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit';
+                    streetCard.className = 'card p-6 h-fit';
                     
                     const items = grouped[rua].sort((a, b) => {
-                        return (parseInt(a.numero.replace(/\\D/g, '')) || 0) - (parseInt(b.numero.replace(/\\D/g, '')) || 0);
+                        const numA = parseInt(String(a.numero || '').replace(/\\D/g, '')) || 0;
+                        const numB = parseInt(String(b.numero || '').replace(/\\D/g, '')) || 0;
+                        return numA - numB;
                     });
 
                     let porteirosHtml = '';
                     items.forEach(p => {
+                        const ruaLabel = normalizeStreetLabel(p.rua || 'Sem Rua');
+                        const numeroRaw = (p.numero || '').trim();
+                        const numeroLabel = (!numeroRaw || numeroRaw.toLowerCase().includes('sem')) ? 'Sem numero' : `N° ${numeroRaw}`;
+                        const nomeRaw = (p.nome_porteiro || '').trim();
+                        const nomeLabel = nomeRaw || 'Porteiro desconhecido';
+                        const suspectName = nomeLabel.toUpperCase().includes('RUA') || nomeLabel.toUpperCase().includes('AVENIDA') || nomeLabel.toUpperCase() === ruaLabel.toUpperCase();
+
                         porteirosHtml += `
                             <div class="py-3 border-b border-slate-100 last:border-0">
                                 <div class="flex items-start justify-between">
                                     <div>
-                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">N° ${p.numero}</p>
-                                        <p class="font-semibold text-slate-800 text-sm">${p.nome_porteiro} ${p.turno ? '<span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded ml-1 uppercase font-bold">' + p.turno + '</span>' : ''}</p>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">${numeroLabel}</p>
+                                        <p class="font-semibold text-slate-800 text-sm">${nomeLabel} ${p.turno ? '<span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded ml-1 uppercase font-bold">' + p.turno + '</span>' : ''}</p>
+                                        ${(suspectName || numeroLabel === 'Sem numero') ? `
+                                            <div class="mt-2 flex flex-wrap gap-1.5">
+                                                ${suspectName ? '<span class="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase font-bold">Possivel erro</span>' : ''}
+                                                ${numeroLabel === 'Sem numero' ? '<span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full uppercase font-bold">Sem numero</span>' : ''}
+                                            </div>
+                                        ` : ''}
                                     </div>
                                 </div>
                                 ${p.notas_predio ? `
@@ -509,11 +581,11 @@ async def dashboard_page(whatsapp_number: str):
 
                     streetCard.innerHTML = `
                         <div class="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100">
-                            <div class="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                            <div class="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center text-teal-600">
                                 <i class="fa-solid fa-map-pin"></i>
                             </div>
                             <div>
-                                <h4 class="font-bold text-sm text-slate-800 uppercase tracking-tight">${rua}</h4>
+                                <h4 class="font-bold text-sm text-slate-800 uppercase tracking-tight">${normalizeStreetLabel(rua)}</h4>
                                 <p class="text-[10px] text-slate-500 font-medium">${items.length} edifício(s)</p>
                             </div>
                         </div>
@@ -547,6 +619,7 @@ async def dashboard_page(whatsapp_number: str):
                     document.getElementById('txt-saldo').innerText = 'R$ ' + fmt(c.saldo);
                     document.getElementById('txt-eficiencia').innerText = 'R$ ' + (c.total_ganhos / (c.km_total || 1)).toFixed(2) + '/km';
                     document.getElementById('txt-tempo').innerText = (c.total_hours || 0).toFixed(1) + 'h';
+                    document.getElementById('txt-tempo-espera').innerText = (c.tempo_espera_galpao || 0).toFixed(1) + 'h';
                     document.getElementById('txt-insight').innerText = data.insight;
 
                     const listContainer = document.getElementById('list-apps');
@@ -564,7 +637,7 @@ async def dashboard_page(whatsapp_number: str):
                                     <p class="text-[10px] text-slate-500 font-medium">${app.km.toFixed(1)}km • ${app.horas.toFixed(1)}h</p>
                                 </div>
                                 <div class="text-right">
-                                    <p class="font-bold text-indigo-600 text-sm">R$ ${app.ganhos.toFixed(2)}</p>
+                                    <p class="font-bold text-teal-700 text-sm">R$ ${app.ganhos.toFixed(2)}</p>
                                     <p class="text-[10px] text-slate-400 font-medium">R$ ${rkm}/km</p>
                                 </div>
                             </div>
@@ -594,9 +667,9 @@ async def dashboard_page(whatsapp_number: str):
                             items.forEach(h => {
                                 const active = analysisId === h.id || (!analysisId && h.id === data.history[0]?.id);
                                 const btn = document.createElement('div');
-                                btn.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col gap-0.5 ${active ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`;
+                                btn.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col gap-0.5 ${active ? 'bg-teal-50 border-teal-200' : 'bg-white border-slate-200 hover:border-teal-300'}`;
                                 btn.innerHTML = `
-                                    <span class="text-[10px] font-bold uppercase ${active ? 'text-indigo-600' : 'text-slate-500'}">${h.periodo_tipo}</span>
+                                    <span class="text-[10px] font-bold uppercase ${active ? 'text-teal-600' : 'text-slate-500'}">${h.periodo_tipo}</span>
                                     <span class="text-xs font-medium text-slate-700">${new Date(h.created_at).toLocaleDateString('pt-BR')}</span>
                                 `;
                                 btn.onclick = () => { loadDashboard(h.id); if(window.innerWidth < 768) window.scrollTo({top: 0, behavior: 'smooth'}); };
@@ -616,7 +689,7 @@ async def dashboard_page(whatsapp_number: str):
                             labels: appNames, 
                             datasets: [{ 
                                 data: appGanhos, 
-                                backgroundColor: '#4f46e5',
+                                backgroundColor: '#0f766e',
                                 borderRadius: 6,
                                 barThickness: window.innerWidth < 768 ? 24 : 40 
                             }] 
@@ -626,8 +699,8 @@ async def dashboard_page(whatsapp_number: str):
                             maintainAspectRatio: false,
                             plugins: { legend: { display: false }, tooltip: { cornerRadius: 8, padding: 12 } }, 
                             scales: { 
-                                y: { border: {display: false}, grid: { color: '#f1f5f9', drawTicks: false }, ticks: { font: { family: 'Inter', size: 11 }, color: '#64748b' } }, 
-                                x: { border: {display: false}, grid: { display: false }, ticks: { font: { family: 'Inter', size: 11, weight: '500' }, color: '#475569' } } 
+                                y: { border: {display: false}, grid: { color: '#f1f5f9', drawTicks: false }, ticks: { font: { family: 'Space Grotesk', size: 11 }, color: '#64748b' } }, 
+                                x: { border: {display: false}, grid: { display: false }, ticks: { font: { family: 'Space Grotesk', size: 11, weight: '500' }, color: '#475569' } } 
                             } 
                         } 
                     });

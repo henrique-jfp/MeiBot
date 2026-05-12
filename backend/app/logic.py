@@ -124,10 +124,29 @@ class LogicService:
             "km_total": 0,
             "saldo": 0,
             "total_hours": 0,
+            "tempo_espera_galpao": 0,
             "ganho_por_hora": 0,
             "custo_por_km": 0,
             "total_operacoes": len(operations) if operations else 0
         }
+
+        def add_duration_hours(start_val, end_val):
+            if not start_val or not end_val:
+                return 0
+            try:
+                if "T" in str(start_val):
+                    t1 = datetime.datetime.fromisoformat(str(start_val).replace('Z', '+00:00'))
+                    t2 = datetime.datetime.fromisoformat(str(end_val).replace('Z', '+00:00'))
+                    diff = (t2 - t1).total_seconds()
+                else:
+                    fmt = "%H:%M"
+                    t1 = datetime.datetime.strptime(str(start_val), fmt)
+                    t2 = datetime.datetime.strptime(str(end_val), fmt)
+                    diff = (t2 - t1).total_seconds()
+                    if diff < 0: diff += 24 * 3600
+                return max(diff, 0) / 3600
+            except Exception:
+                return 0
 
         for ev in events:
             # Pega o valor de forma ultra-robusta
@@ -152,6 +171,7 @@ class LogicService:
 
             tipo = str(ev.get("tipo") or "").lower()
             categoria = str(ev.get("categoria") or "").lower()
+            sub_tipo = str(ev.get("sub_tipo") or "").lower()
 
             if app_name not in apps_data:
                 apps_data[app_name] = {"ganhos": 0, "gastos": 0, "km": 0, "horas": 0}
@@ -184,6 +204,9 @@ class LogicService:
                     consolidado["gastos_essenciais"] += val
             elif tipo == "ajuste":
                 consolidado["total_ajustes"] += val
+
+            if sub_tipo == "espera_galpao":
+                consolidado["tempo_espera_galpao"] += add_duration_hours(ev.get("hora_inicio"), ev.get("hora_fim"))
             
             consolidado["km_total"] += km_val
             apps_data[app_name]["km"] += km_val

@@ -1,4 +1,6 @@
 import os
+import re
+import unicodedata
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -146,6 +148,7 @@ class DBService:
                 "user_id": user_id,
                 "operacao_id": operacao_id,
                 "tipo": str(event_data.get("tipo") or "registro"),
+                "sub_tipo": event_data.get("sub_tipo"),
                 "valor": to_float(event_data.get("valor")),
                 "km": to_float(event_data.get("km") or event_data.get("km_rota")),
                 "app_id": app_id,
@@ -231,17 +234,81 @@ class DBService:
         response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", thirty_days_ago).execute()
         return response.data
 
+    # --- NORMALIZACAO DE PORTEIROS ---
+
+    @staticmethod
+    def _clean_text(value: str):
+        if value is None:
+            return ""
+        text = unicodedata.normalize("NFKC", str(value))
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    @staticmethod
+    def _title_keep_small_words(text: str):
+        if not text:
+            return text
+        small_words = {"de", "da", "do", "das", "dos", "e"}
+        words = []
+        for w in text.split(" "):
+            low = w.lower()
+            if low in small_words:
+                words.append(low)
+            elif w.isupper() and len(w) <= 3:
+                words.append(w)
+            else:
+                words.append(w.capitalize())
+        return " ".join(words)
+
+    @classmethod
+    def normalize_porteiro_rua(cls, rua: str):
+        text = cls._clean_text(rua)
+        if not text:
+            return "Sem Rua"
+
+        text = re.sub(r"\b(r|r\.)\b", "Rua", text, flags=re.IGNORECASE)
+        text = re.sub(r"\b(av|av\.|avenida)\b", "Avenida", text, flags=re.IGNORECASE)
+        text = re.sub(r"\b(trav|trav\.|travessa)\b", "Travessa", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        text_upper = text.upper()
+        if "PAISANDU" in text_upper or "PAISSANDU" in text_upper:
+            return "Paissandu"
+
+        return cls._title_keep_small_words(text)
+
+    @classmethod
+    def normalize_porteiro_numero(cls, numero: str):
+        text = cls._clean_text(numero)
+        if not text:
+            return "Sem Numero"
+        text = re.sub(r"^(n|n\.|nº|no|n°)\s*", "", text, flags=re.IGNORECASE)
+        text = text.replace("N°", "").replace("Nº", "")
+        text = re.sub(r"\s+", " ", text).strip()
+        return text.upper() if text else "Sem Numero"
+
+    @classmethod
+    def normalize_porteiro_nome(cls, nome: str):
+        text = cls._clean_text(nome)
+        if not text:
+            return "Porteiro Desconhecido"
+        text = text.strip('"“”')
+        return cls._title_keep_small_words(text)
+
     # --- MAPEAMENTO DE PORTEIROS ---
 
     def add_porteiro(self, user_id: str, rua: str, numero: str, nome: str, turno: str = None, notas: str = None):
         try:
+            rua_norm = self.normalize_porteiro_rua(rua)
+            numero_norm = self.normalize_porteiro_numero(numero)
+            nome_norm = self.normalize_porteiro_nome(nome)
             data = {
                 "user_id": user_id,
-                "rua": rua,
-                "numero": numero,
-                "nome_porteiro": nome,
+                "rua": rua_norm,
+                "numero": numero_norm,
+                "nome_porteiro": nome_norm,
                 "turno": turno,
-                "notas_predio": notas
+                "notas_predio": self._clean_text(notas) if notas else None
             }
             response = self.supabase.table("mapeamento_porteiros").insert(data).execute()
             return response.data
@@ -253,11 +320,14 @@ class DBService:
 
     def update_porteiro(self, user_id: str, rua: str, numero: str, nome_antigo: str, novo_nome: str = None, novo_turno: str = None, novas_notas: str = None):
         try:
+            rua_norm = self.normalize_porteiro_rua(rua)
+            numero_norm = self.normalize_porteiro_numero(numero)
+            nome_antigo_norm = self.normalize_porteiro_nome(nome_antigo)
             update_data = {}
-            if novo_nome: update_data["nome_porteiro"] = novo_nome
+            if novo_nome: update_data["nome_porteiro"] = self.normalize_porteiro_nome(novo_nome)
             if novo_turno: update_data["turno"] = novo_turno
-            if novas_notas: update_data["notas_predio"] = novas_notas
-            response = self.supabase.table("mapeamento_porteiros").update(update_data).eq("user_id", user_id).ilike("rua", f"%{rua}%").eq("numero", numero).ilike("nome_porteiro", nome_antigo).execute()
+            if novas_notas: update_data["notas_predio"] = self._clean_text(novas_notas)
+            response = self.supabase.table("mapeamento_porteiros").update(update_data).eq("user_id", user_id).eq("rua", rua_norm).eq("numero", numero_norm).eq("nome_porteiro", nome_antigo_norm).execute()
             return response.data
         except Exception as e:
             print(f"Error updating porteiro: {e}")
@@ -265,7 +335,9 @@ class DBService:
 
     def get_porteiros_by_address(self, user_id: str, rua: str, numero: str):
         try:
-            response = self.supabase.table("mapeamento_porteiros").select("*").eq("user_id", user_id).ilike("rua", f"%{rua}%").eq("numero", numero).execute()
+            rua_norm = self.normalize_porteiro_rua(rua)
+            numero_norm = self.normalize_porteiro_numero(numero)
+            response = self.supabase.table("mapeamento_porteiros").select("*").eq("user_id", user_id).eq("rua", rua_norm).eq("numero", numero_norm).execute()
             return response.data
         except Exception as e:
             print(f"Error getting porteiros: {e}")
