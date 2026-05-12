@@ -272,8 +272,24 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
             }
 
     if history:
-        ev_live = db.get_weekly_summary(user_id)
-        op_live = db.get_operations_for_period(user_id, 7)
+        today = datetime.date.today()
+        month_start = today.replace(day=1)
+        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        start_iso = month_start.isoformat() + "T00:00:00Z"
+        end_iso = next_month.isoformat() + "T00:00:00Z"
+
+        ev_live = db.supabase.table("eventos").select("*, apps(*)")\
+            .eq("user_id", user_id)\
+            .gte("timestamp", start_iso)\
+            .lt("timestamp", end_iso)\
+            .execute().data
+
+        op_live = db.supabase.table("operacoes_dia").select("*")\
+            .eq("user_id", user_id)\
+            .gte("data", month_start.isoformat())\
+            .lt("data", next_month.isoformat())\
+            .execute().data
+
         metrics_live = LogicService.calculate_metrics_grouped(ev_live, op_live)
         latest = history[0]
         return {
@@ -285,9 +301,25 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
             "porteiros": porteiros
         }
     
-    ev_week = db.get_weekly_summary(user_id)
-    op_week = db.get_operations_for_period(user_id, 7)
-    metrics_week = LogicService.calculate_metrics_grouped(ev_week, op_week)
+    today = datetime.date.today()
+    month_start = today.replace(day=1)
+    next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+    start_iso = month_start.isoformat() + "T00:00:00Z"
+    end_iso = next_month.isoformat() + "T00:00:00Z"
+
+    ev_month = db.supabase.table("eventos").select("*, apps(*)")\
+        .eq("user_id", user_id)\
+        .gte("timestamp", start_iso)\
+        .lt("timestamp", end_iso)\
+        .execute().data
+
+    op_month = db.supabase.table("operacoes_dia").select("*")\
+        .eq("user_id", user_id)\
+        .gte("data", month_start.isoformat())\
+        .lt("data", next_month.isoformat())\
+        .execute().data
+
+    metrics_week = LogicService.calculate_metrics_grouped(ev_month, op_month)
     
     return {
         "user": user,

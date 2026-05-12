@@ -29,20 +29,36 @@ async def generate_automated_reports(periodo="semanal"):
             user_id = user["id"]
             whatsapp = user["whatsapp_number"]
             
-            # Define o período de busca (7 ou 30 dias)
+            # Define o período de busca (7 dias ou mes calendario)
             days = 7 if periodo == "semanal" else 30
             
             # Busca eventos e operações
             if periodo == "semanal":
                 events = db.get_weekly_summary(user_id)
             else:
-                events = db.get_monthly_summary(user_id)
+                today = datetime.date.today()
+                month_start = today.replace(day=1)
+                next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+                start_iso = month_start.isoformat() + "T00:00:00Z"
+                end_iso = next_month.isoformat() + "T00:00:00Z"
+                events = db.supabase.table("eventos").select("*, apps(*)")\
+                    .eq("user_id", user_id)\
+                    .gte("timestamp", start_iso)\
+                    .lt("timestamp", end_iso)\
+                    .execute().data
             
             if not events:
                 print(f"Usuário {whatsapp}: Sem dados para o período. Pulando.")
                 continue
                 
-            ops = db.get_operations_for_period(user_id, days)
+            if periodo == "semanal":
+                ops = db.get_operations_for_period(user_id, days)
+            else:
+                ops = db.supabase.table("operacoes_dia").select("*")\
+                    .eq("user_id", user_id)\
+                    .gte("data", month_start.isoformat())\
+                    .lt("data", next_month.isoformat())\
+                    .execute().data
             
             # Calcula métricas
             metrics = LogicService.calculate_metrics_grouped(events, ops)
