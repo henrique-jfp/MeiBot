@@ -227,37 +227,51 @@ class DBService:
 
     def get_weekly_summary(self, user_id: str):
         import datetime
-        # Usando 8 dias para garantir cobertura de fuso horário
-        seven_days_ago = (datetime.datetime.now() - datetime.timedelta(days=8)).isoformat()
-        response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", seven_days_ago).execute()
+        # A semana começa na Segunda (weekday=0) e termina no Domingo
+        today = datetime.datetime.now()
+        start_of_week = (today - datetime.timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", start_of_week.isoformat()).execute()
         return response.data
 
     def get_previous_weekly_summary(self, user_id: str):
         import datetime
-        now = datetime.datetime.now()
-        seven_days_ago = (now - datetime.timedelta(days=8)).isoformat()
-        fourteen_days_ago = (now - datetime.timedelta(days=16)).isoformat()
-        response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", fourteen_days_ago).lt("timestamp", seven_days_ago).execute()
+        today = datetime.datetime.now()
+        start_of_this_week = (today - datetime.timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_prev_week = start_of_this_week - datetime.timedelta(days=7)
+        response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", start_of_prev_week.isoformat()).lt("timestamp", start_of_this_week.isoformat()).execute()
         return response.data
 
     def get_monthly_summary(self, user_id: str):
         import datetime
-        thirty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=31)).isoformat()
-        response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", thirty_days_ago).execute()
+        today = datetime.date.today()
+        month_start = today.replace(day=1)
+        start_iso = datetime.datetime.combine(month_start, datetime.time.min).isoformat() + "Z"
+        response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", start_iso).execute()
         return response.data
 
     def get_previous_monthly_summary(self, user_id: str):
         import datetime
-        now = datetime.datetime.now()
-        thirty_days_ago = (now - datetime.timedelta(days=30)).isoformat()
-        sixty_days_ago = (now - datetime.timedelta(days=60)).isoformat()
-        response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", sixty_days_ago).lt("timestamp", thirty_days_ago).execute()
+        today = datetime.date.today()
+        first_day_this_month = today.replace(day=1)
+        last_day_prev_month = first_day_this_month - datetime.timedelta(days=1)
+        first_day_prev_month = last_day_prev_month.replace(day=1)
+        
+        start_iso = datetime.datetime.combine(first_day_prev_month, datetime.time.min).isoformat() + "Z"
+        end_iso = datetime.datetime.combine(first_day_this_month, datetime.time.min).isoformat() + "Z"
+        
+        response = self.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", start_iso).lt("timestamp", end_iso).execute()
         return response.data
 
     def get_operations_for_period(self, user_id: str, days: int):
         import datetime
-        start_date = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
-        response = self.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).gte("hora_inicio", start_date).execute()
+        # Se for semanal (7 dias), forçamos o início na Segunda
+        today = datetime.datetime.now()
+        if days == 7:
+            start_date = (today - datetime.timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            start_date = (today - datetime.timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+            
+        response = self.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).gte("hora_inicio", start_date.isoformat()).execute()
         return response.data
 
     def get_all_time_summary(self, user_id: str):

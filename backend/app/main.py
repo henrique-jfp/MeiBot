@@ -360,6 +360,7 @@ async def dashboard_page(whatsapp_number: str):
         <title>MeiBot - Dashboard Analítico</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
@@ -682,9 +683,11 @@ async def dashboard_page(whatsapp_number: str):
                     const daysWorked = c.days_worked || 0;
                     const avgHours = (c.avg_hours_per_day || (daysWorked ? (c.total_hours || 0) / daysWorked : 0));
                     const avgWait = (c.avg_wait_per_day || (daysWorked ? (c.tempo_espera_galpao || 0) / daysWorked : 0));
-                    document.getElementById('txt-tempo-avg').innerText = daysWorked ? `Media: ${avgHours.toFixed(1)}h/dia (${daysWorked} dias)` : 'Media: --';
-                    document.getElementById('txt-tempo-espera-avg').innerText = daysWorked ? `Media: ${avgWait.toFixed(1)}h/dia (${daysWorked} dias)` : 'Media: --';
-                    document.getElementById('txt-insight').innerText = data.insight;
+                    document.getElementById('txt-tempo-avg').innerText = daysWorked ? `Média: ${avgHours.toFixed(1)}h/dia (${daysWorked} dias)` : 'Média: --';
+                    document.getElementById('txt-tempo-espera-avg').innerText = daysWorked ? `Média: ${avgWait.toFixed(1)}h/dia (${daysWorked} dias)` : 'Média: --';
+                    
+                    // Renderiza Markdown no Insight
+                    document.getElementById('txt-insight').innerHTML = marked.parse(data.insight || "");
 
                     const listContainer = document.getElementById('list-apps');
                     listContainer.innerHTML = '';
