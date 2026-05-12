@@ -285,134 +285,157 @@ async def dashboard_page(whatsapp_number: str):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>MeiBot Dashboard</title>
+        <title>MeiBot - Dashboard Analítico</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-            body { font-family: 'Inter', sans-serif; background-color: #f9fafb; overflow-x: hidden; }
-            .card-gradient { background: linear-gradient(135deg, #128C7E 0%, #075E54 100%); }
-            .history-item { transition: all 0.2s; }
-            .history-item:active { transform: scale(0.98); }
-            ::-webkit-scrollbar { width: 4px; height: 4px; }
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+            body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; overflow-x: hidden; }
+            ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-            .tab-active { border-bottom: 3px solid #128C7E; color: #128C7E; }
+            .history-item { transition: all 0.2s ease-in-out; }
+            .history-item:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+            .history-item:active { transform: translateY(0); }
         </style>
     </head>
     <body class="flex flex-col md:flex-row min-h-screen">
-        <!-- Sidebar Responsiva -->
-        <aside class="w-full md:w-72 bg-white border-b md:border-b-0 md:border-r border-gray-200 p-4 md:p-6 flex-shrink-0 z-50 sticky top-0 md:h-screen md:overflow-y-auto">
-            <div class="flex items-center justify-between md:justify-start md:gap-3 mb-4 md:mb-10">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg shadow-green-100 text-white"> 
-                        <i class="fa-solid fa-robot"></i> 
-                    </div>
-                    <span class="font-bold text-xl text-gray-800">MeiBot <span class="text-green-600">Pro</span></span>
+        <!-- Sidebar -->
+        <aside class="w-full md:w-72 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-5 md:p-6 flex-shrink-0 z-50 sticky top-0 md:h-screen md:overflow-y-auto">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-200 text-white"> 
+                    <i class="fa-solid fa-bolt"></i> 
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-800 leading-tight">MeiBot</h1>
+                    <p class="text-xs text-slate-500 font-medium">Dashboard Analítico</p>
                 </div>
             </div>
             
             <div class="mb-8">
-                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Navegação</h4>
-                <div class="flex flex-col gap-2">
-                    <button onclick="showSection('performance')" class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 text-gray-700 font-bold text-sm transition-all hover:bg-gray-100">
-                        <i class="fa-solid fa-chart-line text-green-600"></i> Performance
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Navegação</p>
+                <div class="flex flex-col gap-1.5">
+                    <button onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-sm transition-colors border border-indigo-100">
+                        <i class="fa-solid fa-chart-pie w-4"></i> Performance
                     </button>
-                    <button onclick="showSection('porteiros')" class="flex items-center gap-3 p-3 rounded-xl bg-white text-gray-700 font-bold text-sm transition-all hover:bg-gray-100 border border-gray-100">
-                        <i class="fa-solid fa-building-user text-blue-500"></i> Porteiros
+                    <button onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200">
+                        <i class="fa-solid fa-map-location-dot w-4"></i> Porteiros
                     </button>
                 </div>
             </div>
 
-            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Pasta de Arquivos</h4>
-            <nav id="history-list" class="flex md:flex-col gap-3 md:gap-4 overflow-x-auto md:overflow-visible pb-2 md:pb-0 snap-x"></nav>
+            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Histórico</p>
+            <nav id="history-list" class="flex md:flex-col gap-3 md:gap-2.5 overflow-x-auto md:overflow-visible pb-2 md:pb-0 snap-x"></nav>
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-grow p-4 md:p-10 space-y-6 md:space-y-8 w-full max-w-7xl mx-auto">
-            <header class="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-6 gap-4">
+        <main class="flex-grow p-5 md:p-8 space-y-6 md:space-y-8 w-full max-w-7xl mx-auto">
+            <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-5 gap-4">
                 <div>
-                    <h2 class="text-2xl md:text-3xl font-black text-gray-800 tracking-tight" id="main-title">Painel de Performance</h2>
-                    <p id="txt-periodo" class="text-gray-400 text-sm font-medium">Carregando dados...</p>
+                    <h2 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight" id="main-title">Visão Geral</h2>
+                    <p id="txt-periodo" class="text-slate-500 text-sm mt-1">Carregando dados estruturados...</p>
                 </div>
-                <div class="bg-gray-100 p-3 rounded-2xl w-full md:w-auto">
-                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Conta Comigo Logística</p>
-                    <p class="text-xs font-bold text-gray-700 uppercase tracking-tighter">ID: """ + whatsapp_number + """</p>
+                <div class="bg-white border border-slate-200 px-4 py-2.5 rounded-lg shadow-sm w-full md:w-auto flex items-center gap-3">
+                    <div class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Operador</p>
+                        <p class="text-sm font-bold text-slate-700">ID: """ + whatsapp_number + """</p>
+                    </div>
                 </div>
             </header>
 
             <!-- SECTION: PERFORMANCE -->
-            <div id="section-performance" class="space-y-6 md:space-y-8">
-                <!-- Cards Financeiros: Responsivos (2 colunas mobile, 6 colunas desktop) -->
-                <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <p class="text-gray-400 text-[10px] font-bold uppercase mb-1">Bruto</p>
-                        <p id="txt-bruto" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+            <div id="section-performance" class="space-y-6">
+                <!-- Cards Financeiros -->
+                <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-slate-500 text-xs font-semibold uppercase">Faturamento</p>
+                            <i class="fa-solid fa-arrow-trend-up text-slate-300"></i>
+                        </div>
+                        <p id="txt-bruto" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
                     </div>
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <p class="text-red-400 text-[10px] font-bold uppercase mb-1">Essenciais</p>
-                        <p id="txt-essencial" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-slate-500 text-xs font-semibold uppercase">Essenciais</p>
+                            <i class="fa-solid fa-gas-pump text-slate-300"></i>
+                        </div>
+                        <p id="txt-essencial" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
                     </div>
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <p class="text-orange-400 text-[10px] font-bold uppercase mb-1 truncate">Não Essenc.</p>
-                        <p id="txt-nao-essencial" class="text-base md:text-xl font-black text-gray-800 truncate">---</p>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-slate-500 text-xs font-semibold uppercase">Não Essenciais</p>
+                            <i class="fa-solid fa-burger text-slate-300"></i>
+                        </div>
+                        <p id="txt-nao-essencial" class="text-xl md:text-2xl font-bold text-orange-600">---</p>
                     </div>
-                    <div class="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-green-500">
-                        <p class="text-green-600 text-[10px] font-bold uppercase mb-1">Líquido</p>
-                        <p id="txt-saldo" class="text-base md:text-xl font-black text-green-600 truncate">---</p>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-indigo-200 border-t-4 border-t-indigo-600">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-indigo-600 text-xs font-bold uppercase">Saldo Líquido</p>
+                            <i class="fa-solid fa-wallet text-indigo-300"></i>
+                        </div>
+                        <p id="txt-saldo" class="text-xl md:text-2xl font-bold text-indigo-700">---</p>
                     </div>
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <p class="text-blue-500 text-[10px] font-bold uppercase mb-1">R$ / KM</p>
-                        <p id="txt-eficiencia" class="text-base md:text-xl font-black text-blue-600 truncate">---</p>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-slate-500 text-xs font-semibold uppercase">Eficiência</p>
+                            <i class="fa-solid fa-gauge-high text-slate-300"></i>
+                        </div>
+                        <p id="txt-eficiencia" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
                     </div>
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <p class="text-purple-500 text-[10px] font-bold uppercase mb-1">Tempo</p>
-                        <p id="txt-tempo" class="text-base md:text-xl font-black text-purple-600 truncate">---</p>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-slate-500 text-xs font-semibold uppercase">Tempo Total</p>
+                            <i class="fa-solid fa-clock text-slate-300"></i>
+                        </div>
+                        <p id="txt-tempo" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
                     </div>
                 </div>
 
-                <!-- Gráfico e Detalhes -->
+                <!-- Gráficos e Apps -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2 bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-gray-100 w-full overflow-hidden">
-                        <h3 class="font-bold text-gray-800 text-xs md:text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
-                            <i class="fa-solid fa-chart-column text-green-500"></i> Faturamento por Plataforma
+                    <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="font-semibold text-slate-800 text-sm mb-6 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-bar text-indigo-500"></i> Distribuição de Ganhos
                         </h3>
-                        <div class="relative w-full h-[200px] md:h-[250px]">
+                        <div class="relative w-full h-[250px]">
                             <canvas id="chartApps"></canvas>
                         </div>
                     </div>
-                    <div class="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-gray-100 w-full">
-                        <h3 class="font-bold text-gray-800 text-xs md:text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
-                            <i class="fa-solid fa-list-check text-blue-500"></i> Metas e Tempos
+                    
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="font-semibold text-slate-800 text-sm mb-6 flex items-center gap-2">
+                            <i class="fa-solid fa-layer-group text-indigo-500"></i> Detalhamento por App
                         </h3>
-                        <div id="list-apps" class="space-y-5 md:space-y-6"></div>
+                        <div id="list-apps" class="space-y-4"></div>
                     </div>
                 </div>
 
-                <!-- VISÃO DO ANALISTA: Destaque Especial -->
-                <div class="card-gradient p-8 md:p-12 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
-                    <i class="fa-solid fa-quote-left absolute top-6 left-6 text-white/5 text-8xl md:text-9xl"></i>
+                <!-- Visão do Analista (Clean) -->
+                <div class="bg-indigo-50 p-6 md:p-8 rounded-xl border border-indigo-100 shadow-sm relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 text-indigo-100 opacity-50">
+                        <i class="fa-solid fa-quote-right text-9xl"></i>
+                    </div>
                     <div class="relative z-10">
-                        <h3 class="text-lg md:text-xl font-bold mb-6 md:mb-8 flex items-center gap-3"> 
-                            <span class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                                <i class="fa-solid fa-user-tie text-white"></i> 
-                            </span>
-                            Visão do Analista Estratégico 
+                        <h3 class="text-indigo-800 font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2"> 
+                            <i class="fa-solid fa-robot"></i> Análise Estratégica
                         </h3>
-                        <div id="txt-insight" class="text-white/90 leading-relaxed whitespace-pre-line text-sm md:text-lg italic font-light"></div>
+                        <div id="txt-insight" class="text-slate-700 leading-relaxed whitespace-pre-line text-sm md:text-base font-medium"></div>
                     </div>
                 </div>
             </div>
 
             <!-- SECTION: PORTEIROS -->
             <div id="section-porteiros" class="hidden space-y-6">
-                <div class="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
-                    <h3 class="font-bold text-gray-800 text-sm mb-6 uppercase tracking-widest flex items-center gap-2">
-                        <i class="fa-solid fa-map-location-dot text-blue-500"></i> Mapeamento de Porteiros
-                    </h3>
-                    <div id="porteiros-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <p class="text-gray-400 italic">Carregando mapeamento...</p>
-                    </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="porteiros-list">
+                    <p class="text-slate-400 italic">Carregando diretório de porteiros...</p>
                 </div>
             </div>
         </main>
@@ -425,62 +448,58 @@ async def dashboard_page(whatsapp_number: str):
                 document.getElementById('section-performance').classList.add('hidden');
                 document.getElementById('section-porteiros').classList.add('hidden');
                 document.getElementById('section-' + section).classList.remove('hidden');
-                document.getElementById('main-title').innerText = section === 'performance' ? 'Painel de Performance' : 'Mapeamento de Porteiros';
+                document.getElementById('main-title').innerText = section === 'performance' ? 'Visão Geral' : 'Diretório de Porteiros';
                 
+                const btns = document.querySelectorAll('aside nav button, aside div button');
+                btns.forEach(b => {
+                    b.className = "flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200";
+                });
+                
+                const activeBtn = Array.from(btns).find(b => b.getAttribute('onclick').includes(section));
+                if(activeBtn) {
+                    activeBtn.className = "flex items-center gap-3 p-2.5 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-sm transition-colors border border-indigo-100";
+                }
+
                 if (section === 'porteiros') renderPorteiros();
             }
 
             function renderPorteiros() {
                 const container = document.getElementById('porteiros-list');
                 if (!dashboardData || !dashboardData.porteiros || dashboardData.porteiros.length === 0) {
-                    container.innerHTML = '<p class="text-gray-400 italic col-span-full">Nenhum porteiro mapeado ainda. Cadastre via WhatsApp!</p>';
+                    container.innerHTML = '<div class="col-span-full bg-white p-8 rounded-xl border border-slate-200 text-center"><p class="text-slate-500">Nenhum porteiro mapeado ainda.</p></div>';
                     return;
                 }
 
                 container.innerHTML = '';
-                
-                // Normalização e Agrupamento por RUA
                 const grouped = {};
                 dashboardData.porteiros.forEach(p => {
                     let rua = (p.rua || "Sem Rua").trim().toUpperCase();
-                    // Normalização simples para Paissandu/Paisandu
                     if (rua.includes("PAISANDU") || rua.includes("PAISSANDU")) rua = "PAISSANDU";
-                    
                     if (!grouped[rua]) grouped[rua] = [];
                     grouped[rua].push(p);
                 });
 
-                // Ordenar ruas
-                const streetNames = Object.keys(grouped).sort();
-
-                streetNames.forEach(rua => {
+                Object.keys(grouped).sort().forEach(rua => {
                     const streetCard = document.createElement('div');
-                    streetCard.className = 'bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full md:col-span-1 mb-4 h-fit';
+                    streetCard.className = 'bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit';
                     
-                    // Ordenar porteiros por número dentro da rua
                     const items = grouped[rua].sort((a, b) => {
-                        const nA = parseInt(a.numero.replace(/\D/g, '')) || 0;
-                        const nB = parseInt(b.numero.replace(/\D/g, '')) || 0;
-                        return nA - nB;
+                        return (parseInt(a.numero.replace(/\D/g, '')) || 0) - (parseInt(b.numero.replace(/\D/g, '')) || 0);
                     });
 
                     let porteirosHtml = '';
                     items.forEach(p => {
                         porteirosHtml += `
-                            <div class="py-4 border-b border-gray-50 last:border-0">
-                                <div class="flex items-start justify-between gap-2">
+                            <div class="py-3 border-b border-slate-100 last:border-0">
+                                <div class="flex items-start justify-between">
                                     <div>
-                                        <p class="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">N° ${p.numero}</p>
-                                        <p class="font-bold text-gray-800 text-sm">${p.nome_porteiro} ${p.turno ? '<span class="text-[9px] bg-green-100 text-green-600 px-2 py-0.5 rounded-full ml-1 uppercase font-black">' + p.turno + '</span>' : ''}</p>
-                                    </div>
-                                    <div class="w-8 h-8 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
-                                        <i class="fa-solid fa-user-shield text-xs"></i>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">N° ${p.numero}</p>
+                                        <p class="font-semibold text-slate-800 text-sm">${p.nome_porteiro} ${p.turno ? '<span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded ml-1 uppercase font-bold">' + p.turno + '</span>' : ''}</p>
                                     </div>
                                 </div>
                                 ${p.notas_predio ? `
-                                    <div class="mt-2 bg-blue-50/50 p-3 rounded-xl border border-blue-100/50">
-                                        <p class="text-[10px] text-blue-400 font-bold uppercase mb-1"><i class="fa-solid fa-notebook mr-1"></i> Notas do Prédio</p>
-                                        <p class="text-xs text-gray-600 italic leading-relaxed">"${p.notas_predio}"</p>
+                                    <div class="mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                        <p class="text-xs text-slate-600 italic">"${p.notas_predio}"</p>
                                     </div>
                                 ` : ''}
                             </div>
@@ -488,16 +507,16 @@ async def dashboard_page(whatsapp_number: str):
                     });
 
                     streetCard.innerHTML = `
-                        <div class="flex items-center gap-3 mb-6 bg-blue-600 p-4 rounded-2xl text-white shadow-lg shadow-blue-100">
-                            <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                                <i class="fa-solid fa-map-location-dot"></i>
+                        <div class="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100">
+                            <div class="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                <i class="fa-solid fa-map-pin"></i>
                             </div>
                             <div>
-                                <h4 class="font-black text-xs uppercase tracking-tighter">${rua}</h4>
-                                <p class="text-[9px] opacity-70 font-bold uppercase tracking-widest">${items.length} Prédio(s) Mapeado(s)</p>
+                                <h4 class="font-bold text-sm text-slate-800 uppercase tracking-tight">${rua}</h4>
+                                <p class="text-[10px] text-slate-500 font-medium">${items.length} edifício(s)</p>
                             </div>
                         </div>
-                        <div class="space-y-2">
+                        <div class="space-y-1">
                             ${porteirosHtml}
                         </div>
                     `;
@@ -507,7 +526,7 @@ async def dashboard_page(whatsapp_number: str):
 
             async function loadDashboard(analysisId = null) {
                 try {
-                    let url = '/api/dashboard/""" + whatsapp_number + """';
+                    let url = '/api/dashboard/' + whatsapp_number;
                     if (analysisId) url += '?analysis_id=' + analysisId;
                     const response = await fetch(url);
                     const data = await response.json();
@@ -517,19 +536,17 @@ async def dashboard_page(whatsapp_number: str):
                     const c = data.metrics.consolidado;
                     const apps = data.metrics.apps;
 
-                    // Header
-                    document.getElementById('txt-periodo').innerText = 'Relatório de: ' + new Date(data.created_at || new Date()).toLocaleDateString('pt-BR');
+                    document.getElementById('txt-periodo').innerText = 'Relatório processado em: ' + new Date(data.created_at || new Date()).toLocaleDateString('pt-BR');
                     
-                    // Cards
-                    document.getElementById('txt-bruto').innerText = 'R$ ' + c.total_ganhos.toLocaleString('pt-BR', {minimumFractionDigits: 2});
-                    document.getElementById('txt-essencial').innerText = 'R$ ' + (c.gastos_essenciais || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
-                    document.getElementById('txt-nao-essencial').innerText = 'R$ ' + (c.gastos_nao_essenciais || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
-                    document.getElementById('txt-saldo').innerText = 'R$ ' + c.saldo.toLocaleString('pt-BR', {minimumFractionDigits: 2});
-                    document.getElementById('txt-eficiencia').innerText = 'R$ ' + (c.total_ganhos / (c.km_total || 1)).toFixed(2);
+                    const fmt = (val) => (val || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                    document.getElementById('txt-bruto').innerText = 'R$ ' + fmt(c.total_ganhos);
+                    document.getElementById('txt-essencial').innerText = 'R$ ' + fmt(c.gastos_essenciais);
+                    document.getElementById('txt-nao-essencial').innerText = 'R$ ' + fmt(c.gastos_nao_essenciais);
+                    document.getElementById('txt-saldo').innerText = 'R$ ' + fmt(c.saldo);
+                    document.getElementById('txt-eficiencia').innerText = 'R$ ' + (c.total_ganhos / (c.km_total || 1)).toFixed(2) + '/km';
                     document.getElementById('txt-tempo').innerText = (c.total_hours || 0).toFixed(1) + 'h';
                     document.getElementById('txt-insight').innerText = data.insight;
 
-                    // Detalhamento de Apps
                     const listContainer = document.getElementById('list-apps');
                     listContainer.innerHTML = '';
                     const appNames = Object.keys(apps);
@@ -538,13 +555,20 @@ async def dashboard_page(whatsapp_number: str):
                         const app = apps[name];
                         appGanhos.push(app.ganhos);
                         const rkm = (app.ganhos / (app.km || 1)).toFixed(2);
-                        const div = document.createElement('div');
-                        div.className = 'border-l-4 border-green-500 pl-4 py-1';
-                        div.innerHTML = `<div class="flex justify-between font-black text-sm text-gray-800"><span>${name}</span><span class="text-green-600">R$ ${app.ganhos.toFixed(2)}</span></div><div class="text-[10px] text-gray-400 uppercase font-black tracking-tight mt-1">${app.km.toFixed(1)}km • R$ ${rkm}/km • ${app.horas.toFixed(1)}h</div>`;
-                        listContainer.appendChild(div);
+                        listContainer.innerHTML += `
+                            <div class="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100">
+                                <div>
+                                    <p class="font-semibold text-slate-800 text-sm">${name}</p>
+                                    <p class="text-[10px] text-slate-500 font-medium">${app.km.toFixed(1)}km • ${app.horas.toFixed(1)}h</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-bold text-indigo-600 text-sm">R$ ${app.ganhos.toFixed(2)}</p>
+                                    <p class="text-[10px] text-slate-400 font-medium">R$ ${rkm}/km</p>
+                                </div>
+                            </div>
+                        `;
                     });
 
-                    // AGRUPAMENTO MENSAL NA SIDEBAR
                     if (data.history) {
                         const histList = document.getElementById('history-list');
                         histList.innerHTML = '';
@@ -552,43 +576,57 @@ async def dashboard_page(whatsapp_number: str):
                         const grouped = {};
                         data.history.forEach(h => {
                             const date = new Date(h.created_at);
-                            const monthKey = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+                            const monthKey = date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).toUpperCase();
                             if(!grouped[monthKey]) grouped[monthKey] = [];
                             grouped[monthKey].push(h);
                         });
 
                         for(const [month, items] of Object.entries(grouped)) {
-                            const monthWrapper = document.createElement('div');
-                            monthWrapper.className = 'min-w-[150px] md:min-w-0 md:mb-8 flex-shrink-0 snap-start';
-                            monthWrapper.innerHTML = `<h5 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 bg-gray-50 px-2 py-1 rounded-md inline-block border border-gray-100">${month}</h5>`;
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'mb-4';
+                            wrapper.innerHTML = `<p class="text-[10px] font-bold text-slate-400 mb-2 px-1">${month}</p>`;
                             
                             const itemsList = document.createElement('div');
-                            itemsList.className = 'flex flex-col gap-2 md:pl-2 md:border-l-2 md:border-gray-100';
+                            itemsList.className = 'flex flex-col gap-1.5';
                             
                             items.forEach(h => {
                                 const active = analysisId === h.id || (!analysisId && h.id === data.history[0]?.id);
                                 const btn = document.createElement('div');
-                                btn.className = `history-item p-3 rounded-2xl border shadow-sm transition-all text-left cursor-pointer ${active ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-100 text-gray-700'}`;
-                                btn.innerHTML = `<p class="text-[10px] font-black uppercase tracking-tighter">${h.periodo_tipo}</p><p class="text-[9px] ${active ? 'text-green-100' : 'text-gray-400'} font-bold">${new Date(h.created_at).toLocaleDateString('pt-BR')}</p>`;
-                                btn.onclick = () => { loadDashboard(h.id); if(window.innerWidth < 768) window.scrollTo({top: 400, behavior: 'smooth'}); };
+                                btn.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col gap-0.5 ${active ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`;
+                                btn.innerHTML = `
+                                    <span class="text-[10px] font-bold uppercase ${active ? 'text-indigo-600' : 'text-slate-500'}">${h.periodo_tipo}</span>
+                                    <span class="text-xs font-medium text-slate-700">${new Date(h.created_at).toLocaleDateString('pt-BR')}</span>
+                                `;
+                                btn.onclick = () => { loadDashboard(h.id); if(window.innerWidth < 768) window.scrollTo({top: 0, behavior: 'smooth'}); };
                                 itemsList.appendChild(btn);
                             });
                             
-                            monthWrapper.appendChild(itemsList);
-                            histList.appendChild(monthWrapper);
+                            wrapper.appendChild(itemsList);
+                            histList.appendChild(wrapper);
                         }
                     }
 
-                    // Chart
                     if (myChart) myChart.destroy();
                     const ctx = document.getElementById('chartApps').getContext('2d');
                     myChart = new Chart(ctx, { 
                         type: 'bar', 
-                        data: { labels: appNames, datasets: [{ label: 'Bruto', data: appGanhos, backgroundColor: '#128C7E', borderRadius: 12, barThickness: window.innerWidth < 768 ? 20 : 35 }] }, 
+                        data: { 
+                            labels: appNames, 
+                            datasets: [{ 
+                                data: appGanhos, 
+                                backgroundColor: '#4f46e5',
+                                borderRadius: 6,
+                                barThickness: window.innerWidth < 768 ? 24 : 40 
+                            }] 
+                        }, 
                         options: { 
-                            responsive: true, maintainAspectRatio: false,
-                            plugins: { legend: { display: false } }, 
-                            scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6', borderDash: [5, 5] }, ticks: { font: { size: 10, weight: 'bold' } } }, x: { grid: { display: false }, ticks: { font: { size: 10, weight: 'bold' } } } } 
+                            responsive: true, 
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false }, tooltip: { cornerRadius: 8, padding: 12 } }, 
+                            scales: { 
+                                y: { border: {display: false}, grid: { color: '#f1f5f9', drawTicks: false }, ticks: { font: { family: 'Inter', size: 11 }, color: '#64748b' } }, 
+                                x: { border: {display: false}, grid: { display: false }, ticks: { font: { family: 'Inter', size: 11, weight: '500' }, color: '#475569' } } 
+                            } 
                         } 
                     });
                 } catch (e) { console.error(e); }

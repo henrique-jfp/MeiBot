@@ -151,13 +151,25 @@ class AIService:
             return json.loads(response.text)
 
     async def transcribe_audio(self, audio_bytes: bytes):
-        # Gemini ainda é melhor para processamento nativo de áudio multimodal
-        prompt = "Transcreva este áudio de um entregador descrevendo seu dia ou fazendo uma pergunta."
-        response = self.gemini_model.generate_content([
-            prompt,
-            {'mime_type': 'audio/ogg', 'data': audio_bytes}
-        ])
-        return response.text
+        try:
+            # Usando Groq Whisper (Muito mais rápido e econômico para áudio)
+            transcription = self.groq_client.audio.transcriptions.create(
+                file=("audio.ogg", audio_bytes),
+                model="whisper-large-v3-turbo", # Modelo super rápido da Groq
+                prompt="Entregador logístico descrevendo rotas, pacotes, shopee, correios, ganhos, gasolina, gastos e endereços.",
+                response_format="json",
+                language="pt"
+            )
+            return transcription.text
+        except Exception as e:
+            print(f"Groq audio transcription failed: {e}. Falling back to Gemini...")
+            # Fallback para Gemini em caso de limite de cota da Groq
+            prompt = "Transcreva este áudio de um entregador descrevendo seu dia ou fazendo uma pergunta."
+            response = self.gemini_model.generate_content([
+                prompt,
+                {'mime_type': 'audio/ogg', 'data': audio_bytes}
+            ])
+            return response.text
 
     async def generate_daily_insight(self, current_metrics: dict, previous_metrics: dict = None):
         curr = {
