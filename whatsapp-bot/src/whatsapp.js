@@ -172,7 +172,7 @@ async function connectToWhatsApp() {
             processedTexts.delete(firstItem);
         }
 
-        console.log(`[MSG] Iniciando processamento IA: ${remoteJid}`);
+        console.log(`[MSG] Iniciando processamento IA: ${remoteJid} | length: ${text.length} | keys: ${Object.keys(msg.message || {}).join(',')}`);
 
         // --- TRAVA DE LOOP (Detecção de respostas do Bot ou do Próprio Usuário) ---
         const startsWithBotEmoji = /^[✅❌⚠️📊🔄🚀⛽📈🎙️📋🏢╔┌]/.test(text.trim());
@@ -187,6 +187,7 @@ async function connectToWhatsApp() {
                              text.includes('Sistema de rotas');
 
         if (startsWithBotEmoji || isBotMessage || text.length > 500) {
+            console.log(`[DEBUG-UPSERT] Cancelado por Trava de Loop: startsWithBotEmoji=${startsWithBotEmoji}, isBotMessage=${isBotMessage}, length=${text.length}`);
             return;
         }
 
