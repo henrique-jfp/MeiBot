@@ -247,7 +247,7 @@ async def process_interpreted_data(user, interpreted):
     if intencao == "pedir_link_dashboard":
         return f"📊 *Seu Painel de Performance e Mapa de Porteiros*:\n\n🔗 {url_dashboard}"
 
-    return "Não entendi o que você quis dizer."
+    return "Não entendi o que você quis dizer ou faltaram informações. Tente ser mais claro, ou digite 'Ajuda'."
 
 @app.get("/api/dashboard/{whatsapp_number}")
 async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):

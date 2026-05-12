@@ -45,10 +45,10 @@ class AIService:
         Data atual: {today}
         
         Intenções Válidas:
-        - 'iniciar': Quando o entregador quer começar o dia ou a operação.
-        - 'encerrar': Quando o entregador quer fechar o dia ou a operação.
-        - 'registro': Para registrar ganhos, gastos, rotas, pacotes, KM, ou tempos de espera.
-        - 'resumo_diario': Para ver o que foi feito hoje ou em uma data específica.
+        - 'iniciar': Quando o entregador começa o trabalho do dia.
+        - 'encerrar': Quando o entregador termina o dia de trabalho e não está relatando números.
+        - 'registro': Para registrar rotas, ganhos, gastos, pacotes, KM, ou tempos. (MUITO IMPORTANTE: Se o usuário relatar dados do que fez, como "finalizei a rota, 100 pacotes", a intenção é SEMPRE 'registro', mesmo que use a palavra "finalizei". Use 'registro' também para dias anteriores).
+        - 'resumo_diario': Apenas quando o usuário pede ativamente para ver o resumo.
         - 'resumo_semanal': Para ver o resumo dos últimos 7 dias.
         - 'resumo_mensal': Para ver o resumo dos últimos 30 dias.
         - 'pergunta': Quando o entregador faz uma pergunta sobre seus ganhos ou dados históricos.
@@ -67,10 +67,7 @@ class AIService:
         Regras de Extração de Eventos (OBRIGATÓRIO):
         1. SEPARAÇÃO DE EVENTOS: O usuário frequentemente relata rotas e gastos no mesmo texto. Você DEVE extrair CADA EVENTO como um objeto separado na lista 'eventos'. (Ex: Se ele fez Correios e comprou cigarro, gere DOIS eventos, um 'ganho' e um 'gasto').
         2. MÚLTIPLAS OPERAÇÕES: O usuário pode fazer mais de uma operação no dia (Ex: Shopee e depois Correios). Crie eventos separados para cada um.
-        3. CÁLCULO DE VALORES: 
-           - Correios: Se o usuário NÃO informar o ganho explicitamente, calcule (pacotes * 2.00) e KM=20.
-           - Shopee: O valor base da rota é 305.00 e KM=60. Se o usuário relatar um BÔNUS extra, lance os 305.00 em um evento, e crie um SEGUNDO evento de 'ganho' (categoria: 'Bônus') com o valor extra.
-           - NÃO ADIVINHE valores que não seguem essas regras.
+        3. EXTRAÇÃO PURA (SEM MATEMÁTICA): Você é APENAS UM EXTRATOR DE DADOS. NUNCA calcule ganhos ou faça contas. Se o usuário disse "150 pacotes" mas não disse quantos reais ganhou, DEIXE o campo 'valor' como null ou 0. O cálculo será feito pelo backend. Apenas extraia o que foi DITO EXPLICITAMENTE.
         4. GASTOS E DESPESAS IMPLÍCITAS: Textos como "20 reais com cigarro e cocacola" DEVEM ser interpretados como tipo: 'gasto', mesmo sem a palavra "gastei". NUNCA use app "Correios" ou "Shopee" para um evento de gasto. Use app: null para gastos.
         5. CATEGORIAS DE GASTOS: Para tipo: 'gasto', classifique a 'categoria' rigorosamente como uma destas: 'Combustível', 'Alimentação', 'Manutenção', 'Essencial', ou 'Outros'. (Ex: cigarro e cocacola = 'Alimentação').
         6. HORÁRIOS: Identifique "cheguei" (ou tempo de espera no galpão) como `hora_chegada_galpao`, "comecei a rota" como `hora_inicio_rota`, e "finalizei" como `hora_fim_operacao`. O período desde que "chegou" até "começou a rota" é essencial.
