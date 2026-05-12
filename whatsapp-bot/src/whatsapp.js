@@ -19,6 +19,10 @@ routeClaim.startScheduleMonitor();
 const processedMessages = new Set();
 const CACHE_LIMIT = 100;
 
+// Trava absoluta de tempo de Boot. Rejeita QUALQUER MENSAGEM nos primeiros 15s de vida do Bot.
+const BOOT_TIME = Date.now();
+const BOOT_LOCK_WINDOW_MS = 15000;
+
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     
@@ -72,6 +76,20 @@ async function connectToWhatsApp() {
     const TEXT_CACHE_LIMIT = 50;
 
     sock.ev.on('messages.upsert', async (m) => {
+        // --- TRAVA ABSOLUTA DE BOOT ---
+        // Se o bot acabou de ligar (menos de 15 segundos atrás), IGNORA COMPLETAMENTE.
+        // Isso mata pela raiz qualquer tentativa do Baileys de cuspir mensagens pendentes ou offline.
+        if (Date.now() - BOOT_TIME < BOOT_LOCK_WINDOW_MS) {
+            return;
+        }
+
+        // --- FILTRO DE MENSAGENS AO VIVO ---
+        // 'notify' significa que é uma mensagem nova chegando. 
+        // 'append' significa que o Baileys está carregando o histórico do banco local ao reiniciar.
+        if (m.type !== 'notify') {
+            return;
+        }
+
         const msg = m.messages[0];
         if (!msg.message) return;
 
