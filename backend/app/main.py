@@ -443,6 +443,7 @@ async def dashboard_page(whatsapp_number: str):
         <script>
             let myChart = null;
             let dashboardData = null;
+            const WHATSAPP_ID = '""" + whatsapp_number + """';
 
             function showSection(section) {
                 document.getElementById('section-performance').classList.add('hidden');
@@ -484,7 +485,7 @@ async def dashboard_page(whatsapp_number: str):
                     streetCard.className = 'bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit';
                     
                     const items = grouped[rua].sort((a, b) => {
-                        return (parseInt(a.numero.replace(/\D/g, '')) || 0) - (parseInt(b.numero.replace(/\D/g, '')) || 0);
+                        return (parseInt(a.numero.replace(/\\D/g, '')) || 0) - (parseInt(b.numero.replace(/\\D/g, '')) || 0);
                     });
 
                     let porteirosHtml = '';
@@ -526,11 +527,12 @@ async def dashboard_page(whatsapp_number: str):
 
             async function loadDashboard(analysisId = null) {
                 try {
-                    let url = '/api/dashboard/' + whatsapp_number;
+                    let url = '/api/dashboard/' + WHATSAPP_ID;
                     if (analysisId) url += '?analysis_id=' + analysisId;
+                    
                     const response = await fetch(url);
                     const data = await response.json();
-                    if (data.error) return;
+                    if (data.error) throw new Error(data.error);
 
                     dashboardData = data;
                     const c = data.metrics.consolidado;
@@ -629,7 +631,10 @@ async def dashboard_page(whatsapp_number: str):
                             } 
                         } 
                     });
-                } catch (e) { console.error(e); }
+                } catch (e) { 
+                    console.error('Dashboard Error:', e);
+                    document.getElementById('txt-periodo').innerText = 'Erro ao carregar dados. Verifique a conexão.';
+                }
             }
             loadDashboard();
         </script>
