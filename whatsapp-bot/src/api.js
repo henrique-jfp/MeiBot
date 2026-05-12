@@ -14,7 +14,13 @@ async function sendToBackend(payload) {
         const response = await api.post('/webhook', payload);
         return response.data.reply;
     } catch (error) {
-        console.error('Error calling backend:', error.message);
+        if (error.response) {
+            console.error('Backend Error Response:', error.response.status, error.response.data);
+        } else if (error.request) {
+            console.error('Backend No Response (Timeout/Network):', error.message);
+        } else {
+            console.error('API Config Error:', error.message);
+        }
         return '❌ Ops! Tive um problema para processar sua mensagem agora. O backend está rodando?';
     }
 }

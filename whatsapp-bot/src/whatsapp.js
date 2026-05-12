@@ -99,7 +99,14 @@ async function connectToWhatsApp() {
         const myId = sock.user?.id?.split(':')[0];
         const myLid = sock.user?.lid?.split(':')[0];
 
-        console.log(`[DEBUG-UPSERT] Nova mensagem de ${remoteJid} | fromMe: ${fromMe} | myId: ${myId}`);
+        // --- FILTRO DE AUTO-MENSAGEM (Ignora o que não for SelfChat se for fromMe) ---
+        const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
+        
+        if (fromMe && !isSelfChat) {
+            return;
+        }
+
+        console.log(`[DEBUG-UPSERT] Nova mensagem de ${remoteJid} | fromMe: ${fromMe} | isSelfChat: ${isSelfChat}`);
 
         if (!remoteJid || !myId) {
             console.log('[DEBUG-UPSERT] Cancelado: remoteJid ou myId ausentes.');
@@ -132,9 +139,6 @@ async function connectToWhatsApp() {
         }
         
         // --- TRAVA DE SEGURANÇA ESTRITA (SOMENTE Chat Próprio) ---
-        const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
-        console.log(`[DEBUG-UPSERT] isSelfChat: ${isSelfChat} | myId: ${myId} | myLid: ${myLid}`);
-
         if (!isSelfChat) {
             console.log(`[DEBUG-UPSERT] Ignorado: Não é SelfChat.`);
             return;
@@ -172,8 +176,6 @@ async function connectToWhatsApp() {
             processedTexts.delete(firstItem);
         }
 
-        console.log(`[MSG] Iniciando processamento IA: ${remoteJid} | length: ${text.length} | keys: ${Object.keys(msg.message || {}).join(',')}`);
-
         // --- TRAVA DE LOOP (Detecção de respostas do Bot ou do Próprio Usuário) ---
         const startsWithBotEmoji = /^[✅❌⚠️📊🔄🚀⛽📈🎙️📋🏢╔┌]/.test(text.trim());
         const isBotMessage = text.includes('Análise estratégica') || 
@@ -184,27 +186,26 @@ async function connectToWhatsApp() {
                              text.includes('RESUMO SEMANAL') ||
                              text.includes('CONSOLIDADO DA OPERAÇÃO') ||
                              text.includes('Rota confirmada:') ||
-                             text.includes('Sistema de rotas');
+                             text.includes('Sistema de rotas') ||
+                             text.includes('O backend está rodando?');
 
-        if (startsWithBotEmoji || isBotMessage || text.length > 500) {
+        if (startsWithBotEmoji || isBotMessage || text.length > 800) {
             console.log(`[DEBUG-UPSERT] Cancelado por Trava de Loop: startsWithBotEmoji=${startsWithBotEmoji}, isBotMessage=${isBotMessage}, length=${text.length}`);
             return;
         }
+
+        console.log(`[MSG] Iniciando processamento IA: ${remoteJid} | content: "${text.substring(0, 30)}..."`);
 
         const from = remoteJid.split('@')[0];
         let payload = { from, type: 'text', content: '' };
 
         try {
             // Captura de conteúdo
-            const messageContent = msg.message.conversation || 
-                                 msg.message.extendedTextMessage?.text || 
+            const messageContent = text || 
                                  msg.message.imageMessage?.caption ||
                                  msg.message.videoMessage?.caption ||
-                                 msg.message.ephemeralMessage?.message?.extendedTextMessage?.text ||
-                                 msg.message.ephemeralMessage?.message?.conversation ||
                                  msg.message.ephemeralMessage?.message?.imageMessage?.caption ||
                                  msg.message.viewOnceMessageV2?.message?.imageMessage?.caption ||
-                                 msg.message.viewOnceMessageV2?.message?.conversation ||
                                  "";
 
             if (messageContent) {
@@ -223,7 +224,7 @@ async function connectToWhatsApp() {
             }
 
             if (payload.content) {
-                console.log(`[PROCESS] Enviando para o backend: "${payload.content.substring(0, 20)}..."`);
+                console.log(`[PROCESS] Enviando para o backend: "${payload.type}" | "${payload.content.substring(0, 20)}..."`);
                 const reply = await sendToBackend(payload);
                 
                 if (reply) {
@@ -232,7 +233,10 @@ async function connectToWhatsApp() {
                         console.log('[WARN] Erro detectado (Cota ou Interno). Bot ficará silencioso conforme configurado.');
                         return;
                     }
-                    await sock.sendMessage(remoteJid, { text: reply });
+                    const sentMsg = await sock.sendMessage(remoteJid, { text: reply });
+                    if (sentMsg?.key?.id) {
+                        processedMessages.add(sentMsg.key.id);
+                    }
                 }
             }
         } catch (err) {
