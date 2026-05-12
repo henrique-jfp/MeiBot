@@ -125,13 +125,15 @@ async def process_interpreted_data(user, interpreted):
 
         if active_op:
             h_chegada = ev.get("hora_chegada_galpao")
+            h_saida_galpao = ev.get("hora_saida_galpao")
             h_inicio_rota = ev.get("hora_inicio_rota")
-            if h_chegada and h_inicio_rota:
+            h_fim_espera = h_saida_galpao or h_inicio_rota
+            if h_chegada and h_fim_espera:
                 wait_event = {
                     "tipo": "registro",
                     "sub_tipo": "espera_galpao",
                     "hora_inicio": h_chegada,
-                    "hora_fim": h_inicio_rota,
+                    "hora_fim": h_fim_espera,
                     "descricao": "Espera no galpao"
                 }
                 if data_ref:
