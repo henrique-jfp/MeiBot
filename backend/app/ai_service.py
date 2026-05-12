@@ -64,14 +64,19 @@ class AIService:
         - Se o usuário pedir o link do mapa ou dashboard, use intencao: 'pedir_link_dashboard'.
         - Se a mensagem contiver um endereço (rua e número) e um nome de pessoa associado a "porteiro", use SEMPRE 'cadastrar_porteiro'.
 
-        Regras de Negócio Pessoais (OBRIGATÓRIO):
-        - Se o app for 'Shopee': Valor bruto = 305.00, KM = 60. 
-        - Se o app for 'Correios': KM = 20. Valor bruto = pacotes * 2.00.
-        
+        Regras de Extração de Eventos (OBRIGATÓRIO):
+        1. SEPARAÇÃO DE EVENTOS: O usuário frequentemente relata rotas e gastos no mesmo texto. Você DEVE extrair CADA EVENTO como um objeto separado na lista 'eventos'. (Ex: Se ele fez Correios e comprou cigarro, gere DOIS eventos, um 'ganho' e um 'gasto').
+        2. MÚLTIPLAS OPERAÇÕES: O usuário pode fazer mais de uma operação no dia (Ex: Shopee e depois Correios). Crie eventos separados para cada um.
+        3. CÁLCULO DE VALORES: 
+           - Correios: Se o usuário NÃO informar o ganho explicitamente, calcule (pacotes * 2.00) e KM=20.
+           - Shopee: O valor base da rota é 305.00 e KM=60. Se o usuário relatar um BÔNUS extra, lance os 305.00 em um evento, e crie um SEGUNDO evento de 'ganho' (categoria: 'Bônus') com o valor extra.
+           - NÃO ADIVINHE valores que não seguem essas regras.
+        4. GASTOS E DESPESAS IMPLÍCITAS: Textos como "20 reais com cigarro e cocacola" DEVEM ser interpretados como tipo: 'gasto', mesmo sem a palavra "gastei". NUNCA use app "Correios" ou "Shopee" para um evento de gasto. Use app: null para gastos.
+        5. CATEGORIAS DE GASTOS: Para tipo: 'gasto', classifique a 'categoria' rigorosamente como uma destas: 'Combustível', 'Alimentação', 'Manutenção', 'Essencial', ou 'Outros'. (Ex: cigarro e cocacola = 'Alimentação').
+        6. HORÁRIOS: Identifique "cheguei" (ou tempo de espera no galpão) como `hora_chegada_galpao`, "comecei a rota" como `hora_inicio_rota`, e "finalizei" como `hora_fim_operacao`. O período desde que "chegou" até "começou a rota" é essencial.
+
         Nomes de APP padronizados (use EXATAMENTE estes):
         - 'Shopee', 'Correios', 'Mercado Livre', 'iFood', 'Uber', 'Loggi', 'Lalamove'.
-        - Para gastos (tipo: 'gasto'), use: 'Combustível', 'Manutenção', 'Alimentação', 'Outros'. 
-        - NUNCA use 'Correios' ou 'Shopee' para um evento do tipo 'gasto' (como gasolina ou comida).
 
         Campos do JSON:
         - intencao: Uma das intenções acima.
