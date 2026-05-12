@@ -324,7 +324,7 @@ class LogicService:
         km_total = c.get("km_total", 0) or 0
         total_hours = c.get("total_hours", 0) or 0
         ganho_hora = c.get("ganho_por_hora", 0) or 0
-        eficiencia = (c.get("saldo", 0) or 0) / km_total if km_total else 0
+        eficiencia = (c.get("total_ganhos", 0) or 0) / km_total if km_total else 0
 
         msg = "╔════════════════════════════╗\n"
         msg += f" {title}\n"

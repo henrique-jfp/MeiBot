@@ -286,6 +286,7 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
                 "user": user, 
                 "metrics": analysis["metrics"], 
                 "insight": analysis["insight"], 
+                "is_live": False,
                 "created_at": analysis["created_at"],
                 "history": history,
                 "porteiros": porteiros
@@ -311,11 +312,11 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
             .execute().data
 
         metrics_live = LogicService.calculate_metrics_grouped(ev_live, op_live)
-        latest = history[0]
         return {
             "user": user,
             "metrics": metrics_live,
-            "insight": latest["insight"],
+            "insight": "",
+            "is_live": True,
             "history": history,
             "created_at": datetime.datetime.now().isoformat(),
             "porteiros": porteiros
@@ -344,7 +345,8 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
     return {
         "user": user,
         "metrics": metrics_week,
-        "insight": "Seu primeiro relatório automatizado será gerado neste sábado às 21h. Aguarde!",
+        "insight": "",
+        "is_live": True,
         "history": [],
         "porteiros": porteiros
     }
@@ -686,8 +688,15 @@ async def dashboard_page(whatsapp_number: str):
                     document.getElementById('txt-tempo-avg').innerText = daysWorked ? `Média: ${avgHours.toFixed(1)}h/dia (${daysWorked} dias)` : 'Média: --';
                     document.getElementById('txt-tempo-espera-avg').innerText = daysWorked ? `Média: ${avgWait.toFixed(1)}h/dia (${daysWorked} dias)` : 'Média: --';
                     
-                    // Renderiza Markdown no Insight
-                    document.getElementById('txt-insight').innerHTML = marked.parse(data.insight || "");
+                    // Renderiza Markdown no Insight (apenas relatorios salvos)
+                    const analysisSection = document.getElementById('txt-insight').closest('div.bg-teal-50');
+                    if (data.is_live) {
+                        analysisSection.classList.add('hidden');
+                        document.getElementById('txt-insight').innerHTML = '';
+                    } else {
+                        analysisSection.classList.remove('hidden');
+                        document.getElementById('txt-insight').innerHTML = marked.parse(data.insight || "");
+                    }
 
                     const listContainer = document.getElementById('list-apps');
                     listContainer.innerHTML = '';
@@ -722,6 +731,21 @@ async def dashboard_page(whatsapp_number: str):
                             if(!grouped[monthKey]) grouped[monthKey] = [];
                             grouped[monthKey].push(h);
                         });
+
+                        const liveWrapper = document.createElement('div');
+                        liveWrapper.className = 'mb-4';
+                        liveWrapper.innerHTML = `<p class="text-[10px] font-bold text-slate-400 mb-2 px-1">AO VIVO</p>`;
+
+                        const liveItem = document.createElement('div');
+                        const liveActive = !analysisId;
+                        liveItem.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col gap-0.5 ${liveActive ? 'bg-teal-50 border-teal-200' : 'bg-white border-slate-200 hover:border-teal-300'}`;
+                        liveItem.innerHTML = `
+                            <span class="text-[10px] font-bold uppercase ${liveActive ? 'text-teal-600' : 'text-slate-500'}">MES ATUAL</span>
+                            <span class="text-xs font-medium text-slate-700">Dashboard ao vivo</span>
+                        `;
+                        liveItem.onclick = () => { loadDashboard(); if(window.innerWidth < 768) window.scrollTo({top: 0, behavior: 'smooth'}); };
+                        liveWrapper.appendChild(liveItem);
+                        histList.appendChild(liveWrapper);
 
                         for(const [month, items] of Object.entries(grouped)) {
                             const wrapper = document.createElement('div');
