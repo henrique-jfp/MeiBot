@@ -272,13 +272,16 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
             }
 
     if history:
+        ev_live = db.get_weekly_summary(user_id)
+        op_live = db.get_operations_for_period(user_id, 7)
+        metrics_live = LogicService.calculate_metrics_grouped(ev_live, op_live)
         latest = history[0]
         return {
             "user": user,
-            "metrics": latest["metrics"],
+            "metrics": metrics_live,
             "insight": latest["insight"],
             "history": history,
-            "created_at": latest["created_at"],
+            "created_at": datetime.datetime.now().isoformat(),
             "porteiros": porteiros
         }
     
