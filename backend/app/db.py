@@ -1,6 +1,7 @@
 import os
 import re
 import unicodedata
+import datetime
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -128,11 +129,25 @@ class DBService:
             print(f"Error updating app params: {e}")
             return None
 
+    @staticmethod
+    def _normalize_event_time(value, data_ref: str = None):
+        if not value:
+            return None
+        text = str(value).strip()
+        if "T" in text:
+            return text
+        if re.match(r"^\d{1,2}:\d{2}(:\d{2})?$", text):
+            date_str = data_ref or datetime.date.today().isoformat()
+            time_str = text if len(text) == 8 else f"{text}:00"
+            return f"{date_str}T{time_str}"
+        return text
+
     def add_event(self, user_id: str, operacao_id: str, event_data: dict):
         if not user_id or not operacao_id: 
             print(f"DEBUG DB: Falha ao salvar evento. User: {user_id}, Op: {operacao_id}")
             return None
         try:
+            data_ref = event_data.get("data_referencia")
             # Busca app_id se o nome for fornecido
             app_id = None
             if event_data.get("app"):
@@ -155,13 +170,19 @@ class DBService:
                 "pacotes": int(event_data.get("pacotes") or 0),
                 "descricao": event_data.get("descricao") or event_data.get("pergunta"),
                 "categoria": event_data.get("categoria"),
-                "hora_inicio": event_data.get("hora_inicio") or event_data.get("hora_inicio_rota"),
-                "hora_fim": event_data.get("hora_fim") or event_data.get("hora_fim_operacao")
+                "hora_inicio": self._normalize_event_time(
+                    event_data.get("hora_inicio") or event_data.get("hora_inicio_rota"),
+                    data_ref
+                ),
+                "hora_fim": self._normalize_event_time(
+                    event_data.get("hora_fim") or event_data.get("hora_fim_operacao"),
+                    data_ref
+                )
             }
             
             # Se tiver data específica no evento
-            if event_data.get("data_referencia"):
-                data["timestamp"] = f"{event_data.get('data_referencia')}T12:00:00Z"
+            if data_ref:
+                data["timestamp"] = f"{data_ref}T12:00:00Z"
 
             print(f"DEBUG DB: Inserindo evento: {data['tipo']} - R$ {data['valor']}")
             response = self.supabase.table("eventos").insert(data).execute()
