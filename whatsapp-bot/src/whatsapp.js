@@ -20,7 +20,7 @@ const processedMessages = new Set();
 const CACHE_LIMIT = 100;
 
 // Trava absoluta de tempo de Boot. Rejeita QUALQUER MENSAGEM nos primeiros 15s de vida do Bot.
-const BOOT_TIME = Date.now();
+let BOOT_TIME = Date.now();
 const BOOT_LOCK_WINDOW_MS = 15000;
 
 async function connectToWhatsApp() {
@@ -68,6 +68,7 @@ async function connectToWhatsApp() {
         } else if (connection === 'open') {
             console.log('✅ MeiBot conectado com sucesso!');
             console.log('Usuário:', sock.user);
+            BOOT_TIME = Date.now(); // Reseta a trava no momento exato em que a conexão é estabelecida
         }
     });
 
@@ -117,7 +118,7 @@ async function connectToWhatsApp() {
         }
 
         // --- FILTRO DE MENSAGENS ANTIGAS (EVITA LOOPS DE HISTÓRICO) ---
-        const messageTimestamp = msg.messageTimestamp;
+        const messageTimestamp = Number(msg.messageTimestamp || 0);
         const now = Math.floor(Date.now() / 1000);
         if (messageTimestamp && (now - messageTimestamp) > 60) {
             console.log(`[DEBUG-UPSERT] Ignorado: Mensagem antiga (${now - messageTimestamp}s).`);
