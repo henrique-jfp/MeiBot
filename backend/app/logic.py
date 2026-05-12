@@ -38,7 +38,7 @@ class LogicService:
         # Bloco de Ganhos
         for g in ganhos:
             app = g.get("app", "Rota")
-            valor = g.get("valor", 0)
+            valor = float(g.get("valor") or 0)
             res += f"💰 *{app}* — R$ {valor:.2f}\n"
         
         # Bloco de Despesas
@@ -52,7 +52,8 @@ class LogicService:
                 elif "aliment" in desc.lower() or "comid" in desc.lower() or "coca" in desc.lower(): icon = "🍔"
                 elif "ajudante" in desc.lower(): icon = "👤"
                 
-                res += f"• {icon} {desc}: R$ {gast.get('valor', 0):.2f}\n"
+                valor_gasto = float(gast.get('valor') or 0)
+                res += f"• {icon} {desc}: R$ {valor_gasto:.2f}\n"
         
         # Bloco de Entrega (pega dados do primeiro ganho que tiver pacotes/km)
         for g in ganhos:

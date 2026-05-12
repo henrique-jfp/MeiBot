@@ -133,14 +133,25 @@ class DBService:
     def _normalize_event_time(value, data_ref: str = None):
         if not value:
             return None
-        text = str(value).strip()
-        if "T" in text:
-            return text
-        if re.match(r"^\d{1,2}:\d{2}(:\d{2})?$", text):
+        text = str(value).strip().lower()
+        if "t" in text:
+            return text.upper()
+        
+        import re
+        import datetime
+        match = re.search(r"(\d{1,2})[\:\,hH]?(\d{2})?", text)
+        if match:
+            hh = int(match.group(1))
+            mm = int(match.group(2)) if match.group(2) else 0
+            
+            if "tarde" in text or "noite" in text or "pm" in text:
+                if hh < 12: hh += 12
+                
+            time_str = f"{hh:02d}:{mm:02d}:00"
             date_str = data_ref or datetime.date.today().isoformat()
-            time_str = text if len(text) == 8 else f"{text}:00"
             return f"{date_str}T{time_str}"
-        return text
+            
+        return None
 
     def add_event(self, user_id: str, operacao_id: str, event_data: dict):
         if not user_id or not operacao_id: 
