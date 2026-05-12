@@ -14,6 +14,12 @@ app = FastAPI()
 db = DBService()
 ai = AIService()
 
+user_locks = {}
+def get_user_lock(user_id):
+    if user_id not in user_locks:
+        user_locks[user_id] = asyncio.Lock()
+    return user_locks[user_id]
+
 def override_data_ref_from_text(content: str, data_ref: str):
     text = (content or "").lower()
     today = datetime.date.today()
@@ -36,21 +42,23 @@ async def handle_webhook(request: Request):
         if not user: user = db.create_user(whatsapp_number)
         if not user.get("id"): return {"reply": "❌ Erro de banco de dados."}
 
-        response_text = ""
-        if message_type == "text":
-            interpreted = await ai.interpret_message(content)
-            interpreted["data_referencia"] = override_data_ref_from_text(content, interpreted.get("data_referencia"))
-            response_text = await process_interpreted_data(user, interpreted)
-        elif message_type == "image":
-            image_bytes = base64.b64decode(content)
-            interpreted = await ai.process_image(image_bytes, "image/jpeg")
-            response_text = await process_interpreted_data(user, interpreted)
-        elif message_type == "audio":
-            audio_bytes = base64.b64decode(content)
-            transcription = await ai.transcribe_audio(audio_bytes)
-            interpreted = await ai.interpret_message(transcription)
-            response_text = await process_interpreted_data(user, interpreted)
-            response_text = f"🎙️ *Transcrição:* \"{transcription}\"\n\n{response_text}"
+        lock = get_user_lock(user["id"])
+        async with lock:
+            response_text = ""
+            if message_type == "text":
+                interpreted = await ai.interpret_message(content)
+                interpreted["data_referencia"] = override_data_ref_from_text(content, interpreted.get("data_referencia"))
+                response_text = await process_interpreted_data(user, interpreted)
+            elif message_type == "image":
+                image_bytes = base64.b64decode(content)
+                interpreted = await ai.process_image(image_bytes, "image/jpeg")
+                response_text = await process_interpreted_data(user, interpreted)
+            elif message_type == "audio":
+                audio_bytes = base64.b64decode(content)
+                transcription = await ai.transcribe_audio(audio_bytes)
+                interpreted = await ai.interpret_message(transcription)
+                response_text = await process_interpreted_data(user, interpreted)
+                response_text = f"🎙️ *Transcrição:* \"{transcription}\"\n\n{response_text}"
 
         return {"reply": response_text}
     except Exception as e:
@@ -92,10 +100,16 @@ async def process_interpreted_data(user, interpreted):
             ev["app"] = "Correios"
             ev["km"] = 20.0
             ev["tipo"] = "ganho"
-            if not ev.get("valor") or ev.get("valor") == 0:
-                ev["valor"] = (float(ev.get("pacotes") or 0) * 2.0) + float(ev.get("valor_extra") or 0)
+            
+            v = float(ev.get("valor") or 0)
+            p = float(ev.get("pacotes") or 0)
+            
+            # Se o valor extraído pela IA for zero, ou se ela se confundir e jogar o número
+            # de pacotes dentro do campo "valor", nós forçamos a regra matemática correta.
+            if v == 0 or v == p:
+                ev["valor"] = (p * 2.0) + float(ev.get("valor_extra") or 0)
             else:
-                ev["valor"] = float(ev["valor"]) + float(ev.get("valor_extra") or 0)
+                ev["valor"] = v + float(ev.get("valor_extra") or 0)
         
         else:
             # Regras via Banco de Dados
