@@ -90,6 +90,12 @@ async def process_interpreted_data(user, interpreted):
         # Normalização e Regras de Negócio Hardcoded
         app_name_raw = str(ev.get("app") or "").lower()
         
+        # Se a IA esquecer de colocar o nome do app, mas tiver pacotes, assumimos Correios por padrão (maior uso de pacotes)
+        if not app_name_raw or app_name_raw == "none":
+            if float(ev.get("pacotes") or 0) > 0:
+                app_name_raw = "correios"
+                ev["app"] = "Correios"
+        
         if "shopee" in app_name_raw:
             ev["app"] = "Shopee"
             ev["valor"] = 305.0 + float(ev.get("valor_extra") or 0)
