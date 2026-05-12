@@ -48,9 +48,10 @@ class LogicService:
                 desc = gast.get("app") or gast.get("descricao") or "Gasto"
                 # Icones amigáveis para gastos comuns
                 icon = "🧾"
-                if "combust" in desc.lower() or "gas" in desc.lower(): icon = "⛽"
-                elif "aliment" in desc.lower() or "comid" in desc.lower() or "coca" in desc.lower(): icon = "🍔"
-                elif "ajudante" in desc.lower(): icon = "👤"
+                desc_lower = desc.lower()
+                if "combust" in desc_lower or "gasolin" in desc_lower or "etanol" in desc_lower or "gnv" in desc_lower or "diesel" in desc_lower: icon = "⛽"
+                elif "aliment" in desc_lower or "comid" in desc_lower or "coca" in desc_lower or "cigarro" in desc_lower or "lanche" in desc_lower: icon = "🍔"
+                elif "ajudante" in desc_lower: icon = "👤"
                 
                 valor_gasto = float(gast.get('valor') or 0)
                 res += f"• {icon} {desc}: R$ {valor_gasto:.2f}\n"
@@ -205,17 +206,20 @@ class LogicService:
                 
                 consolidado["total_gastos"] += val
                 
-                # Classificação ULTRA-RIGOROSA por categoria e descrição
+                # Classificação ULTRA-RIGOROSA: Essencial é APENAS combustível/manutenção do carro.
                 cat_clean = categoria.lower().strip()
                 desc_clean = str(ev.get("descricao") or "").lower().strip()
                 
-                # Lista de palavras que definem um gasto como NÃO ESSENCIAL
-                non_essential_keywords = ["não essencial", "nao essencial", "cigarro", "coca", "lanche", "comida", "hamburguer", "podrão", "doce", "bebida"]
+                essential_keywords = ["combust", "gasolin", "etanol", "diesel", "gnv", "óleo", "oleo", "pneu", "manutenç", "manutenc", "pedágio", "pedagio", "ajudante"]
+                non_essential_keywords = ["não essencial", "nao essencial", "cigarro", "coca", "lanche", "comida", "hamburguer", "podrão", "doce", "bebida", "água", "agua", "refrigerante"]
                 
                 is_non_essential = any(k in cat_clean for k in non_essential_keywords) or \
                                    any(k in desc_clean for k in non_essential_keywords)
                 
-                if is_non_essential:
+                is_essential = any(k in cat_clean for k in essential_keywords) or \
+                               any(k in desc_clean for k in essential_keywords)
+                
+                if is_non_essential or not is_essential:
                     consolidado["gastos_nao_essenciais"] += val
                 else:
                     consolidado["gastos_essenciais"] += val

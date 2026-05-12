@@ -69,7 +69,7 @@ class AIService:
         2. MÚLTIPLAS OPERAÇÕES: O usuário pode fazer mais de uma operação no dia (Ex: Shopee e depois Correios). Crie eventos separados para cada um.
         3. EXTRAÇÃO PURA (SEM MATEMÁTICA): Você é APENAS UM EXTRATOR DE DADOS. NUNCA calcule ganhos ou faça contas. Se o usuário disse "150 pacotes" mas não disse quantos reais ganhou, DEIXE o campo 'valor' como null ou 0. O cálculo será feito pelo backend. Apenas extraia o que foi DITO EXPLICITAMENTE.
         4. GASTOS E DESPESAS IMPLÍCITAS: Textos como "20 reais com cigarro e cocacola" DEVEM ser interpretados como tipo: 'gasto', mesmo sem a palavra "gastei". NUNCA use app "Correios" ou "Shopee" para um evento de gasto. Use app: null para gastos.
-        5. CATEGORIAS DE GASTOS: Para tipo: 'gasto', classifique a 'categoria' rigorosamente como uma destas: 'Combustível', 'Alimentação', 'Manutenção', 'Essencial', ou 'Outros'. (Ex: cigarro e cocacola = 'Alimentação').
+        5. CATEGORIAS DE GASTOS: Para tipo: 'gasto', classifique a 'categoria' rigorosamente como uma destas: 'Combustível', 'Alimentação', 'Manutenção', 'Essencial', ou 'Outros'. (Ex: cigarro e cocacola = 'Outros', apenas combustível e manutenção são 'Essencial').
         6. HORÁRIOS: Identifique "cheguei" (ou tempo de espera no galpão) como `hora_chegada_galpao`, "saí do galpão" como `hora_saida_galpao`, "comecei a rota" como `hora_inicio_rota`, e "finalizei" como `hora_fim_operacao`. O período desde que "chegou" até "começou a rota" (ou "saí") é essencial.
         7. DATAS (CUIDADO): O entregador escreve datas no formato BRASILEIRO DD/MM/YYYY. Por exemplo, 04/05/2026 é 4 de Maio (e não 5 de Abril). O campo `data_referencia` deve ser RIGOROSAMENTE retornado em ISO: YYYY-MM-DD.
 
