@@ -132,7 +132,9 @@ class LogicService:
             "avg_wait_per_day": 0,
             "ganho_por_hora": 0,
             "custo_por_km": 0,
-            "total_operacoes": len(operations) if operations else 0
+            "total_operacoes": len(operations) if operations else 0,
+            "margem_liquida": 0,
+            "avg_faturamento_per_day": 0
         }
 
         def parse_date(value):
@@ -284,6 +286,12 @@ class LogicService:
         
         if consolidado["km_total"] > 0:
             consolidado["custo_por_km"] = consolidado["total_gastos"] / consolidado["km_total"]
+
+        if consolidado["total_ganhos"] > 0:
+            consolidado["margem_liquida"] = (consolidado["saldo"] / consolidado["total_ganhos"]) * 100
+
+        if consolidado["days_worked"] > 0:
+            consolidado["avg_faturamento_per_day"] = consolidado["total_ganhos"] / consolidado["days_worked"]
 
         return {
             "consolidado": consolidado,

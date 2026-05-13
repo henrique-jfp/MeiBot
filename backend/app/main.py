@@ -439,96 +439,126 @@ async def dashboard_page(whatsapp_number: str):
 
             <!-- SECTION: PERFORMANCE -->
             <div id="section-performance" class="space-y-6">
-                <!-- Cards Financeiros -->
-                <div class="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 xl:grid-cols-7 md:gap-4">
-                    <div class="card min-w-[170px] p-4 md:p-5">
+                <!-- Main Metrics Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="card p-5 border-l-4 border-l-slate-400">
                         <div class="flex justify-between items-start mb-2">
-                            <p class="text-slate-500 text-xs font-semibold uppercase">Faturamento</p>
-                            <i class="fa-solid fa-arrow-trend-up text-slate-300"></i>
+                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Faturamento Bruto</p>
+                            <div class="w-7 h-7 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">
+                                <i class="fa-solid fa-money-bill-wave text-xs"></i>
+                            </div>
                         </div>
-                        <p id="txt-bruto" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
-                    </div>
-                    
-                    <div class="card min-w-[170px] p-4 md:p-5">
-                        <div class="flex justify-between items-start mb-2">
-                            <p class="text-slate-500 text-xs font-semibold uppercase">Essenciais</p>
-                            <i class="fa-solid fa-gas-pump text-slate-300"></i>
-                        </div>
-                        <p id="txt-essencial" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
-                    </div>
-                    
-                    <div class="card min-w-[170px] p-4 md:p-5">
-                        <div class="flex justify-between items-start mb-2">
-                            <p class="text-slate-500 text-xs font-semibold uppercase">Não Essenciais</p>
-                            <i class="fa-solid fa-burger text-slate-300"></i>
-                        </div>
-                        <p id="txt-nao-essencial" class="text-xl md:text-2xl font-bold text-amber-600">---</p>
-                    </div>
-                    
-                    <div class="card min-w-[170px] p-4 md:p-5 border-t-4 border-t-teal-600">
-                        <div class="flex justify-between items-start mb-2">
-                            <p class="text-teal-700 text-xs font-bold uppercase">Saldo Líquido</p>
-                            <i class="fa-solid fa-wallet text-teal-300"></i>
-                        </div>
-                        <p id="txt-saldo" class="text-xl md:text-2xl font-bold text-teal-700">---</p>
-                    </div>
-                    
-                    <div class="card min-w-[170px] p-4 md:p-5">
-                        <div class="flex justify-between items-start mb-2">
-                            <p class="text-slate-500 text-xs font-semibold uppercase">Eficiência</p>
-                            <i class="fa-solid fa-gauge-high text-slate-300"></i>
-                        </div>
-                        <p id="txt-eficiencia" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
+                        <p id="txt-bruto" class="text-2xl font-bold text-slate-800">R$ 0,00</p>
+                        <p id="txt-faturamento-avg" class="text-[10px] text-slate-400 mt-1 font-medium">Média: R$ 0,00/dia</p>
                     </div>
 
-                    <div class="card min-w-[170px] p-4 md:p-5">
+                    <div class="card p-5 border-l-4 border-l-teal-500">
                         <div class="flex justify-between items-start mb-2">
-                            <p class="text-slate-500 text-xs font-semibold uppercase">Tempo Total</p>
-                            <i class="fa-solid fa-clock text-slate-300"></i>
+                            <p class="text-teal-600 text-[10px] font-bold uppercase tracking-wider">Saldo Líquido</p>
+                            <div class="w-7 h-7 bg-teal-50 rounded-lg flex items-center justify-center text-teal-500">
+                                <i class="fa-solid fa-wallet text-xs"></i>
+                            </div>
                         </div>
-                        <p id="txt-tempo" class="text-xl md:text-2xl font-bold text-slate-800">---</p>
-                        <p id="txt-tempo-avg" class="text-xs text-slate-500 mt-1">---</p>
+                        <p id="txt-saldo" class="text-2xl font-bold text-teal-700">R$ 0,00</p>
+                        <p id="txt-margem" class="text-[10px] text-teal-500 mt-1 font-bold italic">Margem: 0%</p>
                     </div>
 
-                    <div class="card min-w-[170px] p-4 md:p-5 border-t-4 border-t-amber-500">
+                    <div class="card p-5 border-l-4 border-l-indigo-500">
                         <div class="flex justify-between items-start mb-2">
-                            <p class="text-amber-700 text-xs font-bold uppercase">Espera no Galpão</p>
-                            <i class="fa-solid fa-warehouse text-amber-300"></i>
+                            <p class="text-indigo-600 text-[10px] font-bold uppercase tracking-wider">Eficiência Logística</p>
+                            <div class="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-500">
+                                <i class="fa-solid fa-gauge-high text-xs"></i>
+                            </div>
                         </div>
-                        <p id="txt-tempo-espera" class="text-xl md:text-2xl font-bold text-amber-700">---</p>
-                        <p id="txt-tempo-espera-avg" class="text-xs text-slate-500 mt-1">---</p>
+                        <p id="txt-eficiencia" class="text-2xl font-bold text-indigo-700">R$ 0,00/km</p>
+                        <p id="txt-ganho-hora" class="text-[10px] text-indigo-500 mt-1 font-medium">R$ 0,00/hora</p>
+                    </div>
+
+                    <div class="card p-5 border-l-4 border-l-amber-500">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-amber-600 text-[10px] font-bold uppercase tracking-wider">Tempo em Operação</p>
+                            <div class="w-7 h-7 bg-amber-50 rounded-lg flex items-center justify-center text-amber-500">
+                                <i class="fa-solid fa-clock text-xs"></i>
+                            </div>
+                        </div>
+                        <p id="txt-tempo" class="text-2xl font-bold text-amber-700">0h</p>
+                        <p id="txt-tempo-avg" class="text-[10px] text-amber-500 mt-1 font-medium">Média: 0h/dia</p>
                     </div>
                 </div>
 
-                <!-- Gráficos e Apps -->
+                <!-- Secondary Metrics & Charts Row -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Main Bar Chart (Stacked) -->
                     <div class="lg:col-span-2 card p-6">
-                        <h3 id="chart-title" class="font-semibold text-slate-800 text-sm mb-6 flex items-center gap-2">
-                            <i class="fa-solid fa-chart-bar text-teal-600"></i> Distribuição de Ganhos
-                        </h3>
-                        <div class="relative w-full h-[250px]">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 id="chart-title" class="font-bold text-slate-800 text-sm flex items-center gap-2 uppercase tracking-tight">
+                                <i class="fa-solid fa-chart-column text-teal-600"></i> Performance por Período
+                            </h3>
+                            <div id="chart-legend" class="flex gap-3"></div>
+                        </div>
+                        <div class="relative w-full h-[300px]">
                             <canvas id="chartApps"></canvas>
                         </div>
                     </div>
-                    
-                    <div class="card p-6">
-                        <h3 class="font-semibold text-slate-800 text-sm mb-6 flex items-center gap-2">
-                            <i class="fa-solid fa-layer-group text-teal-600"></i> Detalhamento por App
+
+                    <!-- Expense Distribution (Pie/Doughnut) -->
+                    <div class="card p-6 flex flex-col">
+                        <h3 class="font-bold text-slate-800 text-sm mb-6 flex items-center gap-2 uppercase tracking-tight">
+                            <i class="fa-solid fa-chart-pie text-rose-500"></i> Distribuição de Gastos
                         </h3>
-                        <div id="list-apps" class="space-y-4"></div>
+                        <div class="relative w-full h-[200px] mb-6">
+                            <canvas id="chartGastos"></canvas>
+                        </div>
+                        <div class="space-y-3 mt-auto">
+                            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                <span class="text-[10px] font-bold text-slate-500 uppercase">Essenciais</span>
+                                <span id="txt-essencial" class="text-xs font-bold text-slate-700">R$ 0,00</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                <span class="text-[10px] font-bold text-slate-500 uppercase">Não Essenciais</span>
+                                <span id="txt-nao-essencial" class="text-xs font-bold text-rose-600">R$ 0,00</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Visão do Analista (Clean) -->
-                <div class="bg-teal-50 p-6 md:p-8 rounded-xl border border-teal-100 shadow-sm relative overflow-hidden">
-                    <div class="absolute -right-4 -top-4 text-teal-100 opacity-50">
-                        <i class="fa-solid fa-quote-right text-9xl"></i>
-                    </div>
-                    <div class="relative z-10">
-                        <h3 class="text-teal-800 font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2"> 
-                            <i class="fa-solid fa-robot"></i> Análise Estratégica
+                <!-- App Details & Waiting Time -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 card p-6">
+                        <h3 class="font-bold text-slate-800 text-sm mb-6 flex items-center gap-2 uppercase tracking-tight">
+                            <i class="fa-solid fa-layer-group text-teal-600"></i> Detalhamento por App
                         </h3>
-                        <div id="txt-insight" class="text-slate-700 leading-relaxed whitespace-pre-line text-sm md:text-base font-medium"></div>
+                        <div id="list-apps" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    </div>
+
+                    <div class="card p-6 bg-amber-50/30 border-amber-100">
+                        <h3 class="font-bold text-amber-800 text-sm mb-4 flex items-center gap-2 uppercase tracking-tight">
+                            <i class="fa-solid fa-warehouse"></i> Eficiência de Galpão
+                        </h3>
+                        <div class="flex items-end gap-2 mb-2">
+                            <p id="txt-tempo-espera" class="text-3xl font-bold text-amber-700">0h</p>
+                            <p class="text-xs text-amber-500 font-bold mb-1 uppercase">Total Espera</p>
+                        </div>
+                        <p id="txt-tempo-espera-avg" class="text-xs text-amber-600 font-medium mb-4 italic">Média: 0h/dia</p>
+                        <div class="w-full bg-amber-100 rounded-full h-2 overflow-hidden">
+                            <div id="bar-espera" class="bg-amber-500 h-full transition-all" style="width: 0%"></div>
+                        </div>
+                        <p class="text-[10px] text-amber-500 mt-2 font-bold uppercase tracking-wider">Perda de produtividade por espera</p>
+                    </div>
+                </div>
+
+                <!-- Strategic Analysis Section -->
+                <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all hover:border-teal-200">
+                    <div class="bg-teal-600 px-6 py-4 flex items-center justify-between">
+                        <h3 class="text-white font-bold text-sm uppercase tracking-wider flex items-center gap-2"> 
+                            <i class="fa-solid fa-robot"></i> Inteligência Artificial MeiBot
+                        </h3>
+                        <div class="px-2 py-1 bg-teal-500/30 rounded-md text-[10px] text-white font-bold border border-white/20 uppercase">
+                            Analista Estratégico
+                        </div>
+                    </div>
+                    <div class="p-6 md:p-8 bg-slate-50/50">
+                        <div id="txt-insight" class="prose prose-sm max-w-none text-slate-700 leading-relaxed font-medium"></div>
                     </div>
                 </div>
             </div>
@@ -766,6 +796,8 @@ async def dashboard_page(whatsapp_number: str):
                 });
             }
 
+            let chartGastos = null;
+
             async function loadDashboard(analysisId = null) {
                 try {
                     let url = '/api/dashboard/' + WHATSAPP_ID;
@@ -782,51 +814,81 @@ async def dashboard_page(whatsapp_number: str):
                     document.getElementById('txt-periodo').innerText = 'Relatório processado em: ' + new Date(data.created_at || new Date()).toLocaleDateString('pt-BR');
                     
                     const fmt = (val) => (val || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                    
+                    // Main Cards
                     document.getElementById('txt-bruto').innerText = 'R$ ' + fmt(c.total_ganhos);
-                    document.getElementById('txt-essencial').innerText = 'R$ ' + fmt(c.gastos_essenciais);
-                    document.getElementById('txt-nao-essencial').innerText = 'R$ ' + fmt(c.gastos_nao_essenciais);
                     document.getElementById('txt-saldo').innerText = 'R$ ' + fmt(c.saldo);
                     document.getElementById('txt-eficiencia').innerText = 'R$ ' + (c.total_ganhos / (c.km_total || 1)).toFixed(2) + '/km';
                     document.getElementById('txt-tempo').innerText = (c.total_hours || 0).toFixed(1) + 'h';
-                    document.getElementById('txt-tempo-espera').innerText = (c.tempo_espera_galpao || 0).toFixed(1) + 'h';
+                    
+                    // Sub-metrics
+                    document.getElementById('txt-faturamento-avg').innerText = 'Média: R$ ' + fmt(c.avg_faturamento_per_day) + '/dia';
+                    document.getElementById('txt-margem').innerText = 'Margem: ' + (c.margem_liquida || 0).toFixed(1) + '%';
+                    document.getElementById('txt-ganho-hora').innerText = 'R$ ' + fmt(c.ganho_por_hora) + '/hora';
+                    
                     const daysWorked = c.days_worked || 0;
                     const avgHours = (c.avg_hours_per_day || (daysWorked ? (c.total_hours || 0) / daysWorked : 0));
+                    document.getElementById('txt-tempo-avg').innerText = `Média: ${avgHours.toFixed(1)}h/dia (${daysWorked} dias)`;
+
+                    // Expense breakdown
+                    document.getElementById('txt-essencial').innerText = 'R$ ' + fmt(c.gastos_essenciais);
+                    document.getElementById('txt-nao-essencial').innerText = 'R$ ' + fmt(c.gastos_nao_essenciais);
+
+                    // Wait Time
+                    document.getElementById('txt-tempo-espera').innerText = (c.tempo_espera_galpao || 0).toFixed(1) + 'h';
                     const avgWait = (c.avg_wait_per_day || (daysWorked ? (c.tempo_espera_galpao || 0) / daysWorked : 0));
-                    document.getElementById('txt-tempo-avg').innerText = daysWorked ? `Média: ${avgHours.toFixed(1)}h/dia (${daysWorked} dias)` : 'Média: --';
-                    document.getElementById('txt-tempo-espera-avg').innerText = daysWorked ? `Média: ${avgWait.toFixed(1)}h/dia (${daysWorked} dias)` : 'Média: --';
+                    document.getElementById('txt-tempo-espera-avg').innerText = `Média: ${avgWait.toFixed(1)}h/dia`;
                     
-                    // Renderiza Markdown no Insight (apenas relatorios salvos)
-                    const analysisSection = document.getElementById('txt-insight').closest('div.bg-teal-50');
+                    const waitPercent = Math.min((c.tempo_espera_galpao / (c.total_hours || 1)) * 100, 100);
+                    document.getElementById('bar-espera').style.width = waitPercent + '%';
+                    
+                    // Analysis Insight
+                    const analysisSection = document.getElementById('txt-insight').closest('div.bg-white');
                     if (data.is_live) {
                         analysisSection.classList.add('hidden');
-                        document.getElementById('txt-insight').innerHTML = '';
                     } else {
                         analysisSection.classList.remove('hidden');
                         document.getElementById('txt-insight').innerHTML = marked.parse(data.insight || "");
                     }
 
+                    // App List Details
                     const listContainer = document.getElementById('list-apps');
                     listContainer.innerHTML = '';
-                    const appNames = Object.keys(apps).filter(name => name !== 'Outros');
-                    const appGanhos = [];
-                    appNames.forEach(name => {
+                    const sortedAppNames = Object.keys(apps).filter(name => name !== 'Outros').sort((a,b) => apps[b].ganhos - apps[a].ganhos);
+                    
+                    sortedAppNames.forEach(name => {
                         const app = apps[name];
-                        appGanhos.push(app.ganhos);
                         const rkm = (app.ganhos / (app.km || 1)).toFixed(2);
+                        const rhora = (app.ganhos / (app.horas || 1)).toFixed(2);
+                        const percent = (app.ganhos / (c.total_ganhos || 1)) * 100;
+                        
                         listContainer.innerHTML += `
-                            <div class="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100">
-                                <div>
-                                    <p class="font-semibold text-slate-800 text-sm">${name}</p>
-                                    <p class="text-[10px] text-slate-500 font-medium">${app.km.toFixed(1)}km • ${app.horas.toFixed(1)}h</p>
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100 group hover:border-teal-200 transition-all">
+                                <div class="flex justify-between items-start mb-3">
+                                    <div>
+                                        <p class="font-bold text-slate-800 text-sm uppercase tracking-tight">${name}</p>
+                                        <p class="text-[10px] text-slate-500 font-bold uppercase">${app.km.toFixed(1)}km • ${app.horas.toFixed(1)}h</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="font-bold text-teal-700 text-sm">R$ ${fmt(app.ganhos)}</p>
+                                        <p class="text-[10px] text-teal-500 font-bold uppercase">${percent.toFixed(0)}% do total</p>
+                                    </div>
                                 </div>
-                                <div class="text-right">
-                                    <p class="font-bold text-teal-700 text-sm">R$ ${app.ganhos.toFixed(2)}</p>
-                                    <p class="text-[10px] text-slate-400 font-medium">R$ ${rkm}/km</p>
+                                <div class="grid grid-cols-2 gap-2 mt-4">
+                                    <div class="bg-white p-2 rounded-lg border border-slate-100 text-center">
+                                        <p class="text-[9px] font-bold text-slate-400 uppercase">Eficiência/KM</p>
+                                        <p class="text-xs font-bold text-slate-700">R$ ${rkm}</p>
+                                    </div>
+                                    <div class="bg-white p-2 rounded-lg border border-slate-100 text-center">
+                                        <p class="text-[9px] font-bold text-slate-400 uppercase">Eficiência/Hora</p>
+                                        <p class="text-xs font-bold text-slate-700">R$ ${rhora}</p>
+                                    </div>
                                 </div>
                             </div>
                         `;
                     });
 
+                    // History Sidebar
                     if (data.history) {
                         const histList = document.getElementById('history-list');
                         histList.innerHTML = '';
@@ -848,7 +910,7 @@ async def dashboard_page(whatsapp_number: str):
                         liveItem.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col gap-0.5 ${liveActive ? 'bg-teal-50 border-teal-200' : 'bg-white border-slate-200 hover:border-teal-300'}`;
                         liveItem.innerHTML = `
                             <span class="text-[10px] font-bold uppercase ${liveActive ? 'text-teal-600' : 'text-slate-500'}">MES ATUAL</span>
-                            <span class="text-xs font-medium text-slate-700">Dashboard ao vivo</span>
+                            <span class="text-xs font-medium text-slate-700">Dashboard em tempo real</span>
                         `;
                         liveItem.onclick = () => { loadDashboard(); if(window.innerWidth < 768) window.scrollTo({top: 0, behavior: 'smooth'}); };
                         liveWrapper.appendChild(liveItem);
@@ -863,7 +925,7 @@ async def dashboard_page(whatsapp_number: str):
                             itemsList.className = 'flex flex-col gap-1.5';
                             
                             items.forEach(h => {
-                                const active = analysisId === h.id || (!analysisId && h.id === data.history[0]?.id);
+                                const active = analysisId === h.id;
                                 const btn = document.createElement('div');
                                 btn.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col gap-0.5 ${active ? 'bg-teal-50 border-teal-200' : 'bg-white border-slate-200 hover:border-teal-300'}`;
                                 btn.innerHTML = `
@@ -879,15 +941,56 @@ async def dashboard_page(whatsapp_number: str):
                         }
                     }
 
+                    // --- CHARTS LOGIC ---
+                    
+                    // 1. Expense Doughnut Chart
+                    if (chartGastos) chartGastos.destroy();
+                    const ctxGastos = document.getElementById('chartGastos').getContext('2d');
+                    chartGastos = new Chart(ctxGastos, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Essenciais', 'Não Essenciais'],
+                            datasets: [{
+                                data: [c.gastos_essenciais, c.gastos_nao_essenciais],
+                                backgroundColor: ['#0f766e', '#e11d48'],
+                                borderWeight: 0,
+                                cutout: '75%'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: { cornerRadius: 8, padding: 10 }
+                            }
+                        }
+                    });
+
+                    // 2. Performance Stacked Bar Chart
                     const chartTitle = document.getElementById('chart-title');
-                    let chartLabels = appNames;
-                    let chartValues = appGanhos;
-                    let chartMode = 'apps';
+                    const chartLegend = document.getElementById('chart-legend');
+                    chartLegend.innerHTML = '';
+                    
+                    let chartDatasets = [];
+                    let chartLabels = [];
+                    let isStacked = false;
+
+                    const colors = {
+                        'Correios': '#0f766e',
+                        'Shopee': '#f97316',
+                        'Loggi': '#6366f1',
+                        'Mercado Livre': '#facc15',
+                        'Outros': '#94a3b8'
+                    };
+
+                    const getAppColor = (name) => colors[name] || '#64748b';
 
                     if (data.history && data.history.length) {
                         const refDate = new Date(data.created_at || new Date());
                         const refMonth = refDate.getMonth();
                         const refYear = refDate.getFullYear();
+                        
                         const weekly = data.history
                             .filter(h => h.periodo_tipo === 'semanal')
                             .filter(h => {
@@ -897,15 +1000,51 @@ async def dashboard_page(whatsapp_number: str):
                             .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
                         if (weekly.length) {
-                            chartMode = 'weekly';
-                            chartLabels = weekly.map(h => new Date(h.created_at).toLocaleDateString('pt-BR'));
-                            chartValues = weekly.map(h => (h.metrics?.consolidado?.total_ganhos || 0));
+                            chartTitle.innerHTML = '<i class="fa-solid fa-chart-column text-teal-600"></i> Performance Semanal (Mês)';
+                            chartLabels = weekly.map(h => new Date(h.created_at).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}));
+                            isStacked = true;
+                            
+                            // Coleta todos os apps presentes no histórico
+                            const allApps = new Set();
+                            weekly.forEach(h => {
+                                if (h.metrics && h.metrics.apps) {
+                                    Object.keys(h.metrics.apps).forEach(a => allApps.add(a));
+                                }
+                            });
+
+                            allApps.forEach(appName => {
+                                const dataPoints = weekly.map(h => (h.metrics?.apps?.[appName]?.ganhos || 0));
+                                if (dataPoints.some(v => v > 0)) {
+                                    chartDatasets.push({
+                                        label: appName,
+                                        data: dataPoints,
+                                        backgroundColor: getAppColor(appName),
+                                        borderRadius: 4,
+                                        stack: 'performance'
+                                    });
+                                    
+                                    // Add to legend
+                                    chartLegend.innerHTML += `
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="w-2.5 h-2.5 rounded-full" style="background-color: ${getAppColor(appName)}"></div>
+                                            <span class="text-[10px] font-bold text-slate-500 uppercase">${appName}</span>
+                                        </div>
+                                    `;
+                                }
+                            });
                         }
                     }
 
-                    chartTitle.innerHTML = chartMode === 'weekly'
-                        ? '<i class="fa-solid fa-chart-bar text-teal-600"></i> Resumo Semanal do Mes'
-                        : '<i class="fa-solid fa-chart-bar text-teal-600"></i> Distribuicao de Ganhos';
+                    // Se não houver histórico semanal ou for o dashboard live sem dados de semanas
+                    if (chartDatasets.length === 0) {
+                        chartTitle.innerHTML = '<i class="fa-solid fa-chart-column text-teal-600"></i> Distribuição por App (Atual)';
+                        chartLabels = sortedAppNames;
+                        chartDatasets = [{
+                            data: sortedAppNames.map(name => apps[name].ganhos),
+                            backgroundColor: sortedAppNames.map(name => getAppColor(name)),
+                            borderRadius: 6
+                        }];
+                    }
 
                     if (myChart) myChart.destroy();
                     const ctx = document.getElementById('chartApps').getContext('2d');
@@ -913,20 +1052,41 @@ async def dashboard_page(whatsapp_number: str):
                         type: 'bar', 
                         data: { 
                             labels: chartLabels, 
-                            datasets: [{ 
-                                data: chartValues, 
-                                backgroundColor: '#0f766e',
-                                borderRadius: 6,
-                                barThickness: window.innerWidth < 768 ? 24 : 40 
-                            }] 
+                            datasets: chartDatasets 
                         }, 
                         options: { 
                             responsive: true, 
                             maintainAspectRatio: false,
-                            plugins: { legend: { display: false }, tooltip: { cornerRadius: 8, padding: 12 } }, 
+                            plugins: { 
+                                legend: { display: false }, 
+                                tooltip: { 
+                                    cornerRadius: 8, 
+                                    padding: 12,
+                                    callbacks: {
+                                        label: (context) => {
+                                            let label = context.dataset.label || '';
+                                            if (label) label += ': ';
+                                            if (context.parsed.y !== null) {
+                                                label += 'R$ ' + context.parsed.y.toLocaleString('pt-BR');
+                                            }
+                                            return label;
+                                        }
+                                    }
+                                } 
+                            }, 
                             scales: { 
-                                y: { border: {display: false}, grid: { color: '#f1f5f9', drawTicks: false }, ticks: { font: { family: 'Space Grotesk', size: 11 }, color: '#64748b' } }, 
-                                x: { border: {display: false}, grid: { display: false }, ticks: { font: { family: 'Space Grotesk', size: 11, weight: '500' }, color: '#475569' } } 
+                                y: { 
+                                    stacked: isStacked,
+                                    border: {display: false}, 
+                                    grid: { color: '#f1f5f9', drawTicks: false }, 
+                                    ticks: { font: { family: 'Space Grotesk', size: 10 }, color: '#64748b' } 
+                                }, 
+                                x: { 
+                                    stacked: isStacked,
+                                    border: {display: false}, 
+                                    grid: { display: false }, 
+                                    ticks: { font: { family: 'Space Grotesk', size: 10, weight: '700' }, color: '#475569' } 
+                                } 
                             } 
                         } 
                     });
