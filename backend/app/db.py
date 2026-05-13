@@ -312,14 +312,31 @@ class DBService:
         if not text:
             return "Sem Rua"
 
+        # Remove números perdidos no final do nome da rua
+        text = re.sub(r"\s+\d+$", "", text)
+
         text = re.sub(r"\b(r|r\.)\b", "Rua", text, flags=re.IGNORECASE)
         text = re.sub(r"\b(av|av\.|avenida)\b", "Avenida", text, flags=re.IGNORECASE)
         text = re.sub(r"\b(trav|trav\.|travessa)\b", "Travessa", text, flags=re.IGNORECASE)
         text = re.sub(r"\s+", " ", text).strip()
 
         text_upper = text.upper()
-        if "PAISANDU" in text_upper or "PAISSANDU" in text_upper:
-            return "Paissandu"
+        
+        # Normalização agressiva para ruas conhecidas com muitos erros
+        if any(x in text_upper for x in ["PAISANDU", "PAISSANDU", "PAYSANDU", "BAISSANDU", "PAISSÃO"]):
+            return "Rua Paissandu"
+        
+        if any(x in text_upper for x in ["VERGUEIRO", "BERGUEIRO"]):
+            return "Rua Senador Vergueiro"
+            
+        if "BARATA" in text_upper and "RIBEIRO" in text_upper:
+            return "Rua Barata Ribeiro"
+            
+        if "SANTA" in text_upper and "CLARA" in text_upper:
+            return "Rua Santa Clara"
+            
+        if "COPACABANA" in text_upper and any(x in text_upper for x in ["AV", "AVENIDA"]):
+            return "Avenida Nossa Sra. de Copacabana"
 
         return cls._title_keep_small_words(text)
 

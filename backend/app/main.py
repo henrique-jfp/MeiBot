@@ -602,12 +602,40 @@ async def dashboard_page(whatsapp_number: str):
                 
                 // Utilitários de normalização
                 const normalizeStreetLabel = (value) => {
-                    const text = (value || '').trim().replace(/\s+/g, ' ');
+                    let text = (value || '').trim().replace(/\s+/g, ' ');
                     if (!text) return 'Sem Rua';
+                    
+                    // Remove números perdidos no final do nome da rua (ex: Senador Vergueiro 35 -> Senador Vergueiro)
+                    text = text.replace(/\s+\d+$/, '');
+
                     const upper = text.toUpperCase();
-                    if (upper.includes('PAISANDU') || upper.includes('PAISSANDU')) return 'Paissandu';
+                    
+                    // Normalização agressiva para ruas conhecidas com muitos erros
+                    if (upper.includes('PAISANDU') || upper.includes('PAISSANDU') || upper.includes('PAYSANDU') || upper.includes('BAISSANDU') || upper.includes('PAISSÃO')) {
+                        return 'Rua Paissandu';
+                    }
+                    if (upper.includes('VERGUEIRO') || upper.includes('BERGUEIRO')) {
+                        return 'Rua Senador Vergueiro';
+                    }
+                    if (upper.includes('BARATA') && upper.includes('RIBEIRO')) {
+                        return 'Rua Barata Ribeiro';
+                    }
+                    if (upper.includes('SANTA') && upper.includes('CLARA')) {
+                        return 'Rua Santa Clara';
+                    }
+                    if (upper.includes('COPACABANA') && (upper.includes('AV') || upper.includes('AVENIDA'))) {
+                        return 'Avenida Nossa Sra. de Copacabana';
+                    }
+
+                    // Padronização genérica
                     const smallWords = ['de', 'da', 'do', 'das', 'dos', 'e'];
-                    return text.toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()).split(' ').map(word => smallWords.includes(word.toLowerCase()) ? word.toLowerCase() : word).join(' ');
+                    return text.toLowerCase()
+                        .replace(/\b(r|r\.|rua)\b/gi, 'Rua')
+                        .replace(/\b(av|av\.|avenida)\b/gi, 'Avenida')
+                        .replace(/\b\w/g, (m) => m.toUpperCase())
+                        .split(' ')
+                        .map(word => smallWords.includes(word.toLowerCase()) ? word.toLowerCase() : word)
+                        .join(' ');
                 };
 
                 // Filtragem
