@@ -1,4 +1,5 @@
 import datetime
+from collections import defaultdict
 
 class LogicService:
     @staticmethod
@@ -168,6 +169,9 @@ class LogicService:
             except Exception:
                 return 0
 
+        # Para cálculo de horas sem duplicidade por sobreposição
+        intervals_per_day = defaultdict(list)
+
         for ev in events:
             # Pega o valor de forma ultra-robusta
             try:
@@ -234,28 +238,56 @@ class LogicService:
             consolidado["km_total"] += km_val
             apps_data[app_name]["km"] += km_val
 
-            # Cálculo de horas por evento (suporte a ISO timestamp do banco)
+            # Cálculo de horas para o consolidado (evita sobreposição)
+            # Apenas tipos que representam "trabalho" ou "espera" ativa
+            is_work_event = tipo in ["ganho", "rota", "corrida", "faturamento"] or sub_tipo == "espera_galpao"
+            
             h_ini = ev.get("hora_inicio")
             h_fim = ev.get("hora_fim")
-            if h_ini and h_fim:
+            if h_ini and h_fim and is_work_event:
                 try:
-                    # Tenta ISO format (banco de dados)
-                    if "T" in str(h_ini):
-                        t1 = datetime.datetime.fromisoformat(str(h_ini).replace('Z', '+00:00'))
-                        t2 = datetime.datetime.fromisoformat(str(h_fim).replace('Z', '+00:00'))
-                        diff = (t2 - t1).total_seconds()
-                        if diff > 0:
-                            apps_data[app_name]["horas"] += diff / 3600
-                    # Tenta formato HH:MM (IA / legado)
-                    elif ":" in str(h_ini) and len(str(h_ini)) <= 5:
-                        fmt = "%H:%M"
-                        t1 = datetime.datetime.strptime(str(h_ini), fmt)
-                        t2 = datetime.datetime.strptime(str(h_fim), fmt)
-                        diff = (t2 - t1).total_seconds()
-                        if diff < 0: diff += 24 * 3600
-                        apps_data[app_name]["horas"] += diff / 3600
+                    ev_date = parse_date(ev.get("timestamp")) or parse_date(h_ini)
+                    if ev_date:
+                        t1, t2 = None, None
+                        if "T" in str(h_ini):
+                            t1 = datetime.datetime.fromisoformat(str(h_ini).replace('Z', '+00:00'))
+                            t2 = datetime.datetime.fromisoformat(str(h_fim).replace('Z', '+00:00'))
+                        else:
+                            fmt = "%H:%M"
+                            # Para HH:MM, usamos a data do evento para criar um datetime real
+                            d1 = datetime.datetime.strptime(str(h_ini), fmt).time()
+                            d2 = datetime.datetime.strptime(str(h_fim), fmt).time()
+                            t1 = datetime.datetime.combine(ev_date, d1)
+                            t2 = datetime.datetime.combine(ev_date, d2)
+                            if t2 < t1: t2 += datetime.timedelta(days=1)
+                        
+                        if t1 and t2:
+                            intervals_per_day[ev_date].append((t1, t2))
+                            # Também adiciona ao app_data (ainda pode ter sobreposição aqui, mas é por app)
+                            apps_data[app_name]["horas"] += (t2 - t1).total_seconds() / 3600
                 except Exception as e:
-                    print(f"Erro ao calcular horas do evento: {e}")
+                    print(f"Erro ao processar intervalo do evento: {e}")
+
+        # Consolida horas totais usando união de intervalos por dia
+        total_unique_hours = 0
+        for day, intervals in intervals_per_day.items():
+            if not intervals: continue
+            # Ordena por início
+            intervals.sort()
+            # Merge intervals
+            merged = []
+            if intervals:
+                curr_start, curr_end = intervals[0]
+                for next_start, next_end in intervals[1:]:
+                    if next_start <= curr_end:
+                        curr_end = max(curr_end, next_end)
+                    else:
+                        merged.append((curr_start, curr_end))
+                        curr_start, curr_end = next_start, next_end
+                merged.append((curr_start, curr_end))
+            
+            day_hours = sum(((end - start).total_seconds() / 3600) for start, end in merged)
+            total_unique_hours += day_hours
 
         days_set = set()
         if operations:
@@ -264,17 +296,16 @@ class LogicService:
                 if op_date:
                     days_set.add(op_date)
         else:
+            for day in intervals_per_day:
+                days_set.add(day)
             for ev in events:
                 ev_date = parse_date(ev.get("timestamp")) or parse_date(ev.get("hora_inicio"))
                 if ev_date:
                     days_set.add(ev_date)
         consolidado["days_worked"] = len(days_set)
 
-        # Cálculo de Horas Totais (Soma das rotas individuais para ignorar repouso)
-        total_worked_hours = 0
-        for app_name in apps_data:
-            total_worked_hours += apps_data[app_name].get("horas", 0)
-        consolidado["total_hours"] = total_worked_hours
+        # Cálculo de Horas Totais (Usa o valor unificado sem sobreposição)
+        consolidado["total_hours"] = total_unique_hours
         
         consolidado["saldo"] = consolidado["total_ganhos"] - consolidado["total_gastos"]
         if consolidado.get("total_hours", 0) > 0:
