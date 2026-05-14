@@ -69,6 +69,7 @@ async def process_interpreted_data(user, interpreted):
     intencao = interpreted.get("intencao")
     user_id = user["id"]
     data_ref = interpreted.get("data_referencia")
+    if data_ref == "null": data_ref = None
     eventos_brutos = interpreted.get("eventos", [])
     whatsapp = user["whatsapp_number"]
     

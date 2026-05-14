@@ -19,9 +19,9 @@ routeClaim.startScheduleMonitor();
 const processedMessages = new Set();
 const CACHE_LIMIT = 100;
 
-// Trava absoluta de tempo de Boot. Rejeita QUALQUER MENSAGEM nos primeiros 15s de vida do Bot.
+// Trava absoluta de tempo de Boot. Rejeita QUALQUER MENSAGEM nos primeiros 60s de vida do Bot.
 let BOOT_TIME = Date.now();
-const BOOT_LOCK_WINDOW_MS = 15000;
+const BOOT_LOCK_WINDOW_MS = 60000;
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
