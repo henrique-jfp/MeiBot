@@ -196,7 +196,12 @@ async function connectToWhatsApp() {
 
         console.log(`[MSG] Iniciando processamento IA: ${remoteJid} | content: "${text.substring(0, 30)}..."`);
 
-        const from = remoteJid.split('@')[0];
+        let from = remoteJid.split('@')[0].split(':')[0];
+        // Se for SelfChat, força o uso do ID real do bot (telefone) para evitar duplicidade com LID
+        if (isSelfChat && myId) {
+            from = myId;
+        }
+
         let payload = { from, type: 'text', content: '' };
 
         try {
