@@ -232,8 +232,15 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     }
     if (messageId && groupState.processedMessageIds.has(messageId)) return true;
     if (groupState.lastClaimId) {
-        console.log(`[DEBUG-ROUTE] Ignorado: Já existe um claim pendente neste grupo. Grupo: ${groupName}`);
-        return true;
+        const now = Date.now();
+        if (now - groupState.lastClaimAt > 5 * 60 * 1000) {
+            console.log(`[DEBUG-ROUTE] Claim travado expirado (>5 min). Destravando grupo: ${groupName}`);
+            groupState.lastClaimId = null;
+            groupState.candidates = [];
+        } else {
+            console.log(`[DEBUG-ROUTE] Ignorado: Já existe um claim pendente neste grupo. Grupo: ${groupName}`);
+            return true;
+        }
     }
     if (groupState.inFlight) return true;
     
