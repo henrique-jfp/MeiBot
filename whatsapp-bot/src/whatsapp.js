@@ -201,6 +201,9 @@ async function connectToWhatsApp() {
         if (isSelfChat) {
             if (myId && myId.startsWith('55')) {
                 from = myId;
+            } else if (from.startsWith('47')) {
+                // Fallback hardcoded para garantir a estabilidade do painel
+                from = '5521985287511';
             }
         }
 
