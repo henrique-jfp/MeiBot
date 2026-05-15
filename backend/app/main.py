@@ -313,9 +313,32 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
             .execute().data
 
         metrics_live = LogicService.calculate_metrics_grouped(ev_live, op_live)
+
+        # NOVO CÓDIGO: Calcular performance diária
+        daily_performance = {}
+        for ev in ev_live:
+            tipo = ev.get("tipo", "").lower()
+            if tipo in ["ganho", "rota", "corrida", "faturamento"]:
+                try:
+                    # Extrai a data do timestamp
+                    event_date = datetime.datetime.fromisoformat(ev["timestamp"]).strftime('%Y-%m-%d')
+                    valor = float(ev.get("valor", 0))
+                    
+                    # Agrupa os ganhos por dia
+                    if event_date not in daily_performance:
+                        daily_performance[event_date] = 0
+                    daily_performance[event_date] += valor
+                except:
+                    continue # Ignora eventos com timestamp mal formatado
+
+        # Transforma o dicionário em uma lista de objetos para o frontend
+        daily_performance_list = [{"date": d, "ganho": g} for d, g in daily_performance.items()]
+        daily_performance_list.sort(key=lambda x: x['date'])
+
         return {
             "user": user,
             "metrics": metrics_live,
+            "daily_performance": daily_performance_list, # <-- NOVO CAMPO
             "insight": "",
             "is_live": True,
             "history": history,

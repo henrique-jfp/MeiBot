@@ -196,16 +196,7 @@ async function connectToWhatsApp() {
 
         console.log(`[MSG] Iniciando processamento IA: ${remoteJid} | content: "${text.substring(0, 30)}..."`);
 
-        let from = remoteJid.split('@')[0].split(':')[0];
-        // Se for SelfChat, garante que usamos o telefone real e não um LID (que costuma começar com 47)
-        if (isSelfChat) {
-            if (myId && myId.startsWith('55')) {
-                from = myId;
-            } else if (from.startsWith('47')) {
-                // Fallback hardcoded para garantir a estabilidade do painel
-                from = '5521985287511';
-            }
-        }
+        let from = '5521985287511'; // FIXO: Garante que o usuário correto seja sempre usado.
 
         let payload = { from, type: 'text', content: '' };
 
