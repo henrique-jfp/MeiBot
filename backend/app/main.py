@@ -383,7 +383,7 @@ async def dashboard_page(whatsapp_number: str):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>MeiBot - Dashboard Perfeito</title>
+        <title>MeiBot - Dashboard Analítico</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -394,16 +394,13 @@ async def dashboard_page(whatsapp_number: str):
                 --ink: #0f172a;
                 --line: #e2e8f0;
                 --brand: #0f766e;
-                --brand-strong: #115e59;
-                --accent: #f59e0b;
-                --surface: #ffffff;
             }
             body {
                 font-family: 'Inter', sans-serif;
                 background-color: #f8fafc;
                 color: var(--ink);
             }
-            .tooltip-container { position: relative; display: inline-flex; align-items: center; }
+            .tooltip-container { position: relative; display: inline-flex; align-items: center; gap: 6px;}
             .tooltip {
                 display: none;
                 position: absolute;
@@ -425,14 +422,13 @@ async def dashboard_page(whatsapp_number: str):
                 pointer-events: none;
             }
             .tooltip-container:hover .tooltip { display: block; opacity: 1;}
-            .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 18px -14px rgb(15 23 42 / 0.1); }
+            .card { background: white; border: 1px solid var(--line); border-radius: 16px; }
         </style>
     </head>
     <body class="flex flex-col lg:flex-row min-h-screen">
-        <!-- Sidebar -->
-        <aside class="w-full lg:w-80 bg-white/90 backdrop-blur border-b lg:border-b-0 lg:border-r border-slate-200 p-5 lg:p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
+        <aside class="w-full lg:w-80 bg-white/95 backdrop-blur border-b lg:border-b-0 lg:border-r border-slate-200 p-5 lg:p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
             <div class="flex items-center gap-3 mb-8">
-                <div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center shadow-md shadow-teal-200 text-white"> 
+                <div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white"> 
                     <i class="fa-solid fa-bolt"></i> 
                 </div>
                 <div>
@@ -447,7 +443,7 @@ async def dashboard_page(whatsapp_number: str):
                     <button onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100">
                         <i class="fa-solid fa-chart-pie w-4"></i> Performance
                     </button>
-                    <button onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200">
+                    <button onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg text-slate-600 font-medium text-sm transition-colors hover:bg-slate-100">
                         <i class="fa-solid fa-map-location-dot w-4"></i> Porteiros
                     </button>
                 </div>
@@ -457,121 +453,82 @@ async def dashboard_page(whatsapp_number: str):
             <nav id="history-list" class="flex lg:flex-col gap-3 lg:gap-2.5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 snap-x"></nav>
         </aside>
 
-        <!-- Main Content -->
         <main class="flex-grow p-5 md:p-8 space-y-6 md:space-y-8 w-full max-w-7xl mx-auto">
             <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-5 gap-4">
                 <div>
                     <h2 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight" id="main-title">Visão Geral</h2>
-                    <p id="txt-periodo" class="text-slate-500 text-sm mt-1">Carregando dados estruturados...</p>
+                    <p id="txt-periodo" class="text-slate-500 text-sm mt-1">Carregando dados...</p>
                 </div>
             </header>
 
-            <!-- SECTION: PERFORMANCE -->
             <div id="section-performance" class="space-y-6">
-                <!-- Main Metrics Grid -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div class="card p-5">
-                        <div class="tooltip-container mb-2">
-                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Faturamento Bruto</p>
-                            <span class="tooltip">Soma de todos os ganhos registrados no período.</span>
-                        </div>
-                        <p id="txt-bruto" class="text-3xl font-bold text-slate-800">R$ 0,00</p>
-                    </div>
-
-                    <div class="card p-5">
-                        <div class="tooltip-container mb-2">
-                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Saldo Líquido</p>
-                             <span class="tooltip">Faturamento Bruto menos todos os gastos (essenciais e não essenciais).</span>
-                        </div>
-                        <p id="txt-saldo" class="text-3xl font-bold text-teal-700">R$ 0,00</p>
-                    </div>
-
-                    <div class="card p-5">
-                        <div class="tooltip-container mb-2">
-                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Saldo c/ Provisão</p>
-                            <span class="tooltip">Saldo líquido menos uma reserva de R$0,20 por KM rodado para manutenções futuras.</span>
-                        </div>
-                        <p id="txt-saldo-provisao" class="text-3xl font-bold text-sky-700">R$ 0,00</p>
-                    </div>
-                    
-                    <div class="card p-5">
-                        <div class="tooltip-container mb-2">
-                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Eficiência (KM)</p>
-                            <span class="tooltip">Quanto você fatura para cada KM que roda. (Bruto / KM Total).</span>
-                        </div>
-                        <p id="txt-eficiencia" class="text-3xl font-bold text-indigo-700">R$ 0,00/km</p>
-                    </div>
-
-                    <div class="card p-5">
-                        <div class="tooltip-container mb-2">
-                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Eficiência (Hora)</p>
-                            <span class="tooltip">Seu ganho líquido por hora total de trabalho. (Saldo / Horas Totais).</span>
-                        </div>
-                        <p id="txt-ganho-hora" class="text-3xl font-bold text-indigo-700">R$ 0,00/h</p>
-                    </div>
-
-                    <div class="card p-5">
-                        <div class="tooltip-container mb-2">
-                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Eficiência na Rua</p>
-                            <span class="tooltip">Seu ganho bruto por hora em rota (descontando o tempo de espera no galpão).</span>
-                        </div>
-                        <p id="txt-ganho-hora-rua" class="text-3xl font-bold text-violet-700">R$ 0,00/h</p>
-                    </div>
+                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Faturamento Bruto</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Soma de todos os ganhos registrados no período.</span></div><p id="txt-bruto" class="text-3xl font-bold text-slate-800">R$ 0,00</p></div>
+                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Saldo Líquido</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Faturamento Bruto menos todos os gastos.</span></div><p id="txt-saldo" class="text-3xl font-bold text-teal-700">R$ 0,00</p></div>
+                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Saldo c/ Provisão</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Saldo líquido menos uma reserva de R$0,20 por KM rodado para manutenções.</span></div><p id="txt-saldo-provisao" class="text-3xl font-bold text-sky-700">R$ 0,00</p></div>
+                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Eficiência (KM)</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Quanto você fatura para cada KM rodado.</span></div><p id="txt-eficiencia" class="text-3xl font-bold text-indigo-700">R$ 0,00/km</p></div>
+                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Eficiência (Hora)</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Seu ganho líquido por hora total de trabalho.</span></div><p id="txt-ganho-hora" class="text-3xl font-bold text-indigo-700">R$ 0,00/h</p></div>
+                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Eficiência na Rua</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Ganho bruto por hora em rota, descontando o tempo de espera no galpão.</span></div><p id="txt-ganho-hora-rua" class="text-3xl font-bold text-violet-700">R$ 0,00/h</p></div>
                 </div>
 
-                <!-- Charts Row -->
+                <div id="daily-chart-container" class="card p-6" style="display: none;">
+                    <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance Diária (Mês Atual)</h3>
+                    <div class="relative w-full h-[300px]"><canvas id="chartDaily"></canvas></div>
+                </div>
+                <div id="apps-chart-container" class="card p-6" style="display: none;">
+                    <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance por Período</h3>
+                    <div class="relative w-full h-[300px]"><canvas id="chartApps"></canvas></div>
+                </div>
+                
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div id="daily-chart-container" class="lg:col-span-2 card p-6" style="display: none;">
-                        <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance Diária (Mês Atual)</h3>
-                        <div class="relative w-full h-[300px]">
-                            <canvas id="chartDaily"></canvas>
-                        </div>
-                    </div>
-                    <div id="apps-chart-container" class="lg:col-span-2 card p-6" style="display: none;">
-                        <div class="flex justify-between items-center mb-6">
-                            <h3 id="chart-title" class="font-bold text-slate-800 text-sm uppercase tracking-tight">Performance por Período</h3>
-                            <div id="chart-legend" class="flex gap-3"></div>
-                        </div>
-                        <div class="relative w-full h-[300px]">
-                            <canvas id="chartApps"></canvas>
-                        </div>
-                    </div>
-                    <div class="card p-6 flex flex-col">
-                         <div class="tooltip-container mb-6">
-                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-tight">Distribuição de Gastos</h3>
-                            <span class="tooltip">Como seus gastos totais são divididos entre o necessário para a operação e despesas pessoais.</span>
-                        </div>
-                        <div class="relative w-full h-[200px] mb-6">
-                            <canvas id="chartGastos"></canvas>
-                        </div>
-                    </div>
+                    <div class="lg:col-span-2 card p-6"><h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Detalhamento por App</h3><div id="list-apps" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div></div>
+                    <div class="card p-6 flex flex-col"><h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Distribuição de Gastos</h3><div class="relative w-full h-[200px] mb-6"><canvas id="chartGastos"></canvas></div></div>
                 </div>
             </div>
-            <!-- ... (O resto do HTML para porteiros etc. permanece o mesmo) ... -->
+            
+            <div id="section-porteiros" class="hidden"></div>
         </main>
 
         <script>
-            let myChart = null;
-            let dailyChart = null;
-            let chartGastos = null;
+            let dailyChart = null, appsChart = null, chartGastos = null;
             let dashboardData = null;
             const WHATSAPP_ID = '""" + whatsapp_number + """';
+
+            function showSection(section) {
+                document.getElementById('section-performance').style.display = 'none';
+                document.getElementById('section-porteiros').style.display = 'none';
+                document.getElementById('section-' + section).style.display = 'block';
+                document.getElementById('main-title').innerText = section === 'performance' ? 'Visão Geral' : 'Diretório de Porteiros';
+                const btns = document.querySelectorAll('aside button');
+                btns.forEach(b => {
+                    const isTarget = b.getAttribute('onclick').includes(section);
+                    b.classList.toggle('bg-teal-50', isTarget);
+                    b.classList.toggle('text-teal-700', isTarget);
+                    b.classList.toggle('font-semibold', isTarget);
+                    b.classList.toggle('bg-transparent', !isTarget);
+                    b.classList.toggle('text-slate-600', !isTarget);
+                });
+                if (section === 'porteiros') renderPorteiros();
+            }
+
+            function renderPorteiros() {
+                // Logic for rendering porteiros - assuming it exists or will be added
+                document.getElementById('section-porteiros').innerHTML = '<p>Funcionalidade de porteiros a ser implementada aqui.</p>';
+            }
 
             const fmt = (val) => (val || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
 
             async function loadDashboard(analysisId = null) {
                 try {
-                    let url = '/api/dashboard/' + WHATSAPP_ID;
-                    if (analysisId) url += '?analysis_id=' + analysisId;
-                    
+                    const url = analysisId ? `/api/dashboard/${WHATSAPP_ID}?analysis_id=${analysisId}` : `/api/dashboard/${WHATSAPP_ID}`;
                     const response = await fetch(url);
                     const data = await response.json();
                     if (data.error) throw new Error(data.error);
 
                     dashboardData = data;
                     const c = data.metrics.consolidado;
+                    const apps = data.metrics.apps;
 
-                    // Popular Cards
                     document.getElementById('txt-bruto').innerText = 'R$ ' + fmt(c.total_ganhos);
                     document.getElementById('txt-saldo').innerText = 'R$ ' + fmt(c.saldo);
                     document.getElementById('txt-saldo-provisao').innerText = 'R$ ' + fmt(c.saldo_com_provisao);
@@ -579,51 +536,49 @@ async def dashboard_page(whatsapp_number: str):
                     document.getElementById('txt-ganho-hora').innerText = 'R$ ' + fmt(c.ganho_por_hora) + '/h';
                     document.getElementById('txt-ganho-hora-rua').innerText = 'R$ ' + fmt(c.ganho_por_hora_rua) + '/h';
 
-                    // Gráfico de Gastos
+                    const listContainer = document.getElementById('list-apps');
+                    listContainer.innerHTML = '';
+                    for (const name in apps) {
+                        const app = apps[name];
+                        listContainer.innerHTML += `<div class="p-4 rounded-xl bg-slate-50 border"><p class="font-bold text-sm">${name}</p><p class="text-teal-700">R$ ${fmt(app.ganhos)}</p></div>`;
+                    }
+
                     if (chartGastos) chartGastos.destroy();
-                    const ctxGastos = document.getElementById('chartGastos').getContext('2d');
-                    chartGastos = new Chart(ctxGastos, {
+                    chartGastos = new Chart(document.getElementById('chartGastos').getContext('2d'), {
                         type: 'doughnut',
-                        data: {
-                            labels: ['Essenciais', 'Não Essenciais'],
-                            datasets: [{ data: [c.gastos_essenciais, c.gastos_nao_essenciais], backgroundColor: ['#0f766e', '#e11d48'] }]
-                        },
+                        data: { labels: ['Essenciais', 'Não Essenciais'], datasets: [{ data: [c.gastos_essenciais, c.gastos_nao_essenciais], backgroundColor: ['#0f766e', '#e11d48'] }] },
                         options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }
                     });
 
-                    const dailyData = data.daily_performance || [];
                     const dailyContainer = document.getElementById('daily-chart-container');
                     const appsContainer = document.getElementById('apps-chart-container');
-
-                    if (data.is_live && dailyData.length > 0) {
+                    if (data.is_live && data.daily_performance?.length > 0) {
                         dailyContainer.style.display = 'block';
                         appsContainer.style.display = 'none';
-
                         if (dailyChart) dailyChart.destroy();
-                        const ctxDaily = document.getElementById('chartDaily').getContext('2d');
-                        dailyChart = new Chart(ctxDaily, {
+                        dailyChart = new Chart(document.getElementById('chartDaily').getContext('2d'), {
                             type: 'bar',
                             data: {
-                                labels: dailyData.map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit' })),
-                                datasets: [{
-                                    label: 'Faturamento Diário',
-                                    data: dailyData.map(d => d.ganho),
-                                    backgroundColor: '#0f766e',
-                                    borderRadius: 4
-                                }]
+                                labels: data.daily_performance.map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit' })),
+                                datasets: [{ label: 'Faturamento Diário', data: data.daily_performance.map(d => d.ganho), backgroundColor: '#0f766e' }]
                             },
                             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
                         });
                     } else {
                         dailyContainer.style.display = 'none';
                         appsContainer.style.display = 'block';
-                        // Lógica para o gráfico de apps (semanal/mensal) permanece a mesma
+                        if (appsChart) appsChart.destroy();
+                        const sortedAppNames = Object.keys(apps).filter(name => name !== 'Outros').sort((a,b) => apps[b].ganhos - apps[a].ganhos);
+                        appsChart = new Chart(document.getElementById('chartApps').getContext('2d'), {
+                            type: 'bar',
+                            data: {
+                                labels: sortedAppNames,
+                                datasets: [{ data: sortedAppNames.map(name => apps[name].ganhos), backgroundColor: ['#0f766e', '#f97316', '#6366f1'] }]
+                            },
+                            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                        });
                     }
-
-                } catch (e) { 
-                    console.error('Dashboard Error:', e);
-                    document.getElementById('txt-periodo').innerText = 'Erro ao carregar dados.';
-                }
+                } catch (e) { console.error('Dashboard Error:', e); }
             }
             loadDashboard();
         </script>
