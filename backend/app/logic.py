@@ -1,6 +1,8 @@
 import datetime
 from collections import defaultdict
 
+CUSTO_PROVISAO_KM = 0.20 # Provisão de 20 centavos por KM rodado
+
 class LogicService:
     @staticmethod
     def format_brl(value):
@@ -135,7 +137,9 @@ class LogicService:
             "custo_por_km": 0,
             "total_operacoes": len(operations) if operations else 0,
             "margem_liquida": 0,
-            "avg_faturamento_per_day": 0
+            "avg_faturamento_per_day": 0,
+            "saldo_com_provisao": 0,
+            "ganho_por_hora_rua": 0
         }
 
         def parse_date(value):
@@ -324,10 +328,87 @@ class LogicService:
         if consolidado["days_worked"] > 0:
             consolidado["avg_faturamento_per_day"] = consolidado["total_ganhos"] / consolidado["days_worked"]
 
+        horas_na_rua = consolidado["total_hours"] - consolidado["tempo_espera_galpao"]
+        if horas_na_rua > 0:
+            consolidado["ganho_por_hora_rua"] = consolidado["total_ganhos"] / horas_na_rua
+        
+        consolidado["saldo_com_provisao"] = consolidado["saldo"] - (consolidado["km_total"] * CUSTO_PROVISAO_KM)
+
         return {
             "consolidado": consolidado,
             "apps": apps_data
         }
+
+    @staticmethod
+    def format_summary_3_blocks(metrics: dict, title: str = "RESUMO DA OPERAÇÃO", analyst_insight: str = None):
+        c = metrics["consolidado"]
+        apps = metrics.get("apps") or {}
+        period_label = metrics.get("period_label")
+
+        def find_app(match_text: str):
+            match_text = match_text.lower()
+            for name, data in apps.items():
+                if name and match_text in name.lower():
+                    return name, data
+            return match_text.title(), {"ganhos": 0, "gastos": 0, "km": 0, "horas": 0}
+
+        def app_block(label: str, data: dict):
+            ganhos = data.get("ganhos", 0) or 0
+            km = data.get("km", 0) or 0
+            horas = data.get("horas", 0) or 0
+            eficiencia_km = ganhos / km if km else 0
+            eficiencia_hora = ganhos / horas if horas else 0
+            
+            msg_block = f"\n📦 {label.upper()}\n"
+            msg_block += "┌──────────────────────────\n"
+            msg_block += f" 💰 Faturamento:   {LogicService.format_brl(ganhos)}\n"
+            msg_block += f" 🛣️ KM Rodados:    {LogicService.format_decimal(km)} km ({LogicService.format_brl(eficiencia_km)}/km)\n"
+            msg_block += f" ⏱️ Tempo Rota:    {LogicService.format_decimal(horas)}h ({LogicService.format_brl(eficiencia_hora)}/h)\n"
+            msg_block += "└──────────────────────────\n"
+            return msg_block
+
+        shopee_name, shopee_data = find_app("shopee")
+        correios_name, correios_data = find_app("correio")
+
+        km_total = c.get("km_total", 0) or 0
+        total_hours = c.get("total_hours", 0) or 0
+        ganho_hora = c.get("ganho_por_hora", 0) or 0
+        eficiencia = (c.get("total_ganhos", 0) or 0) / km_total if km_total else 0
+
+        msg = "╔════════════════════════════╗\n"
+        msg += f" {title}\n"
+        msg += "╚════════════════════════════╝\n"
+        if period_label:
+            msg += f"\n 📅 Período: {period_label}\n"
+        msg += app_block(shopee_name, shopee_data)
+        msg += app_block(correios_name, correios_data)
+
+        msg += "\n 🏢 CONSOLIDADO DA OPERAÇÃO\n"
+        msg += "┌──────────────────────────\n"
+        msg += f" 💰 Saldo Líquido: {LogicService.format_brl(c.get('saldo', 0))}\n"
+        msg += f" 📈 Ganhos Totais: {LogicService.format_brl(c.get('total_ganhos', 0))}\n"
+        msg += f" 📉 Gastos Essenciais: {LogicService.format_brl(c.get('gastos_essenciais', 0))}\n"
+        msg += f" 🍔 Gastos Não Essenciais: {LogicService.format_brl(c.get('gastos_nao_essenciais', 0))}\n"
+        msg += f" 🛣️ KM Total:      {LogicService.format_decimal(km_total)} km\n"
+        msg += f" ⏱️ Tempo Total:   {LogicService.format_decimal(total_hours)}h\n"
+        msg += f" 💸 Ganho/Hora:    {LogicService.format_brl(ganho_hora)}/h\n"
+        msg += f" 📊 Eficiência:    {LogicService.format_brl(eficiencia)}/km\n"
+        msg += "└──────────────────────────\n"
+
+        if analyst_insight:
+            msg += "\n 🤵 VISÃO DO ANALISTA ESTRATÉGICO\n\n"
+            msg += analyst_insight
+
+        return msg
+
+    @staticmethod
+    def calculate_metrics(events: list, operations: list = None):
+        # Versão simplificada para compatibilidade
+        return LogicService.calculate_metrics_grouped(events, operations)
+
+    @staticmethod
+    def format_summary(metrics: dict, title: str = "RESUMO DA OPERAÇÃO", analyst_insight: str = None):
+        return LogicService.format_summary_3_blocks(metrics, title, analyst_insight)
 
     @staticmethod
     def format_summary_3_blocks(metrics: dict, title: str = "RESUMO DA OPERAÇÃO", analyst_insight: str = None):

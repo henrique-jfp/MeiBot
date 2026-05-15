@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "url": "https://mcp.supabase.com/mcp",
+      "type": "http"
+    },
+    "browser": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--browser",
+        "chromium"
+      ],
+      "env": {
+        "PLAYWRIGHT_BROWSERS_PATH": "/home/henriquejfp/.cache/ms-playwright",
+        "PLAYWRIGHT_MCP_HEADLESS": "true",
+        "PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS": "true"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "$GITHUB_PERSONAL_ACCESS_TOKEN"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Projetos Pessoais\\ContaComigo"
+      ]
+    }}
+  }
