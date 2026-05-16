@@ -143,7 +143,7 @@ class LogicService:
             app_name = app_info.get("nome") if isinstance(app_info, dict) else (ev.get("app") or "Outros")
             
             tipo = str(ev.get("tipo") or "").lower()
-            if app_name not in apps_data: apps_data[app_name] = {"ganhos": 0, "gastos": 0, "km": 0, "horas": 0, "pacotes": 0}
+            if app_name not in apps_data: apps_data[app_name] = {"ganhos": 0, "gastos": 0, "km": 0, "horas": 0, "pacotes": 0, "tempo_espera": 0}
 
             if tipo in ["ganho", "rota", "corrida", "faturamento"]:
                 apps_data[app_name]["ganhos"] += val
@@ -162,11 +162,14 @@ class LogicService:
                 base_date = get_event_date(ev)
                 if not base_date and operations:
                     base_date = parse_date(operations[0].get("data"))
-                consolidado["tempo_espera_galpao"] += add_duration_hours(
+                duration = add_duration_hours(
                     ev.get("hora_inicio"),
                     ev.get("hora_fim"),
                     base_date
                 )
+                consolidado["tempo_espera_galpao"] += duration
+                if app_name and app_name in apps_data:
+                    apps_data[app_name]["tempo_espera"] += duration
 
             h_ini = ev.get("hora_inicio_rota") or ev.get("hora_inicio")
             h_fim = ev.get("hora_fim_operacao") or ev.get("hora_fim")

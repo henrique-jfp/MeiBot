@@ -58,7 +58,15 @@ async def process_interpreted_data(user, interpreted):
             h_inicio_rota = ev.get("hora_inicio_rota")
             h_fim_espera = h_saida_galpao or h_inicio_rota
             if h_chegada and h_fim_espera:
-                wait_event = {"tipo": "registro", "sub_tipo": "espera_galpao", "hora_inicio": h_chegada, "hora_fim": h_fim_espera, "descricao": "Espera no galpao"}
+                app_for_wait = ev.get("app")
+                wait_event = {
+                    "tipo": "registro",
+                    "sub_tipo": "espera_galpao",
+                    "hora_inicio": h_chegada,
+                    "hora_fim": h_fim_espera,
+                    "descricao": f"Espera no galpao ({app_for_wait})" if app_for_wait else "Espera no galpao",
+                    "app": app_for_wait
+                }
                 if data_ref: wait_event["data_referencia"] = data_ref
                 db.add_event(user_id, active_op["id"], wait_event)
                 eventos_processados.append(wait_event)
@@ -213,7 +221,21 @@ async def dashboard_page(whatsapp_number: str):
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-2 card p-6"><h3 class="font-bold text-sm mb-6 uppercase">Detalhamento por App</h3><div id="list-apps" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div></div>
-                    <div class="card p-6 bg-amber-50/30 border-amber-100"><h3 class="font-bold text-amber-800 text-sm mb-4 uppercase">Eficiência de Galpão</h3><div class="flex items-end gap-2 mb-2"><p id="txt-tempo-espera" class="text-3xl font-bold text-amber-700">0h</p><p class="text-xs text-amber-500 font-bold mb-1 uppercase">Espera</p></div><div class="w-full bg-amber-100 rounded-full h-2 mb-4"><div id="bar-espera" class="bg-amber-500 h-full w-0"></div></div><p id="txt-tempo-total" class="text-[10px] text-slate-500">Tempo Total: 0h</p></div>
+                    <div class="card p-6 bg-amber-50/30 border-amber-100">
+                        <h3 class="font-bold text-amber-800 text-sm mb-4 uppercase">Eficiência de Galpão</h3>
+                        <div class="flex items-end gap-2 mb-2">
+                            <p id="txt-tempo-espera" class="text-3xl font-bold text-amber-700">0h</p>
+                            <p class="text-xs text-amber-500 font-bold mb-1 uppercase">Espera Total</p>
+                        </div>
+                        
+                        <div id="espera-app-breakdown" class="space-y-1 border-t border-amber-200/60 pt-3 mt-3" style="display: none;">
+                        </div>
+
+                        <div class="w-full bg-amber-100 rounded-full h-2 my-4">
+                            <div id="bar-espera" class="bg-amber-500 h-full w-0"></div>
+                        </div>
+                        <p id="txt-tempo-total" class="text-[10px] text-slate-500">Tempo Total: 0h</p>
+                    </div>
                 </div>
                 <div id="insight-section" class="card hidden"><div class="bg-teal-600 px-6 py-3 text-white font-bold text-sm uppercase">Análise da IA</div><div class="p-6 prose prose-sm max-w-none" id="txt-insight"></div></div>
             </div>
@@ -510,6 +532,25 @@ async def dashboard_page(whatsapp_number: str):
                                 </div>
                             </div>`;
                     });
+
+                    // New: Wait Time Breakdown
+                    const esperaBreakdown = document.getElementById('espera-app-breakdown');
+                    esperaBreakdown.innerHTML = '';
+                    let waitBreakdownCount = 0;
+                    Object.keys(apps).forEach(name => {
+                        const app = apps[name];
+                        if (app.tempo_espera > 0) {
+                            waitBreakdownCount++;
+                            const div = document.createElement('div');
+                            div.className = 'flex justify-between items-center text-xs';
+                            div.innerHTML = `
+                                <span class="font-semibold text-amber-800/80">${name}</span>
+                                <span class="font-bold text-amber-700">${fmt(app.tempo_espera, 1)}h</span>
+                            `;
+                            esperaBreakdown.appendChild(div);
+                        }
+                    });
+                    esperaBreakdown.style.display = waitBreakdownCount > 0 ? 'block' : 'none';
 
                     // Charts
                     const dailyContainer = document.getElementById('daily-chart-container');
