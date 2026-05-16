@@ -217,7 +217,28 @@ async def dashboard_page(whatsapp_number: str):
                 </div>
                 <div id="insight-section" class="card hidden"><div class="bg-teal-600 px-6 py-3 text-white font-bold text-sm uppercase">Análise da IA</div><div class="p-6 prose prose-sm max-w-none" id="txt-insight"></div></div>
             </div>
-            <div id="section-porteiros" class="hidden space-y-6"></div>
+            <div id="section-porteiros" class="hidden space-y-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-map-location-dot text-teal-600"></i> Mapeamento de Porteiros
+                        </h3>
+                        <p id="porteiros-stats" class="text-slate-500 text-sm mt-1 font-medium">Carregando estatisticas...</p>
+                    </div>
+                    <div class="relative w-full md:w-96 group">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-magnifying-glass text-slate-400 group-focus-within:text-teal-600 transition-colors"></i>
+                        </div>
+                        <input type="text" id="search-porteiros" oninput="handleSearch(this.value)"
+                            class="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 focus:bg-white transition-all"
+                            placeholder="Buscar predio, rua ou porteiro...">
+                    </div>
+                </div>
+
+                <div class="space-y-4" id="porteiros-container">
+                    <p class="text-slate-400 italic text-center py-10">Carregando diretorio de porteiros...</p>
+                </div>
+            </div>
         </main>
 
         <script>
@@ -232,69 +253,177 @@ async def dashboard_page(whatsapp_number: str):
                 if (s === 'porteiros') renderPorteiros();
             }
 
-            function esc(value) {
-                return String(value ?? '')
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#39;');
+            function handleSearch(query) {
+                renderPorteiros(query);
             }
 
-            function renderPorteiros(f = '') {
-                const container = document.getElementById('section-porteiros');
-                const porteiros = (dashboardData && Array.isArray(dashboardData.porteiros)) ? dashboardData.porteiros : [];
-                const filter = String(f || '').toLowerCase();
-                const filtrados = porteiros.filter(p => {
-                    const rua = (p.rua || '').toLowerCase();
-                    const numero = (p.numero || '').toLowerCase();
-                    const nome = (p.nome_porteiro || '').toLowerCase();
-                    return !filter || rua.includes(filter) || numero.includes(filter) || nome.includes(filter);
+            function renderPorteiros(filterText = '') {
+                const container = document.getElementById('porteiros-container');
+                const statsEl = document.getElementById('porteiros-stats');
+
+                if (!dashboardData || !dashboardData.porteiros || dashboardData.porteiros.length === 0) {
+                    container.innerHTML = '<div class="card p-12 text-center bg-white border-dashed border-2 border-slate-200"><p class="text-slate-500 font-medium">Nenhum porteiro mapeado ainda.</p></div>';
+                    statsEl.innerText = '0 predios cadastrados - 0 ruas';
+                    return;
+                }
+
+                const query = (filterText || '').toLowerCase().trim();
+
+                const normalizeStreetLabel = (value) => {
+                    let text = (value || '').trim().replace(/\s+/g, ' ');
+                    if (!text) return 'Sem Rua';
+
+                    text = text.replace(/\s+\d+$/, '');
+
+                    const upper = text.toUpperCase();
+                    if (upper.includes('PAISANDU') || upper.includes('PAISSANDU') || upper.includes('PAYSANDU') || upper.includes('BAISSANDU') || upper.includes('PAISSAO')) {
+                        return 'Rua Paissandu';
+                    }
+                    if (upper.includes('VERGUEIRO') || upper.includes('BERGUEIRO')) {
+                        return 'Rua Senador Vergueiro';
+                    }
+                    if (upper.includes('BARATA') && upper.includes('RIBEIRO')) {
+                        return 'Rua Barata Ribeiro';
+                    }
+                    if (upper.includes('SANTA') && upper.includes('CLARA')) {
+                        return 'Rua Santa Clara';
+                    }
+                    if (upper.includes('COPACABANA') && (upper.includes('AV') || upper.includes('AVENIDA'))) {
+                        return 'Avenida Nossa Sra. de Copacabana';
+                    }
+
+                    const smallWords = ['de', 'da', 'do', 'das', 'dos', 'e'];
+                    return text.toLowerCase()
+                        .replace(/\b(r|r\.|rua)\b/gi, 'Rua')
+                        .replace(/\b(av|av\.|avenida)\b/gi, 'Avenida')
+                        .replace(/\b\w/g, (m) => m.toUpperCase())
+                        .split(' ')
+                        .map(word => smallWords.includes(word.toLowerCase()) ? word.toLowerCase() : word)
+                        .join(' ');
+                };
+
+                const filteredPorteiros = dashboardData.porteiros.filter(p => {
+                    if (!query) return true;
+                    const content = `${p.rua} ${p.numero} ${p.nome_porteiro} ${p.notas_predio || ''}`.toLowerCase();
+                    return content.includes(query);
                 });
 
-                const header = `
-                    <div class="card p-6">
-                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                            <div>
-                                <h3 class="font-bold text-sm uppercase">Mapeamento de Porteiros</h3>
-                                <p class="text-xs text-slate-500">${filtrados.length} de ${porteiros.length} registros</p>
-                            </div>
-                            <input id="porteiro-filter" value="${esc(filter)}" placeholder="Buscar por rua, numero ou nome" class="w-full md:w-80 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-200" />
-                        </div>
-                    </div>
-                `;
+                if (filteredPorteiros.length === 0) {
+                    container.innerHTML = '<div class="card p-12 text-center bg-white"><p class="text-slate-500 font-medium">Nenhum resultado para sua busca.</p></div>';
+                    return;
+                }
 
-                if (porteiros.length === 0) {
-                    container.innerHTML = header + '<div class="card p-6 text-sm text-slate-500">Nenhum porteiro cadastrado.</div>';
-                } else if (filtrados.length === 0) {
-                    container.innerHTML = header + '<div class="card p-6 text-sm text-slate-500">Nenhum resultado para esse filtro.</div>';
-                } else {
-                    const rows = filtrados
-                        .sort((a, b) => (a.rua || '').localeCompare(b.rua || '') || (a.numero || '').localeCompare(b.numero || ''))
-                        .map(p => {
-                            const notas = p.notas_predio ? `<div class="text-[11px] text-slate-500 mt-1">${esc(p.notas_predio)}</div>` : '';
-                            const turno = p.turno ? `<span class="text-[10px] font-bold text-slate-500 uppercase">${esc(p.turno)}</span>` : '';
-                            return `
-                                <div class="card p-4">
-                                    <div class="flex items-center justify-between gap-3">
+                const grouped = {};
+                filteredPorteiros.forEach(p => {
+                    const rua = normalizeStreetLabel(p.rua);
+                    if (!grouped[rua]) grouped[rua] = [];
+                    grouped[rua].push(p);
+                });
+
+                const sortedStreets = Object.keys(grouped).sort();
+                statsEl.innerText = `${dashboardData.porteiros.length} predios cadastrados - ${Object.keys(grouped).length} ruas`;
+
+                container.innerHTML = '';
+
+                sortedStreets.forEach((rua, idx) => {
+                    const items = grouped[rua].sort((a, b) => {
+                        const numA = parseInt(String(a.numero || '').replace(/\D/g, '')) || 0;
+                        const numB = parseInt(String(b.numero || '').replace(/\D/g, '')) || 0;
+                        return numA - numB;
+                    });
+
+                    const sectionId = `rua-${idx}`;
+                    const accordion = document.createElement('div');
+                    accordion.className = 'bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all hover:border-slate-300';
+
+                    let cardsHtml = '';
+                    items.forEach(p => {
+                        const tags = [];
+                        const notes = (p.notas_predio || '').toLowerCase();
+
+                        const greenWords = ['banheiro', 'bebedouro', 'recebe pacote', 'facil', 'tranquilo', '24h', 'liberado'];
+                        const yellowWords = ['troca', 'atencao', 'limite', 'horario', 'esperar'];
+                        const redWords = ['nao recebe', 'dificil', 'complicado', 'ruim', 'problema', 'evitar'];
+
+                        greenWords.forEach(w => { if (notes.includes(w)) tags.push({ text: w, color: 'bg-emerald-50 text-emerald-700 border-emerald-100' }); });
+                        yellowWords.forEach(w => { if (notes.includes(w)) tags.push({ text: w, color: 'bg-amber-50 text-amber-700 border-amber-100' }); });
+                        redWords.forEach(w => { if (notes.includes(w)) tags.push({ text: w, color: 'bg-rose-50 text-rose-700 border-rose-100' }); });
+
+                        const tagsHtml = tags.map(t => `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-tight ${t.color}">${t.text}</span>`).join('');
+
+                        let predioNome = 'Edificio';
+                        const predioMatch = p.notas_predio ? p.notas_predio.match(/edificio\s+([^,.-]+)/i) || p.notas_predio.match(/residencial\s+([^,.-]+)/i) : null;
+                        if (predioMatch) predioNome = predioMatch[0];
+
+                        cardsHtml += `
+                            <div class="bg-slate-50/50 rounded-xl p-4 border border-slate-100 flex flex-col justify-between hover:bg-white hover:border-teal-200 transition-all group">
+                                <div>
+                                    <div class="flex justify-between items-start mb-3">
                                         <div>
-                                            <div class="text-xs font-bold uppercase text-slate-500">${esc(p.rua)}${p.numero ? ', ' + esc(p.numero) : ''}</div>
-                                            <div class="text-sm font-semibold text-slate-800">${esc(p.nome_porteiro || 'Porteiro')}</div>
+                                            <p class="text-xs font-bold text-teal-600 uppercase tracking-wider">N. ${p.numero || '-'}</p>
+                                            <h5 class="font-bold text-slate-800 leading-tight">${predioNome}</h5>
                                         </div>
-                                        ${turno}
+                                        <div class="w-8 h-8 bg-white rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 group-hover:text-teal-500 group-hover:border-teal-100 transition-colors">
+                                            <i class="fa-solid fa-building text-sm"></i>
+                                        </div>
                                     </div>
-                                    ${notas}
+
+                                    <div class="space-y-2 mb-4">
+                                        <div class="flex items-center gap-2 text-slate-600">
+                                            <i class="fa-solid fa-user-tie text-xs w-4"></i>
+                                            <span class="text-sm font-semibold">${p.nome_porteiro || 'Nao informado'}</span>
+                                        </div>
+                                        ${p.turno ? `
+                                            <div class="flex items-center gap-2 text-slate-500">
+                                                <i class="fa-solid fa-clock text-xs w-4"></i>
+                                                <span class="text-xs font-medium">${p.turno}</span>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+
+                                    <div class="flex flex-wrap gap-1.5 mb-4">
+                                        ${tagsHtml}
+                                    </div>
                                 </div>
-                            `;
-                        }).join('');
 
-                    container.innerHTML = header + `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${rows}</div>`;
-                }
+                                ${p.notas_predio ? `
+                                    <details class="mt-auto border-t border-slate-100 pt-3 group/details">
+                                        <summary class="list-none cursor-pointer flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-teal-600 transition-colors">
+                                            <i class="fa-solid fa-note-sticky text-[10px]"></i>
+                                            VER OBSERVACOES
+                                            <i class="fa-solid fa-chevron-down text-[10px] ml-auto transition-transform group-open/details:rotate-180"></i>
+                                        </summary>
+                                        <div class="mt-2 p-3 bg-white rounded-lg border border-slate-100 shadow-inner">
+                                            <p class="text-xs text-slate-600 leading-relaxed italic">"${p.notas_predio}"</p>
+                                        </div>
+                                    </details>
+                                ` : ''}
+                            </div>
+                        `;
+                    });
 
-                const input = document.getElementById('porteiro-filter');
-                if (input) {
-                    input.oninput = (e) => renderPorteiros(e.target.value);
-                }
+                    accordion.innerHTML = `
+                        <button onclick="document.getElementById('${sectionId}').classList.toggle('hidden'); this.querySelector('.chevron').classList.toggle('rotate-180')"
+                            class="w-full px-6 py-4 flex items-center justify-between bg-white hover:bg-slate-50 transition-colors text-left">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 shadow-sm border border-teal-100">
+                                    <i class="fa-solid fa-map-pin"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-bold text-slate-800 uppercase tracking-tight">${rua}</h4>
+                                    <p class="text-[10px] text-slate-400 font-bold uppercase">${items.length} PREDIOS CADASTRADOS</p>
+                                </div>
+                            </div>
+                            <i class="fa-solid fa-chevron-down text-slate-300 transition-transform chevron"></i>
+                        </button>
+                        <div id="${sectionId}" class="px-6 pb-6 pt-2">
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                ${cardsHtml}
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(accordion);
+                });
             }
 
             function formatPeriodRange(data) {
@@ -422,7 +551,7 @@ async def dashboard_page(whatsapp_number: str):
                     });
                     const sectionOpen = !document.getElementById('section-porteiros').classList.contains('hidden');
                     if (sectionOpen) {
-                        const existingFilter = document.getElementById('porteiro-filter')?.value || '';
+                        const existingFilter = document.getElementById('search-porteiros')?.value || '';
                         renderPorteiros(existingFilter);
                     }
                 } catch (e) { console.error('Dashboard load error:', e); }
