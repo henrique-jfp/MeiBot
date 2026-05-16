@@ -275,6 +275,28 @@ async def dashboard_page(whatsapp_number: str):
                     });
 
                     // Charts
+                    const dailyContainer = document.getElementById('daily-chart-container');
+                    const appsContainer = document.getElementById('apps-chart-container');
+                    const dailyPerf = Array.isArray(data.daily_performance) ? data.daily_performance : [];
+                    if (dailyPerf.length > 0) {
+                        dailyContainer.style.display = '';
+                        appsContainer.style.display = 'none';
+                        const labels = dailyPerf.map((d) => {
+                            const dt = new Date(d.date);
+                            return Number.isNaN(dt.getTime()) ? d.date : dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                        });
+                        const values = dailyPerf.map((d) => d.ganho || 0);
+                        if (dailyChart) dailyChart.destroy();
+                        dailyChart = new Chart(document.getElementById('chartDaily').getContext('2d'), {
+                            type: 'line',
+                            data: { labels: labels, datasets: [{ label: 'Ganho diario', data: values, borderColor: '#0f766e', backgroundColor: 'rgba(15,118,110,0.12)', tension: 0.3, fill: true, pointRadius: 3 }] },
+                            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => 'R$ ' + fmt(v) } } } }
+                        });
+                    } else {
+                        dailyContainer.style.display = 'none';
+                        appsContainer.style.display = '';
+                    }
+
                     if (chartGastos) chartGastos.destroy();
                     chartGastos = new Chart(document.getElementById('chartGastos').getContext('2d'), { type: 'doughnut', data: { labels: ['Essenciais', 'Não Essenciais'], datasets: [{ data: [c.gastos_essenciais, c.gastos_nao_essenciais], backgroundColor: ['#0f766e', '#e11d48'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } } });
                     
