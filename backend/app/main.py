@@ -97,11 +97,56 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
     user_id = user["id"]
     porteiros = db.get_all_porteiros(user_id)
     history = db.get_analysis_history(user_id, limit=30)
+
+    def _calc_period_range(analysis):
+        metrics = analysis.get("metrics") or {}
+        start_iso = metrics.get("period_start")
+        end_iso = metrics.get("period_end")
+        if start_iso and end_iso:
+            try:
+                return datetime.date.fromisoformat(start_iso), datetime.date.fromisoformat(end_iso)
+            except Exception:
+                pass
+
+        created_at = analysis.get("created_at")
+        periodo_tipo = analysis.get("periodo_tipo")
+        if not created_at or not periodo_tipo:
+            return None, None
+        try:
+            created_dt = datetime.datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except Exception:
+            return None, None
+        if periodo_tipo == "semanal":
+            day = created_dt.weekday()
+            start = (created_dt - datetime.timedelta(days=day)).date()
+            end = start + datetime.timedelta(days=6)
+            return start, end
+        if periodo_tipo == "mensal":
+            start = created_dt.replace(day=1).date()
+            end = (start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+            return start, end
+        return None, None
     if analysis_id:
         res = db.supabase.table("historico_analises").select("*").eq("id", analysis_id).execute()
         if res.data:
             analysis = res.data[0]
-            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "is_live": False, "created_at": analysis["created_at"], "periodo_tipo": analysis.get("periodo_tipo"), "history": history, "porteiros": porteiros}
+            start_date, end_date = _calc_period_range(analysis)
+            daily_list = []
+            if start_date and end_date:
+                start_iso = start_date.isoformat()
+                end_iso = (end_date + datetime.timedelta(days=1)).isoformat()
+                ev_hist = db.supabase.table("eventos").select("*")\
+                    .eq("user_id", user_id)\
+                    .gte("timestamp", start_iso)\
+                    .lt("timestamp", end_iso)\
+                    .execute().data
+                daily_perf = {ev["timestamp"].split("T")[0]: 0 for ev in ev_hist if str(ev.get("tipo", "")).lower() in ["ganho", "rota"]}
+                for ev in ev_hist:
+                    if str(ev.get("tipo", "")).lower() in ["ganho", "rota"]:
+                        daily_perf[ev["timestamp"].split("T")[0]] += float(ev.get("valor", 0))
+                daily_list = sorted([{"date": d, "ganho": g} for d, g in daily_perf.items()], key=lambda x: x["date"])
+
+            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "is_live": False, "created_at": analysis["created_at"], "periodo_tipo": analysis.get("periodo_tipo"), "daily_performance": daily_list, "history": history, "porteiros": porteiros}
     today = datetime.date.today()
     start_iso, end_iso = (today.replace(day=1).isoformat(), (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1).isoformat())
     ev_live = db.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", start_iso + "T00:00:00Z").lt("timestamp", end_iso + "T00:00:00Z").execute().data
