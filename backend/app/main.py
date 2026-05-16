@@ -88,10 +88,7 @@ async def process_interpreted_data(user, interpreted):
 
     eventos_processados = []
     for ev in eventos_brutos:
-        # Normalização e Regras de Negócio Hardcoded
         app_name_raw = str(ev.get("app") or "").lower()
-        
-        # Se a IA esquecer de colocar o nome do app, mas tiver pacotes, assumimos Correios por padrão (maior uso de pacotes)
         if not app_name_raw or app_name_raw == "none":
             if float(ev.get("pacotes") or 0) > 0:
                 app_name_raw = "correios"
@@ -102,24 +99,15 @@ async def process_interpreted_data(user, interpreted):
             ev["valor"] = 305.0 + float(ev.get("valor_extra") or 0)
             ev["km"] = 60.0
             ev["tipo"] = "ganho"
-        
         elif "correio" in app_name_raw:
             ev["app"] = "Correios"
             ev["km"] = 20.0
             ev["tipo"] = "ganho"
-            
             v = float(ev.get("valor") or 0)
             p = float(ev.get("pacotes") or 0)
-            
-            # Se o valor extraído pela IA for zero, ou se ela se confundir e jogar o número
-            # de pacotes dentro do campo "valor", nós forçamos a regra matemática correta.
-            if v == 0 or v == p:
-                ev["valor"] = (p * 2.0) + float(ev.get("valor_extra") or 0)
-            else:
-                ev["valor"] = v + float(ev.get("valor_extra") or 0)
-        
+            if v == 0 or v == p: ev["valor"] = (p * 2.0) + float(ev.get("valor_extra") or 0)
+            else: ev["valor"] = v + float(ev.get("valor_extra") or 0)
         else:
-            # Regras via Banco de Dados
             app_info = db.get_app_by_name(ev.get("app")) if ev.get("app") else None
             if app_info and (not ev.get("valor") or ev.get("valor") == 0):
                 if app_info.get("tipo_remuneracao") == "pacote":
@@ -129,7 +117,6 @@ async def process_interpreted_data(user, interpreted):
             elif ev.get("valor"):
                 ev["valor"] = float(ev["valor"]) + float(ev.get("valor_extra") or 0)
 
-        # 2. Lançamento AUTOMÁTICO de repasse para entregador (Ajudante) via Banco
         app_info = db.get_app_by_name(ev.get("app")) if ev.get("app") else None
         if app_info and app_info.get("entregador_padrao_id"):
             res_ent = db.supabase.table("entregadores").select("valor_diaria").eq("id", app_info["entregador_padrao_id"]).execute()
@@ -150,15 +137,8 @@ async def process_interpreted_data(user, interpreted):
             h_inicio_rota = ev.get("hora_inicio_rota")
             h_fim_espera = h_saida_galpao or h_inicio_rota
             if h_chegada and h_fim_espera:
-                wait_event = {
-                    "tipo": "registro",
-                    "sub_tipo": "espera_galpao",
-                    "hora_inicio": h_chegada,
-                    "hora_fim": h_fim_espera,
-                    "descricao": "Espera no galpao"
-                }
-                if data_ref:
-                    wait_event["data_referencia"] = data_ref
+                wait_event = {"tipo": "registro", "sub_tipo": "espera_galpao", "hora_inicio": h_chegada, "hora_fim": h_fim_espera, "descricao": "Espera no galpao"}
+                if data_ref: wait_event["data_referencia"] = data_ref
                 db.add_event(user_id, active_op["id"], wait_event)
                 eventos_processados.append(wait_event)
 
@@ -168,106 +148,68 @@ async def process_interpreted_data(user, interpreted):
 
     if intencao == "registro":
         return LogicService.format_events_confirmation(eventos_processados, "DADOS REGISTRADOS", data_ref) if eventos_processados else "Nada para registrar."
-
     if intencao == "resumo_diario":
         target_date = data_ref or datetime.date.today().isoformat()
         events_curr = db.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", target_date).lt("timestamp", (datetime.datetime.fromisoformat(target_date) + datetime.timedelta(days=1)).isoformat()).execute().data
         ops_curr = db.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).eq("data", target_date).execute().data
         metrics_curr = LogicService.calculate_metrics_grouped(events_curr, ops_curr)
         return await ai.generate_daily_insight(metrics_curr["consolidado"], None)
-
     if intencao in ["resumo_semanal", "resumo_mensal"]:
         url = f"https://meibot.henriquedejesus.dev/dashboard/{whatsapp}"
         return f"📊 *Automação Ativada!*\n\nOs relatórios agora são gerados de forma 100% automática! Todo sábado às 21h (e no último dia do mês), nossa inteligência artificial processa seus dados e cria o arquivo.\n\nVocê pode consultar as análises agrupadas por mês a qualquer momento no seu painel:\n🔗 {url}"
-
     if intencao == "encerrar":
         if active_op: db.end_operation(active_op["id"])
         return f"🚀 Operação encerrada com sucesso! Bom descanso."
-
     if intencao == "pergunta":
         events_db = db.get_all_time_summary(user_id)
         return await ai.answer_question(str(events_db), interpreted.get("pergunta", ""))
 
-    # --- MAPEAMENTO DE PORTEIROS ---
     url_dashboard = f"https://meibot.henriquedejesus.dev/dashboard/{whatsapp}"
-
     if intencao == "cadastrar_porteiro":
         info = interpreted.get("porteiro_info", {})
         res = db.add_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome"), info.get("turno"), info.get("notas"))
-        if res == "DUPLICATE":
-            return f"⚠️ O porteiro *{info.get('nome')}* já está mapeado para este endereço."
+        if res == "DUPLICATE": return f"⚠️ O porteiro *{info.get('nome')}* já está mapeado para este endereço."
         return f"✅ Porteiro *{info.get('nome')}* mapeado com sucesso em {info.get('rua')}, {info.get('numero')}!\n\nVocê pode ver o mapa completo aqui:\n🔗 {url_dashboard}" if res else "❌ Erro ao cadastrar porteiro."
-
     if intencao == "consultar_porteiro":
         info = interpreted.get("porteiro_info", {})
         porteiros = db.get_porteiros_by_address(user_id, info.get("rua"), info.get("numero"))
-        if not porteiros:
-            return f"🔍 Nenhum porteiro encontrado para {info.get('rua')}, {info.get('numero')}."
-        
+        if not porteiros: return f"🔍 Nenhum porteiro encontrado para {info.get('rua')}, {info.get('numero')}."
         res = f"🏢 *Porteiros em {info.get('rua')}, {info.get('numero')}*\n\n"
         for p in porteiros:
             turno = f" ({p['turno']})" if p.get("turno") else ""
             res += f"• *{p['nome_porteiro']}*{turno}\n"
-            if p.get("notas_predio"):
-                res += f"  📝 Notas: {p['notas_predio']}\n"
+            if p.get("notas_predio"): res += f"  📝 Notas: {p['notas_predio']}\n"
         res += f"\n🔗 {url_dashboard}"
         return res
-
     if intencao == "listar_porteiros":
         porteiros = db.get_all_porteiros(user_id)
-        if not porteiros:
-            return "📭 Você ainda não mapeou nenhum porteiro."
-        
+        if not porteiros: return "📭 Você ainda não mapeou nenhum porteiro."
         res = "📋 *MEU MAPEAMENTO ESTRATÉGICO*\n"
-        
-        # Agrupamento e Normalização por Rua
         grouped = {}
         for p in porteiros:
-            rua_raw = p.get('rua') or "Rua Não Informada"
-            rua = rua_raw.strip().title()
-            
-            # Normalização para Paissandu/Paisandu
-            rua_norm = rua.upper()
-            if "PAISANDU" in rua_norm or "PAISSANDU" in rua_norm:
-                rua = "Paissandu"
-            
-            if rua not in grouped:
-                grouped[rua] = []
+            rua = (p.get('rua') or "Rua Não Informada").strip().title()
+            if "PAISANDU" in rua.upper() or "PAISSANDU" in rua.upper(): rua = "Paissandu"
+            if rua not in grouped: grouped[rua] = []
             grouped[rua].append(p)
-            
-        # Ordenar ruas alfabeticamente
         for rua in sorted(grouped.keys()):
             items = grouped[rua]
-            res += f"\n┏━━━━━━━━━━━━━━┓\n"
-            res += f"┃ 🏢 *{rua.upper()}* \n"
-            res += f"┗━━━━━━━━━━━━━━┛\n"
-            
-            # Ordenar por número
-            try:
-                items.sort(key=lambda x: int(''.join(filter(str.isdigit, x.get('numero', '0'))) or 0))
-            except:
-                pass
-
+            res += f"\n┏━━━━━━━━━━━━━━┓\n┃ 🏢 *{rua.upper()}* \n┗━━━━━━━━━━━━━━┛\n"
+            try: items.sort(key=lambda x: int(''.join(filter(str.isdigit, x.get('numero', '0'))) or 0))
+            except: pass
             for p in items:
                 turno = f" *({p['turno']})*" if p.get("turno") else ""
                 num = p.get('numero') or "?"
                 nome = p.get('nome_porteiro') or "Porteiro Desconhecido"
                 res += f"🔹 *N° {num}*: {nome}{turno}\n"
-                if p.get("notas_predio"):
-                    res += f"   ╰─ 📓 _\"{p['notas_predio']}\"_\n"
-        
-        res += f"\n────────────────\n"
-        res += f"🖥️ *DASHBOARD COMPLETO:*\n🔗 {url_dashboard}"
+                if p.get("notas_predio"): res += f"   ╰─ 📓 _\"{p['notas_predio']}\"_\n"
+        res += f"\n────────────────\n🖥️ *DASHBOARD COMPLETO:*\n🔗 {url_dashboard}"
         return res
-
     if intencao == "corrigir_porteiro":
         info = interpreted.get("porteiro_info", {})
         res = db.update_porteiro(user_id, info.get("rua"), info.get("numero"), info.get("nome_antigo"), info.get("nome"), info.get("turno"), info.get("notas"))
         return f"✅ Informações do porteiro atualizadas!\n\n🔗 {url_dashboard}" if res else "❌ Não consegui atualizar as informações. Verifique se o nome antigo está correto."
-
     if intencao == "pedir_link_dashboard":
         return f"📊 *Seu Painel de Performance e Mapa de Porteiros*:\n\n🔗 {url_dashboard}"
-
     return "Não entendi o que você quis dizer ou faltaram informações. Tente ser mais claro, ou digite 'Ajuda'."
 
 @app.get("/api/dashboard/{whatsapp_number}")
@@ -275,105 +217,31 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
     user = db.get_user_by_whatsapp(whatsapp_number)
     if not user: return JSONResponse({"error": "User not found"}, status_code=404)
     user_id = user["id"]
-    
     porteiros = db.get_all_porteiros(user_id)
     history = db.get_analysis_history(user_id, limit=30)
-
     if analysis_id:
         res = db.supabase.table("historico_analises").select("*").eq("id", analysis_id).execute()
         if res.data:
             analysis = res.data[0]
-            return {
-                "user": user, 
-                "metrics": analysis["metrics"], 
-                "insight": analysis["insight"], 
-                "is_live": False,
-                "created_at": analysis["created_at"],
-                "history": history,
-                "porteiros": porteiros
-            }
-
-    if history:
-        today = datetime.date.today()
-        month_start = today.replace(day=1)
-        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        start_iso = month_start.isoformat() + "T00:00:00Z"
-        end_iso = next_month.isoformat() + "T00:00:00Z"
-
-        ev_live = db.supabase.table("eventos").select("*, apps(*)")\
-            .eq("user_id", user_id)\
-            .gte("timestamp", start_iso)\
-            .lt("timestamp", end_iso)\
-            .execute().data
-
-        op_live = db.supabase.table("operacoes_dia").select("*")\
-            .eq("user_id", user_id)\
-            .gte("data", month_start.isoformat())\
-            .lt("data", next_month.isoformat())\
-            .execute().data
-
-        metrics_live = LogicService.calculate_metrics_grouped(ev_live, op_live)
-
-        # NOVO CÓDIGO: Calcular performance diária
-        daily_performance = {}
-        for ev in ev_live:
-            tipo = ev.get("tipo", "").lower()
-            if tipo in ["ganho", "rota", "corrida", "faturamento"]:
-                try:
-                    # Extrai a data do timestamp
-                    event_date = datetime.datetime.fromisoformat(ev["timestamp"]).strftime('%Y-%m-%d')
-                    valor = float(ev.get("valor", 0))
-                    
-                    # Agrupa os ganhos por dia
-                    if event_date not in daily_performance:
-                        daily_performance[event_date] = 0
-                    daily_performance[event_date] += valor
-                except:
-                    continue # Ignora eventos com timestamp mal formatado
-
-        # Transforma o dicionário em uma lista de objetos para o frontend
-        daily_performance_list = [{"date": d, "ganho": g} for d, g in daily_performance.items()]
-        daily_performance_list.sort(key=lambda x: x['date'])
-
-        return {
-            "user": user,
-            "metrics": metrics_live,
-            "daily_performance": daily_performance_list, # <-- NOVO CAMPO
-            "insight": "",
-            "is_live": True,
-            "history": history,
-            "created_at": datetime.datetime.now().isoformat(),
-            "porteiros": porteiros
-        }
-    
+            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "is_live": False, "created_at": analysis["created_at"], "history": history, "porteiros": porteiros}
     today = datetime.date.today()
     month_start = today.replace(day=1)
     next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
     start_iso = month_start.isoformat() + "T00:00:00Z"
     end_iso = next_month.isoformat() + "T00:00:00Z"
-
-    ev_month = db.supabase.table("eventos").select("*, apps(*)")\
-        .eq("user_id", user_id)\
-        .gte("timestamp", start_iso)\
-        .lt("timestamp", end_iso)\
-        .execute().data
-
-    op_month = db.supabase.table("operacoes_dia").select("*")\
-        .eq("user_id", user_id)\
-        .gte("data", month_start.isoformat())\
-        .lt("data", next_month.isoformat())\
-        .execute().data
-
-    metrics_week = LogicService.calculate_metrics_grouped(ev_month, op_month)
-    
-    return {
-        "user": user,
-        "metrics": metrics_week,
-        "insight": "",
-        "is_live": True,
-        "history": [],
-        "porteiros": porteiros
-    }
+    ev_live = db.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", start_iso).lt("timestamp", end_iso).execute().data
+    op_live = db.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).gte("data", month_start.isoformat()).lt("data", next_month.isoformat()).execute().data
+    metrics_live = LogicService.calculate_metrics_grouped(ev_live, op_live)
+    daily_performance = {}
+    for ev in ev_live:
+        if str(ev.get("tipo", "")).lower() in ["ganho", "rota", "corrida", "faturamento"]:
+            try:
+                dt = datetime.datetime.fromisoformat(ev["timestamp"]).strftime('%Y-%m-%d')
+                val = float(ev.get("valor", 0))
+                daily_performance[dt] = daily_performance.get(dt, 0) + val
+            except: continue
+    daily_list = sorted([{"date": d, "ganho": g} for d, g in daily_performance.items()], key=lambda x: x['date'])
+    return {"user": user, "metrics": metrics_live, "daily_performance": daily_list, "insight": "", "is_live": True, "history": history, "created_at": datetime.datetime.now().isoformat(), "porteiros": porteiros}
 
 @app.get("/dashboard/{whatsapp_number}", response_class=HTMLResponse)
 async def dashboard_page(whatsapp_number: str):
@@ -390,304 +258,112 @@ async def dashboard_page(whatsapp_number: str):
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
-            :root {
-                --ink: #0f172a;
-                --line: #e2e8f0;
-                --brand: #0f766e;
-                --brand-strong: #115e59;
-                --accent: #f59e0b;
-                --surface: #ffffff;
-            }
-            body {
-                font-family: 'Space Grotesk', sans-serif;
-                background: radial-gradient(1200px 600px at 20% -10%, #d1fae5 0%, transparent 60%),
-                            radial-gradient(900px 500px at 100% 0%, #fef3c7 0%, transparent 55%),
-                            #f8fafc;
-                color: var(--ink);
-                overflow-x: hidden;
-            }
-            ::-webkit-scrollbar { width: 6px; height: 6px; }
-            ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-            .history-item { transition: all 0.2s ease-in-out; }
-            .history-item:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgb(15 23 42 / 0.08); }
-            .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 18px -14px rgb(15 23 42 / 0.25); }
+            :root { --ink: #0f172a; --line: #e2e8f0; --brand: #0f766e; }
+            body { font-family: 'Space Grotesk', sans-serif; background: #f8fafc; color: var(--ink); overflow-x: hidden; }
+            .card { background: white; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
             .tooltip-container { position: relative; display: inline-flex; align-items: center; gap: 4px; }
-            .tooltip {
-                display: none;
-                position: absolute;
-                bottom: 100%;
-                left: 50%;
-                transform: translateX(-50%);
-                margin-bottom: 8px;
-                background-color: #1e293b;
-                color: white;
-                padding: 10px;
-                border-radius: 8px;
-                font-size: 11px;
-                width: 220px;
-                text-align: center;
-                z-index: 100;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                pointer-events: none;
-                font-weight: 500;
-            }
+            .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; background: #1e293b; color: white; padding: 10px; border-radius: 8px; font-size: 11px; width: 220px; text-align: center; z-index: 100; font-weight: 500; pointer-events: none; }
             .tooltip-container:hover .tooltip { display: block; }
+            .history-item { transition: all 0.2s; }
+            .history-item:hover { transform: translateY(-1px); }
         </style>
     </head>
     <body class="flex flex-col lg:flex-row min-h-screen">
-        <!-- Sidebar -->
-        <aside class="w-full lg:w-80 bg-white/90 backdrop-blur border-b lg:border-b-0 lg:border-r border-slate-200 p-5 lg:p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
+        <aside class="w-full lg:w-80 bg-white/95 backdrop-blur border-b lg:border-b-0 lg:border-r border-slate-200 p-5 lg:p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
             <div class="flex items-center gap-3 mb-8">
-                <div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center shadow-md shadow-teal-200 text-white"> 
-                    <i class="fa-solid fa-bolt"></i> 
-                </div>
-                <div>
-                    <h1 class="font-bold text-lg text-slate-800 leading-tight">MeiBot</h1>
-                    <p class="text-xs text-slate-500 font-medium">Dashboard Analítico</p>
-                </div>
+                <div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-teal-100"> <i class="fa-solid fa-bolt"></i> </div>
+                <div><h1 class="font-bold text-lg text-slate-800 leading-tight">MeiBot</h1><p class="text-xs text-slate-500 font-medium">Dashboard Analítico</p></div>
             </div>
-            
             <div class="mb-6">
                 <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Navegação</p>
                 <div class="flex flex-row lg:flex-col gap-2">
-                    <button id="btn-nav-performance" onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100">
-                        <i class="fa-solid fa-chart-pie w-4"></i> Performance
-                    </button>
-                    <button id="btn-nav-porteiros" onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200">
-                        <i class="fa-solid fa-map-location-dot w-4"></i> Porteiros
-                    </button>
+                    <button id="btn-nav-performance" onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100"><i class="fa-solid fa-chart-pie w-4"></i> Performance</button>
+                    <button id="btn-nav-porteiros" onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50"><i class="fa-solid fa-map-location-dot w-4"></i> Porteiros</button>
                 </div>
             </div>
-
             <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Histórico</p>
-            <nav id="history-list" class="flex lg:flex-col gap-3 lg:gap-2.5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 snap-x"></nav>
+            <nav id="history-list" class="flex lg:flex-col gap-2.5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 snap-x"></nav>
         </aside>
 
-        <!-- Main Content -->
-        <main class="flex-grow p-5 md:p-8 space-y-6 md:space-y-8 w-full max-w-7xl mx-auto">
+        <main class="flex-grow p-5 md:p-8 space-y-6 w-full max-w-7xl mx-auto">
             <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-5 gap-4">
-                <div>
-                    <h2 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight" id="main-title">Visão Geral</h2>
-                    <p id="txt-periodo" class="text-slate-500 text-sm mt-1">Carregando dados estruturados...</p>
-                </div>
+                <div><h2 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight" id="main-title">Visão Geral</h2><p id="txt-periodo" class="text-slate-500 text-sm mt-1">Carregando dados...</p></div>
             </header>
 
-            <!-- SECTION: PERFORMANCE -->
             <div id="section-performance" class="space-y-6">
-                <!-- Main Metrics Grid -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div class="card p-5 border-l-4 border-l-slate-400">
-                        <div class="flex justify-between items-start mb-2 tooltip-container">
-                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Faturamento Bruto</p>
-                            <i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i>
-                            <span class="tooltip">Soma de todos os ganhos registrados no período.</span>
-                        </div>
-                        <p id="txt-bruto" class="text-3xl font-bold text-slate-800">R$ 0,00</p>
-                    </div>
-
-                    <div class="card p-5 border-l-4 border-l-teal-500">
-                        <div class="flex justify-between items-start mb-2 tooltip-container">
-                            <p class="text-teal-600 text-[10px] font-bold uppercase tracking-wider">Saldo Líquido</p>
-                            <i class="fa-solid fa-circle-info text-[10px] text-teal-300"></i>
-                            <span class="tooltip">Faturamento Bruto menos todos os gastos (essenciais e não essenciais).</span>
-                        </div>
-                        <p id="txt-saldo" class="text-3xl font-bold text-teal-700">R$ 0,00</p>
-                    </div>
-
-                    <div class="card p-5 border-l-4 border-l-sky-500">
-                        <div class="flex justify-between items-start mb-2 tooltip-container">
-                            <p class="text-sky-600 text-[10px] font-bold uppercase tracking-wider">Saldo c/ Provisão</p>
-                            <i class="fa-solid fa-circle-info text-[10px] text-sky-300"></i>
-                            <span class="tooltip">Saldo líquido menos uma reserva de R$0,20 por KM para manutenções futuras.</span>
-                        </div>
-                        <p id="txt-saldo-provisao" class="text-3xl font-bold text-sky-700">R$ 0,00</p>
-                    </div>
-
-                    <div class="card p-5 border-l-4 border-l-indigo-500">
-                        <div class="flex justify-between items-start mb-2 tooltip-container">
-                            <p class="text-indigo-600 text-[10px] font-bold uppercase tracking-wider">Eficiência (KM)</p>
-                            <i class="fa-solid fa-circle-info text-[10px] text-indigo-300"></i>
-                            <span class="tooltip">Quanto você fatura para cada KM que roda.</span>
-                        </div>
-                        <p id="txt-eficiencia" class="text-3xl font-bold text-indigo-700">R$ 0,00/km</p>
-                    </div>
-
-                    <div class="card p-5 border-l-4 border-l-indigo-500">
-                        <div class="flex justify-between items-start mb-2 tooltip-container">
-                            <p class="text-indigo-600 text-[10px] font-bold uppercase tracking-wider">Eficiência (Hora)</p>
-                            <i class="fa-solid fa-circle-info text-[10px] text-indigo-300"></i>
-                            <span class="tooltip">Seu ganho líquido por hora total de trabalho.</span>
-                        </div>
-                        <p id="txt-ganho-hora" class="text-3xl font-bold text-indigo-700">R$ 0,00/h</p>
-                    </div>
-
-                    <div class="card p-5 border-l-4 border-l-violet-500">
-                        <div class="flex justify-between items-start mb-2 tooltip-container">
-                            <p class="text-violet-600 text-[10px] font-bold uppercase tracking-wider">Eficiência na Rua</p>
-                            <i class="fa-solid fa-circle-info text-[10px] text-violet-300"></i>
-                            <span class="tooltip">Seu ganho bruto por hora em rota (descontando o tempo de espera no galpão).</span>
-                        </div>
-                        <p id="txt-ganho-hora-rua" class="text-3xl font-bold text-violet-700">R$ 0,00/h</p>
-                    </div>
+                    <div class="card p-5 border-l-4 border-l-slate-400"><div class="flex justify-between items-start mb-2 tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Faturamento Bruto</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Soma de todos os ganhos registrados no período.</span></div><p id="txt-bruto" class="text-3xl font-bold text-slate-800">R$ 0,00</p></div>
+                    <div class="card p-5 border-l-4 border-l-teal-500"><div class="flex justify-between items-start mb-2 tooltip-container"><p class="text-teal-600 text-[10px] font-bold uppercase tracking-wider">Saldo Líquido</p><i class="fa-solid fa-circle-info text-[10px] text-teal-300"></i><span class="tooltip">Faturamento Bruto menos todos os gastos.</span></div><p id="txt-saldo" class="text-3xl font-bold text-teal-700">R$ 0,00</p></div>
+                    <div class="card p-5 border-l-4 border-l-sky-500"><div class="flex justify-between items-start mb-2 tooltip-container"><p class="text-sky-600 text-[10px] font-bold uppercase tracking-wider">Saldo c/ Provisão</p><i class="fa-solid fa-circle-info text-[10px] text-sky-300"></i><span class="tooltip">Saldo líquido menos uma reserva de R$0,20 por KM para manutenções.</span></div><p id="txt-saldo-provisao" class="text-3xl font-bold text-sky-700">R$ 0,00</p></div>
+                    <div class="card p-5 border-l-4 border-l-indigo-500"><div class="flex justify-between items-start mb-2 tooltip-container"><p class="text-indigo-600 text-[10px] font-bold uppercase tracking-wider">Eficiência (KM)</p><i class="fa-solid fa-circle-info text-[10px] text-indigo-300"></i><span class="tooltip">Quanto você fatura para cada KM que roda.</span></div><p id="txt-eficiencia" class="text-3xl font-bold text-indigo-700">R$ 0,00/km</p></div>
+                    <div class="card p-5 border-l-4 border-l-indigo-500"><div class="flex justify-between items-start mb-2 tooltip-container"><p class="text-indigo-600 text-[10px] font-bold uppercase tracking-wider">Eficiência (Hora)</p><i class="fa-solid fa-circle-info text-[10px] text-indigo-300"></i><span class="tooltip">Seu ganho líquido por hora total de trabalho.</span></div><p id="txt-ganho-hora" class="text-3xl font-bold text-indigo-700">R$ 0,00/h</p></div>
+                    <div class="card p-5 border-l-4 border-l-violet-500"><div class="flex justify-between items-start mb-2 tooltip-container"><p class="text-violet-600 text-[10px] font-bold uppercase tracking-wider">Eficiência na Rua</p><i class="fa-solid fa-circle-info text-[10px] text-violet-300"></i><span class="tooltip">Seu ganho bruto por hora em rota (descontando galpão).</span></div><p id="txt-ganho-hora-rua" class="text-3xl font-bold text-violet-700">R$ 0,00/h</p></div>
                 </div>
 
-                <!-- Charts Row -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div id="daily-chart-container" class="lg:col-span-2 card p-6" style="display: none;">
-                        <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance Diária (Mês Atual)</h3>
-                        <div class="relative w-full h-[300px]"><canvas id="chartDaily"></canvas></div>
-                    </div>
-                    <div id="apps-chart-container" class="lg:col-span-2 card p-6" style="display: none;">
-                        <div class="flex justify-between items-center mb-6">
-                            <h3 id="chart-title" class="font-bold text-slate-800 text-sm uppercase tracking-tight">Performance por Período</h3>
-                            <div id="chart-legend" class="flex gap-3"></div>
-                        </div>
-                        <div class="relative w-full h-[300px]"><canvas id="chartApps"></canvas></div>
-                    </div>
-
-                    <div class="card p-6 flex flex-col">
-                        <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Distribuição de Gastos</h3>
-                        <div class="relative w-full h-[200px] mb-6"><canvas id="chartGastos"></canvas></div>
-                        <div class="space-y-3 mt-auto">
-                            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
-                                <span class="text-[10px] font-bold text-slate-500 uppercase">Essenciais</span>
-                                <span id="txt-essencial" class="text-xs font-bold text-slate-700">R$ 0,00</span>
-                            </div>
-                            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
-                                <span class="text-[10px] font-bold text-slate-500 uppercase">Não Essenciais</span>
-                                <span id="txt-nao-essencial" class="text-xs font-bold text-rose-600">R$ 0,00</span>
-                            </div>
-                        </div>
-                    </div>
+                    <div id="daily-chart-container" class="lg:col-span-2 card p-6" style="display: none;"><h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance Diária</h3><div class="relative w-full h-[300px]"><canvas id="chartDaily"></canvas></div></div>
+                    <div id="apps-chart-container" class="lg:col-span-2 card p-6" style="display: none;"><h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance por Período</h3><div class="relative w-full h-[300px]"><canvas id="chartApps"></canvas></div></div>
+                    <div class="card p-6 flex flex-col"><h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Distribuição de Gastos</h3><div class="relative w-full h-[200px] mb-6"><canvas id="chartGastos"></canvas></div><div class="space-y-3 mt-auto"><div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-500 uppercase"><span>Essenciais</span><span id="txt-essencial">R$ 0,00</span></div><div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-500 uppercase"><span>Não Essenciais</span><span id="txt-nao-essencial" class="text-rose-600">R$ 0,00</span></div></div></div>
                 </div>
 
-                <!-- App Details & Waiting Time -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2 card p-6">
-                        <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Detalhamento por App</h3>
-                        <div id="list-apps" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-                    </div>
-
-                    <div class="card p-6 bg-amber-50/30 border-amber-100">
-                        <h3 class="font-bold text-amber-800 text-sm mb-4 uppercase tracking-tight">Eficiência de Galpão</h3>
-                        <div class="flex items-end gap-2 mb-2">
-                            <p id="txt-tempo-espera" class="text-3xl font-bold text-amber-700">0h</p>
-                            <p class="text-xs text-amber-500 font-bold mb-1 uppercase">Total Espera</p>
-                        </div>
-                        <div class="w-full bg-amber-100 rounded-full h-2 overflow-hidden mb-4">
-                            <div id="bar-espera" class="bg-amber-500 h-full transition-all" style="width: 0%"></div>
-                        </div>
-                        <p id="txt-tempo-total" class="text-[10px] text-slate-500 font-medium">Tempo Total: 0h</p>
-                    </div>
+                    <div class="lg:col-span-2 card p-6"><h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Detalhamento por App</h3><div id="list-apps" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div></div>
+                    <div class="card p-6 bg-amber-50/30 border-amber-100"><h3 class="font-bold text-amber-800 text-sm mb-4 uppercase tracking-tight">Eficiência de Galpão</h3><div class="flex items-end gap-2 mb-2"><p id="txt-tempo-espera" class="text-3xl font-bold text-amber-700">0h</p><p class="text-xs text-amber-500 font-bold mb-1 uppercase">Total Espera</p></div><div class="w-full bg-amber-100 rounded-full h-2 overflow-hidden mb-4"><div id="bar-espera" class="bg-amber-500 h-full" style="width: 0%"></div></div><p id="txt-tempo-total" class="text-[10px] text-slate-500 font-medium">Tempo Total: 0h</p></div>
                 </div>
 
-                <!-- Strategic Analysis Section -->
-                <div id="insight-section" class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hidden">
-                    <div class="bg-teal-600 px-6 py-4 flex items-center justify-between">
-                        <h3 class="text-white font-bold text-sm uppercase tracking-wider flex items-center gap-2"> 
-                            <i class="fa-solid fa-robot"></i> Inteligência Artificial MeiBot
-                        </h3>
-                    </div>
-                    <div class="p-6 md:p-8 bg-slate-50/50">
-                        <div id="txt-insight" class="prose prose-sm max-w-none text-slate-700 leading-relaxed font-medium"></div>
-                    </div>
-                </div>
+                <div id="insight-section" class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hidden"><div class="bg-teal-600 px-6 py-4"><h3 class="text-white font-bold text-sm uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-robot"></i> Inteligência Artificial MeiBot</h3></div><div class="p-6 md:p-8 bg-slate-50/50"><div id="txt-insight" class="prose prose-sm max-w-none text-slate-700 leading-relaxed font-medium"></div></div></div>
             </div>
 
-            <!-- SECTION: PORTEIROS -->
             <div id="section-porteiros" class="hidden space-y-6">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <div>
-                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">🗺️ Mapeamento de Porteiros</h3>
-                        <p id="porteiros-stats" class="text-slate-500 text-sm mt-1 font-medium">Carregando estatísticas...</p>
-                    </div>
-                    <div class="relative w-full md:w-96">
-                        <input type="text" id="search-porteiros" oninput="handleSearch(this.value)" 
-                            class="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-teal-500/20 focus:border-teal-500 focus:bg-white transition-all" 
-                            placeholder="Buscar prédio, rua ou porteiro...">
-                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><i class="fa-solid fa-magnifying-glass text-slate-400"></i></div>
-                    </div>
+                    <div><h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">🗺️ Mapeamento de Porteiros</h3><p id="porteiros-stats" class="text-slate-500 text-sm mt-1 font-medium">Carregando...</p></div>
+                    <div class="relative w-full md:w-96"><input type="text" id="search-porteiros" oninput="handleSearch(this.value)" class="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all" placeholder="Buscar prédio, rua ou porteiro..."><div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><i class="fa-solid fa-magnifying-glass text-slate-400"></i></div></div>
                 </div>
                 <div class="space-y-4" id="porteiros-container"></div>
             </div>
         </main>
 
         <script>
-            let dailyChart = null, appsChart = null, chartGastos = null;
-            let dashboardData = null;
+            let dailyChart = null, appsChart = null, chartGastos = null, dashboardData = null;
             const WHATSAPP_ID = '""" + whatsapp_number + """';
+            const fmt = (val) => (val || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
 
             function showSection(section) {
                 document.getElementById('section-performance').classList.toggle('hidden', section !== 'performance');
                 document.getElementById('section-porteiros').classList.toggle('hidden', section !== 'porteiros');
                 document.getElementById('main-title').innerText = section === 'performance' ? 'Visão Geral' : 'Diretório de Porteiros';
-                
-                const btnPerf = document.getElementById('btn-nav-performance');
-                const btnPort = document.getElementById('btn-nav-porteiros');
-                
-                if (section === 'performance') {
-                    btnPerf.className = "flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100";
-                    btnPort.className = "flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200";
-                } else {
-                    btnPerf.className = "flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200";
-                    btnPort.className = "flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100";
-                    renderPorteiros();
-                }
+                const btnPerf = document.getElementById('btn-nav-performance'), btnPort = document.getElementById('btn-nav-porteiros');
+                if (section === 'performance') { btnPerf.className = "flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100"; btnPort.className = "flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50"; }
+                else { btnPerf.className = "flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50"; btnPort.className = "flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100"; renderPorteiros(); }
             }
 
             function handleSearch(query) { renderPorteiros(query); }
-
             function renderPorteiros(filterText = '') {
-                const container = document.getElementById('porteiros-container');
-                const statsEl = document.getElementById('porteiros-stats');
-                if (!dashboardData?.porteiros?.length) return;
+                const container = document.getElementById('porteiros-container'), statsEl = document.getElementById('porteiros-stats');
+                if (!dashboardData?.porteiros?.length) { container.innerHTML = '<p class="text-slate-400 italic text-center py-10">Sem dados.</p>'; return; }
                 const query = (filterText || '').toLowerCase().trim();
-                const normalizeStreetLabel = (v) => {
-                    let text = (v || '').trim();
-                    const upper = text.toUpperCase();
-                    if (upper.includes('PAISANDU') || upper.includes('PAISSANDU')) return 'Rua Paissandu';
-                    if (upper.includes('VERGUEIRO')) return 'Rua Senador Vergueiro';
-                    return text.replace(/\b(r|r\.|rua)\b/gi, 'Rua').replace(/\b(av|av\.|avenida)\b/gi, 'Avenida');
-                };
+                const normalizeStreetLabel = (v) => { let text = (v || '').trim(); if (text.toUpperCase().includes('PAISANDU')) return 'Rua Paissandu'; if (text.toUpperCase().includes('VERGUEIRO')) return 'Rua Senador Vergueiro'; return text.replace(/\\b(r|r\\.|rua)\\b/gi, 'Rua').replace(/\\b(av|av\\.|avenida)\\b/gi, 'Avenida'); };
                 const filtered = dashboardData.porteiros.filter(p => !query || `${p.rua} ${p.numero} ${p.nome_porteiro}`.toLowerCase().includes(query));
-                const grouped = {};
-                filtered.forEach(p => { const r = normalizeStreetLabel(p.rua); if(!grouped[r]) grouped[r]=[]; grouped[r].push(p); });
+                const grouped = {}; filtered.forEach(p => { const r = normalizeStreetLabel(p.rua); if(!grouped[r]) grouped[r]=[]; grouped[r].push(p); });
                 statsEl.innerText = `${dashboardData.porteiros.length} prédios cadastrados • ${Object.keys(grouped).length} ruas`;
                 container.innerHTML = '';
                 Object.keys(grouped).sort().forEach((rua, idx) => {
-                    const sectionId = `rua-${idx}`;
-                    let cardsHtml = '';
-                    grouped[rua].sort((a,b) => (parseInt(a.numero)||0) - (parseInt(b.numero)||0)).forEach(p => {
-                        cardsHtml += `
-                            <div class="bg-white rounded-xl p-4 border border-slate-100 flex flex-col justify-between hover:border-teal-200 transition-all">
-                                <div>
-                                    <p class="text-xs font-bold text-teal-600 uppercase tracking-wider">Nº ${p.numero}</p>
-                                    <h5 class="font-bold text-slate-800 leading-tight">${p.nome_porteiro || 'Porteiro'}</h5>
-                                    <p class="text-xs text-slate-500 mt-2 flex items-center gap-1.5"><i class="fa-solid fa-clock"></i> ${p.turno || 'Não inf.'}</p>
-                                </div>
-                                ${p.notas_predio ? `<div class="mt-3 pt-3 border-t border-slate-50"><p class="text-[11px] text-slate-600 italic leading-relaxed">"${p.notas_predio}"</p></div>` : ''}
-                            </div>`;
-                    });
-                    const accordion = document.createElement('div');
-                    accordion.className = 'bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm';
+                    const sectionId = `rua-${idx}`; let cardsHtml = '';
+                    grouped[rua].sort((a,b) => (parseInt(a.numero)||0)-(parseInt(b.numero)||0)).forEach(p => { cardsHtml += `<div class="bg-white rounded-xl p-4 border border-slate-100 flex flex-col justify-between hover:border-teal-200 transition-all shadow-sm"><div><p class="text-xs font-bold text-teal-600 uppercase tracking-wider">Nº ${p.numero}</p><h5 class="font-bold text-slate-800 leading-tight">${p.nome_porteiro || 'Porteiro'}</h5><p class="text-xs text-slate-500 mt-2 flex items-center gap-1.5"><i class="fa-solid fa-clock"></i> ${p.turno || 'Não inf.'}</p></div>${p.notas_predio ? `<div class="mt-3 pt-3 border-t border-slate-50"><p class="text-[11px] text-slate-600 italic leading-relaxed">"${p.notas_predio}"</p></div>`:''}</div>`; });
+                    const accordion = document.createElement('div'); accordion.className = 'bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm';
                     accordion.innerHTML = `<button onclick="document.getElementById('${sectionId}').classList.toggle('hidden')" class="w-full px-6 py-4 flex items-center justify-between bg-white hover:bg-slate-50 transition-colors font-bold text-slate-800 uppercase tracking-tight"><span>${rua}</span><i class="fa-solid fa-chevron-down text-slate-300"></i></button><div id="${sectionId}" class="px-6 pb-6 pt-2 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">${cardsHtml}</div>`;
                     container.appendChild(accordion);
                 });
             }
 
-            const fmt = (val) => (val || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
-
             async function loadDashboard(analysisId = null) {
                 try {
                     const url = analysisId ? `/api/dashboard/${WHATSAPP_ID}?analysis_id=${analysisId}` : `/api/dashboard/${WHATSAPP_ID}`;
-                    const response = await fetch(url);
-                    const data = await response.json();
-                    if (data.error) throw new Error(data.error);
-                    dashboardData = data;
-                    const c = data.metrics.consolidado;
-                    const apps = data.metrics.apps;
-
-                    document.getElementById('txt-periodo').innerText = 'Relatório de: ' + new Date(data.created_at).toLocaleDateString('pt-BR');
+                    const response = await fetch(url); const data = await response.json(); if (data.error) throw new Error(data.error);
+                    dashboardData = data; const c = data.metrics.consolidado, apps = data.metrics.apps;
+                    const dateStr = new Date(data.created_at).toLocaleDateString('pt-BR');
+                    if (data.is_live) { document.getElementById('main-title').innerText = 'Visão Geral'; document.getElementById('txt-periodo').innerText = 'Dados acumulados do mês atual'; }
+                    else { document.getElementById('main-title').innerText = 'Resumo Histórico'; document.getElementById('txt-periodo').innerText = `Gerado em ${dateStr}`; }
                     document.getElementById('txt-bruto').innerText = 'R$ ' + fmt(c.total_ganhos);
                     document.getElementById('txt-saldo').innerText = 'R$ ' + fmt(c.saldo);
                     document.getElementById('txt-saldo-provisao').innerText = 'R$ ' + fmt(c.saldo_com_provisao);
@@ -699,71 +375,37 @@ async def dashboard_page(whatsapp_number: str):
                     document.getElementById('txt-tempo-espera').innerText = (c.tempo_espera_galpao || 0).toFixed(1) + 'h';
                     document.getElementById('txt-tempo-total').innerText = 'Tempo Total: ' + (c.total_hours || 0).toFixed(1) + 'h';
                     document.getElementById('bar-espera').style.width = Math.min((c.tempo_espera_galpao / (c.total_hours || 1)) * 100, 100) + '%';
-
                     const insightSection = document.getElementById('insight-section');
-                    if (!data.is_live) { insightSection.classList.remove('hidden'); document.getElementById('txt-insight').innerHTML = marked.parse(data.insight || ""); }
-                    else { insightSection.classList.add('hidden'); }
-
-                    const listContainer = document.getElementById('list-apps');
-                    listContainer.innerHTML = '';
+                    if (!data.is_live) { insightSection.classList.remove('hidden'); document.getElementById('txt-insight').innerHTML = marked.parse(data.insight || ""); } else { insightSection.classList.add('hidden'); }
+                    const listContainer = document.getElementById('list-apps'); listContainer.innerHTML = '';
                     Object.keys(apps).filter(n => n !== 'Outros').sort((a,b) => apps[b].ganhos - apps[a].ganhos).forEach(name => {
-                        const app = apps[name];
-                        const rkm = (app.ganhos / (app.km || 1)).toFixed(2);
-                        const rhora = (app.ganhos / (app.horas || 1)).toFixed(2);
-                        const percent = (app.ganhos / (c.total_ganhos || 1)) * 100;
-                        listContainer.innerHTML += `
-                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100 group hover:border-teal-200 transition-all shadow-sm">
-                                <div class="flex justify-between items-start mb-3">
-                                    <div><p class="font-bold text-slate-800 text-sm uppercase tracking-tight">${name}</p><p class="text-[10px] text-slate-500 font-bold uppercase">${app.km.toFixed(1)}km • ${app.horas.toFixed(1)}h</p></div>
-                                    <div class="text-right"><p class="font-bold text-teal-700 text-sm">R$ ${fmt(app.ganhos)}</p><p class="text-[10px] text-teal-500 font-bold uppercase">${percent.toFixed(0)}% do total</p></div>
-                                </div>
-                                <div class="grid grid-cols-2 gap-2 mt-4">
-                                    <div class="bg-white p-2 rounded-lg border border-slate-50 text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/KM</p><p class="text-xs font-bold text-slate-700">R$ ${rkm}</p></div>
-                                    <div class="bg-white p-2 rounded-lg border border-slate-50 text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/Hora</p><p class="text-xs font-bold text-slate-700">R$ ${rhora}</p></div>
-                                </div>
-                            </div>`;
+                        const app = apps[name], rkm = (app.ganhos / (app.km || 1)).toFixed(2), rhora = (app.ganhos / (app.horas || 1)).toFixed(2), p = (app.ganhos / (c.total_ganhos || 1)) * 100;
+                        listContainer.innerHTML += `<div class="p-4 rounded-xl bg-slate-50 border border-slate-100 group hover:border-teal-200 transition-all shadow-sm"><div class="flex justify-between items-start mb-3"><div><p class="font-bold text-slate-800 text-sm uppercase tracking-tight">${name}</p><p class="text-[10px] text-slate-500 font-bold uppercase">${app.km.toFixed(1)}km • ${app.horas.toFixed(1)}h</p></div><div class="text-right"><p class="font-bold text-teal-700 text-sm">R$ ${fmt(app.ganhos)}</p><p class="text-[10px] text-teal-500 font-bold uppercase">${p.toFixed(0)}%</p></div></div><div class="grid grid-cols-2 gap-2 mt-4"><div class="bg-white p-2 rounded-lg border border-slate-50 text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/KM</p><p class="text-xs font-bold text-slate-700">R$ ${rkm}</p></div><div class="bg-white p-2 rounded-lg border border-slate-50 text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/Hora</p><p class="text-xs font-bold text-slate-700">R$ ${rhora}</p></div></div></div>`;
                     });
-
                     if (chartGastos) chartGastos.destroy();
-                    chartGastos = new Chart(document.getElementById('chartGastos').getContext('2d'), {
-                        type: 'doughnut',
-                        data: { labels: ['Essenciais', 'Não Essenciais'], datasets: [{ data: [c.gastos_essenciais, c.gastos_nao_essenciais], backgroundColor: ['#0f766e', '#e11d48'] }] },
-                        options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }
-                    });
-
-                    const dailyContainer = document.getElementById('daily-chart-container');
-                    const appsContainer = document.getElementById('apps-chart-container');
+                    chartGastos = new Chart(document.getElementById('chartGastos').getContext('2d'), { type: 'doughnut', data: { labels: ['Essenciais', 'Não Essenciais'], datasets: [{ data: [c.gastos_essenciais, c.gastos_nao_essenciais], backgroundColor: ['#0f766e', '#e11d48'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } } });
+                    const dailyContainer = document.getElementById('daily-chart-container'), appsContainer = document.getElementById('apps-chart-container');
                     if (data.is_live && data.daily_performance?.length > 0) {
                         dailyContainer.style.display = 'block'; appsContainer.style.display = 'none';
                         if (dailyChart) dailyChart.destroy();
-                        dailyChart = new Chart(document.getElementById('chartDaily').getContext('2d'), {
-                            type: 'bar',
-                            data: { labels: data.daily_performance.map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit' })), datasets: [{ label: 'Ganho', data: data.daily_performance.map(d => d.ganho), backgroundColor: '#0f766e', borderRadius: 4 }] },
-                            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-                        });
+                        dailyChart = new Chart(document.getElementById('chartDaily').getContext('2d'), { type: 'bar', data: { labels: data.daily_performance.map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit' })), datasets: [{ label: 'Ganho', data: data.daily_performance.map(d => d.ganho), backgroundColor: '#0f766e', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
                     } else {
                         dailyContainer.style.display = 'none'; appsContainer.style.display = 'block';
                         if (appsChart) appsChart.destroy();
                         const sorted = Object.keys(apps).filter(n => n !== 'Outros').sort((a,b) => apps[b].ganhos - apps[a].ganhos);
-                        appsChart = new Chart(document.getElementById('chartApps').getContext('2d'), {
-                            type: 'bar',
-                            data: { labels: sorted, datasets: [{ data: sorted.map(n => apps[n].ganhos), backgroundColor: ['#0f766e', '#f97316', '#6366f1'], borderRadius: 4 }] },
-                            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-                        });
+                        appsChart = new Chart(document.getElementById('chartApps').getContext('2d'), { type: 'bar', data: { labels: sorted, datasets: [{ data: sorted.map(n => apps[n].ganhos), backgroundColor: ['#0f766e', '#f97316', '#6366f1'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
                     }
-
                     if (data.history) {
                         const histList = document.getElementById('history-list'); histList.innerHTML = '';
-                        const liveItem = document.createElement('div');
-                        liveItem.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col ${!analysisId ? 'bg-teal-50 border-teal-200' : 'bg-white border-slate-200'}`;
-                        liveItem.innerHTML = `<span class="text-[10px] font-bold uppercase ${!analysisId ? 'text-teal-600' : 'text-slate-500'}">AO VIVO</span><span class="text-xs font-medium">Mês Atual</span>`;
-                        liveItem.onclick = () => loadDashboard(); histList.appendChild(liveItem);
-                        data.history.forEach(h => {
-                            const active = analysisId === h.id;
-                            const btn = document.createElement('div');
-                            btn.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col mt-2 ${active ? 'bg-teal-50 border-teal-200' : 'bg-white border-slate-200'}`;
-                            btn.innerHTML = `<span class="text-[10px] font-bold uppercase ${active ? 'text-teal-600' : 'text-slate-500'}">${h.periodo_tipo}</span><span class="text-xs font-medium">${new Date(h.created_at).toLocaleDateString('pt-BR')}</span>`;
-                            btn.onclick = () => loadDashboard(h.id); histList.appendChild(btn);
+                        const liveItem = document.createElement('div'); liveItem.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col ${!analysisId ? 'bg-teal-50 border-teal-200':'bg-white border-slate-200'}`;
+                        liveItem.innerHTML = `<span class="text-[10px] font-bold uppercase ${!analysisId ? 'text-teal-600':'text-slate-500'}">AO VIVO</span><span class="text-xs font-medium">Dashboard Atual</span>`;
+                        liveItem.onclick = () => { loadDashboard(); window.scrollTo({top:0, behavior:'smooth'}); }; histList.appendChild(liveItem);
+                        data.history.forEach((h, index) => {
+                            const active = analysisId === h.id; const btn = document.createElement('div'); btn.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col mt-2 ${active ? 'bg-teal-50 border-teal-200':'bg-white border-slate-200'}`;
+                            const currentTypeIndex = data.history.filter((x, i) => x.periodo_tipo === h.periodo_tipo && i >= index).length;
+                            const label = `${h.periodo_tipo.charAt(0).toUpperCase() + h.periodo_tipo.slice(1)} ${currentTypeIndex}`;
+                            btn.innerHTML = `<span class="text-[10px] font-bold uppercase ${active ? 'text-teal-600':'text-slate-500'}">${label}</span><span class="text-[10px] text-slate-400">Ver detalhes</span>`;
+                            btn.onclick = () => { loadDashboard(h.id); window.scrollTo({top:0, behavior:'smooth'}); }; histList.appendChild(btn);
                         });
                     }
                 } catch (e) { console.error('Dashboard Error:', e); }
@@ -774,7 +416,6 @@ async def dashboard_page(whatsapp_number: str):
     </html>
     """
     return html
-
 
 if __name__ == "__main__":
     import uvicorn
