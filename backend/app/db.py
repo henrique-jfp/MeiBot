@@ -312,6 +312,10 @@ class DBService:
         if not text:
             return "Sem Rua"
 
+        # Remove pontuacoes soltas
+        text = re.sub(r"[\,;]+", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+
         # Remove números perdidos no final do nome da rua
         text = re.sub(r"\s+\d+$", "", text)
 
@@ -323,7 +327,7 @@ class DBService:
         text_upper = text.upper()
         
         # Normalização agressiva para ruas conhecidas com muitos erros
-        if any(x in text_upper for x in ["PAISANDU", "PAISSANDU", "PAYSANDU", "BAISSANDU", "PAISSÃO"]):
+        if any(x in text_upper for x in ["PAISANDU", "PAISSANDU", "PAYSANDU", "BAISSANDU", "PAISSÃO", "PASSANDU"]):
             return "Rua Paissandu"
         
         if any(x in text_upper for x in ["VERGUEIRO", "BERGUEIRO"]):
