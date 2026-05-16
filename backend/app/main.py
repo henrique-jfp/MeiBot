@@ -232,7 +232,70 @@ async def dashboard_page(whatsapp_number: str):
                 if (s === 'porteiros') renderPorteiros();
             }
 
-            function renderPorteiros(f = '') { /* ... porteiro logic ... */ }
+            function esc(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function renderPorteiros(f = '') {
+                const container = document.getElementById('section-porteiros');
+                const porteiros = (dashboardData && Array.isArray(dashboardData.porteiros)) ? dashboardData.porteiros : [];
+                const filter = String(f || '').toLowerCase();
+                const filtrados = porteiros.filter(p => {
+                    const rua = (p.rua || '').toLowerCase();
+                    const numero = (p.numero || '').toLowerCase();
+                    const nome = (p.nome_porteiro || '').toLowerCase();
+                    return !filter || rua.includes(filter) || numero.includes(filter) || nome.includes(filter);
+                });
+
+                const header = `
+                    <div class="card p-6">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                            <div>
+                                <h3 class="font-bold text-sm uppercase">Mapeamento de Porteiros</h3>
+                                <p class="text-xs text-slate-500">${filtrados.length} de ${porteiros.length} registros</p>
+                            </div>
+                            <input id="porteiro-filter" value="${esc(filter)}" placeholder="Buscar por rua, numero ou nome" class="w-full md:w-80 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-200" />
+                        </div>
+                    </div>
+                `;
+
+                if (porteiros.length === 0) {
+                    container.innerHTML = header + '<div class="card p-6 text-sm text-slate-500">Nenhum porteiro cadastrado.</div>';
+                } else if (filtrados.length === 0) {
+                    container.innerHTML = header + '<div class="card p-6 text-sm text-slate-500">Nenhum resultado para esse filtro.</div>';
+                } else {
+                    const rows = filtrados
+                        .sort((a, b) => (a.rua || '').localeCompare(b.rua || '') || (a.numero || '').localeCompare(b.numero || ''))
+                        .map(p => {
+                            const notas = p.notas_predio ? `<div class="text-[11px] text-slate-500 mt-1">${esc(p.notas_predio)}</div>` : '';
+                            const turno = p.turno ? `<span class="text-[10px] font-bold text-slate-500 uppercase">${esc(p.turno)}</span>` : '';
+                            return `
+                                <div class="card p-4">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div>
+                                            <div class="text-xs font-bold uppercase text-slate-500">${esc(p.rua)}${p.numero ? ', ' + esc(p.numero) : ''}</div>
+                                            <div class="text-sm font-semibold text-slate-800">${esc(p.nome_porteiro || 'Porteiro')}</div>
+                                        </div>
+                                        ${turno}
+                                    </div>
+                                    ${notas}
+                                </div>
+                            `;
+                        }).join('');
+
+                    container.innerHTML = header + `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${rows}</div>`;
+                }
+
+                const input = document.getElementById('porteiro-filter');
+                if (input) {
+                    input.oninput = (e) => renderPorteiros(e.target.value);
+                }
+            }
 
             function formatPeriodRange(data) {
                 const metrics = data && data.metrics ? data.metrics : {};
@@ -357,6 +420,11 @@ async def dashboard_page(whatsapp_number: str):
                         btn.innerHTML = `<span class="text-xs font-bold uppercase ${aid === h.id ? 'text-teal-600':'text-slate-500'}">${h.periodo_tipo} ${cti}</span><span class="block text-[11px] text-slate-500">${periodLabel}</span>`;
                         btn.onclick = (e) => { e.preventDefault(); loadDashboard(h.id); }; hlist.appendChild(btn);
                     });
+                    const sectionOpen = !document.getElementById('section-porteiros').classList.contains('hidden');
+                    if (sectionOpen) {
+                        const existingFilter = document.getElementById('porteiro-filter')?.value || '';
+                        renderPorteiros(existingFilter);
+                    }
                 } catch (e) { console.error('Dashboard load error:', e); }
             }
             loadDashboard();
