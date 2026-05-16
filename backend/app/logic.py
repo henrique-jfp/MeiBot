@@ -132,7 +132,8 @@ class LogicService:
             if str(ev.get("sub_tipo")).lower() == "espera_galpao":
                 consolidado["tempo_espera_galpao"] += add_duration_hours(ev.get("hora_inicio"), ev.get("hora_fim"))
 
-            h_ini, h_fim = ev.get("hora_inicio"), ev.get("hora_fim")
+            h_ini = ev.get("hora_inicio_rota") or ev.get("hora_inicio")
+            h_fim = ev.get("hora_fim_operacao") or ev.get("hora_fim")
             if h_ini and h_fim and (tipo in ["ganho", "rota"] or str(ev.get("sub_tipo")) == "espera_galpao"):
                 try:
                     # Tenta pegar a data do evento; se não tiver, busca a data da operação correspondente

@@ -53,6 +53,16 @@ async def process_interpreted_data(user, interpreted):
             valor_calc = (p * 2.0) if (v == 0 or v == p) else v
             ev.update({"app": "Correios", "km": 20.0, "tipo": "ganho", "valor": valor_calc + float(ev.get("valor_extra", 0))})
         if active_op:
+            h_chegada = ev.get("hora_chegada_galpao")
+            h_saida_galpao = ev.get("hora_saida_galpao")
+            h_inicio_rota = ev.get("hora_inicio_rota")
+            h_fim_espera = h_saida_galpao or h_inicio_rota
+            if h_chegada and h_fim_espera:
+                wait_event = {"tipo": "registro", "sub_tipo": "espera_galpao", "hora_inicio": h_chegada, "hora_fim": h_fim_espera, "descricao": "Espera no galpao"}
+                if data_ref: wait_event["data_referencia"] = data_ref
+                db.add_event(user_id, active_op["id"], wait_event)
+                eventos_processados.append(wait_event)
+
             if data_ref: ev["data_referencia"] = data_ref
             db.add_event(user_id, active_op["id"], ev)
             eventos_processados.append(ev)
