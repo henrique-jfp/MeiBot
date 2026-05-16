@@ -9,6 +9,7 @@ import datetime
 import traceback
 import json
 import asyncio
+from collections import defaultdict
 
 app = FastAPI()
 db = DBService()
@@ -607,3 +608,63 @@ async def dashboard_page(whatsapp_number: str):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.get("/admin/fix-wait-events")
+async def fix_wait_events():
+    """
+    Endpoint temporário para associar eventos de 'espera_galpao' sem app_id ao app correto.
+    """
+    print("--- Iniciando backfill via endpoint para associar apps a eventos de espera ---")
+    
+    wait_events_res = db.supabase.table("eventos").select("id, operacao_id, timestamp").eq("sub_tipo", "espera_galpao").is_("app_id", "null").execute()
+    wait_events = wait_events_res.data
+    
+    if not wait_events:
+        return {"message": "Nenhum evento de espera sem app para corrigir. Tudo certo!"}
+
+    print(f"Encontrados {len(wait_events)} eventos de espera para processar.")
+    
+    events_by_op = defaultdict(list)
+    for ev in wait_events:
+        if ev.get("operacao_id"):
+            events_by_op[ev["operacao_id"]].append(ev)
+
+    updated_count = 0
+    skipped_count = 0
+    logs = []
+
+    for op_id, wait_evs in events_by_op.items():
+        gain_events_res = db.supabase.table("eventos").select("app_id, timestamp").eq("operacao_id", op_id).eq("tipo", "ganho").not_.is_("app_id", "null").execute()
+        gain_events = gain_events_res.data
+
+        if not gain_events:
+            logs.append(f"Operação {op_id}: Nenhum evento de ganho com app_id. Pulando {len(wait_evs)} eventos de espera.")
+            skipped_count += len(wait_evs)
+            continue
+            
+        apps_per_day = defaultdict(set)
+        for g_ev in gain_events:
+            day = g_ev["timestamp"][:10]
+            apps_per_day[day].add(g_ev["app_id"])
+
+        for w_ev in wait_evs:
+            wait_day = w_ev["timestamp"][:10]
+            candidate_apps = apps_per_day.get(wait_day)
+            
+            if candidate_apps and len(candidate_apps) == 1:
+                app_id_to_set = list(candidate_apps)[0]
+                logs.append(f"Operação {op_id}: Atualizando evento {w_ev['id']} com app_id {app_id_to_set}")
+                db.supabase.table("eventos").update({"app_id": app_id_to_set}).eq("id", w_ev["id"]).execute()
+                updated_count += 1
+            else:
+                logs.append(f"Operação {op_id}: Ambiguidade para evento {w_ev['id']} no dia {wait_day}. Apps candidatos: {candidate_apps}. Pulando.")
+                skipped_count += 1
+
+    summary = {
+        "message": "Backfill concluído",
+        "updated": updated_count,
+        "skipped": skipped_count,
+        "logs": logs
+    }
+    print(summary)
+    return summary
