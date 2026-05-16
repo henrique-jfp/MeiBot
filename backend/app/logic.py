@@ -135,15 +135,23 @@ class LogicService:
             h_ini, h_fim = ev.get("hora_inicio"), ev.get("hora_fim")
             if h_ini and h_fim and (tipo in ["ganho", "rota"] or str(ev.get("sub_tipo")) == "espera_galpao"):
                 try:
+                    # Tenta pegar a data do evento; se não tiver, busca a data da operação correspondente
                     ev_date = parse_date(ev.get("timestamp"))
+                    if not ev_date and operations:
+                        op_date_str = operations[0].get("data") if operations else None
+                        if op_date_str:
+                           ev_date = parse_date(op_date_str)
+
                     if ev_date:
                         fmt = "%H:%M"
                         t1 = datetime.datetime.combine(ev_date, datetime.datetime.strptime(str(h_ini), fmt).time())
                         t2 = datetime.datetime.combine(ev_date, datetime.datetime.strptime(str(h_fim), fmt).time())
                         if t2 < t1: t2 += datetime.timedelta(days=1)
                         intervals_per_day[ev_date].append((t1, t2))
+                        # A soma de horas por app é uma aproximação, pode haver sobreposição
                         apps_data[app_name]["horas"] += (t2 - t1).total_seconds() / 3600
-                except: pass
+                except Exception as e:
+                    print(f"Error processing time event: {e}")
 
         total_unique_hours = 0
         for day, intervals in intervals_per_day.items():
