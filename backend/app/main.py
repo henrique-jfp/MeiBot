@@ -389,18 +389,29 @@ async def dashboard_page(whatsapp_number: str):
         <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
             :root {
                 --ink: #0f172a;
                 --line: #e2e8f0;
                 --brand: #0f766e;
+                --brand-strong: #115e59;
+                --accent: #f59e0b;
+                --surface: #ffffff;
             }
             body {
-                font-family: 'Inter', sans-serif;
-                background-color: #f8fafc;
+                font-family: 'Space Grotesk', sans-serif;
+                background: radial-gradient(1200px 600px at 20% -10%, #d1fae5 0%, transparent 60%),
+                            radial-gradient(900px 500px at 100% 0%, #fef3c7 0%, transparent 55%),
+                            #f8fafc;
                 color: var(--ink);
+                overflow-x: hidden;
             }
-            .tooltip-container { position: relative; display: inline-flex; align-items: center; gap: 6px;}
+            ::-webkit-scrollbar { width: 6px; height: 6px; }
+            ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+            .history-item { transition: all 0.2s ease-in-out; }
+            .history-item:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgb(15 23 42 / 0.08); }
+            .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 18px -14px rgb(15 23 42 / 0.25); }
+            .tooltip-container { position: relative; display: inline-flex; align-items: center; gap: 4px; }
             .tooltip {
                 display: none;
                 position: absolute;
@@ -412,23 +423,22 @@ async def dashboard_page(whatsapp_number: str):
                 color: white;
                 padding: 10px;
                 border-radius: 8px;
-                font-size: 12px;
-                width: 240px;
+                font-size: 11px;
+                width: 220px;
                 text-align: center;
-                z-index: 10;
+                z-index: 100;
                 box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                opacity: 0;
-                transition: opacity 0.2s;
                 pointer-events: none;
+                font-weight: 500;
             }
-            .tooltip-container:hover .tooltip { display: block; opacity: 1;}
-            .card { background: white; border: 1px solid var(--line); border-radius: 16px; }
+            .tooltip-container:hover .tooltip { display: block; }
         </style>
     </head>
     <body class="flex flex-col lg:flex-row min-h-screen">
-        <aside class="w-full lg:w-80 bg-white/95 backdrop-blur border-b lg:border-b-0 lg:border-r border-slate-200 p-5 lg:p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
+        <!-- Sidebar -->
+        <aside class="w-full lg:w-80 bg-white/90 backdrop-blur border-b lg:border-b-0 lg:border-r border-slate-200 p-5 lg:p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
             <div class="flex items-center gap-3 mb-8">
-                <div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white"> 
+                <div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center shadow-md shadow-teal-200 text-white"> 
                     <i class="fa-solid fa-bolt"></i> 
                 </div>
                 <div>
@@ -440,10 +450,10 @@ async def dashboard_page(whatsapp_number: str):
             <div class="mb-6">
                 <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Navegação</p>
                 <div class="flex flex-row lg:flex-col gap-2">
-                    <button onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100">
+                    <button id="btn-nav-performance" onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100">
                         <i class="fa-solid fa-chart-pie w-4"></i> Performance
                     </button>
-                    <button onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg text-slate-600 font-medium text-sm transition-colors hover:bg-slate-100">
+                    <button id="btn-nav-porteiros" onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200">
                         <i class="fa-solid fa-map-location-dot w-4"></i> Porteiros
                     </button>
                 </div>
@@ -453,40 +463,153 @@ async def dashboard_page(whatsapp_number: str):
             <nav id="history-list" class="flex lg:flex-col gap-3 lg:gap-2.5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 snap-x"></nav>
         </aside>
 
+        <!-- Main Content -->
         <main class="flex-grow p-5 md:p-8 space-y-6 md:space-y-8 w-full max-w-7xl mx-auto">
             <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-5 gap-4">
                 <div>
                     <h2 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight" id="main-title">Visão Geral</h2>
-                    <p id="txt-periodo" class="text-slate-500 text-sm mt-1">Carregando dados...</p>
+                    <p id="txt-periodo" class="text-slate-500 text-sm mt-1">Carregando dados estruturados...</p>
                 </div>
             </header>
 
+            <!-- SECTION: PERFORMANCE -->
             <div id="section-performance" class="space-y-6">
+                <!-- Main Metrics Grid -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Faturamento Bruto</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Soma de todos os ganhos registrados no período.</span></div><p id="txt-bruto" class="text-3xl font-bold text-slate-800">R$ 0,00</p></div>
-                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Saldo Líquido</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Faturamento Bruto menos todos os gastos.</span></div><p id="txt-saldo" class="text-3xl font-bold text-teal-700">R$ 0,00</p></div>
-                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Saldo c/ Provisão</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Saldo líquido menos uma reserva de R$0,20 por KM rodado para manutenções.</span></div><p id="txt-saldo-provisao" class="text-3xl font-bold text-sky-700">R$ 0,00</p></div>
-                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Eficiência (KM)</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Quanto você fatura para cada KM rodado.</span></div><p id="txt-eficiencia" class="text-3xl font-bold text-indigo-700">R$ 0,00/km</p></div>
-                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Eficiência (Hora)</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Seu ganho líquido por hora total de trabalho.</span></div><p id="txt-ganho-hora" class="text-3xl font-bold text-indigo-700">R$ 0,00/h</p></div>
-                    <div class="card p-5"><div class="tooltip-container mb-2"><p class="text-slate-500 text-sm font-semibold">Eficiência na Rua</p><i class="fa-solid fa-circle-info text-slate-400 text-xs"></i><span class="tooltip">Ganho bruto por hora em rota, descontando o tempo de espera no galpão.</span></div><p id="txt-ganho-hora-rua" class="text-3xl font-bold text-violet-700">R$ 0,00/h</p></div>
+                    <div class="card p-5 border-l-4 border-l-slate-400">
+                        <div class="flex justify-between items-start mb-2 tooltip-container">
+                            <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Faturamento Bruto</p>
+                            <i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i>
+                            <span class="tooltip">Soma de todos os ganhos registrados no período.</span>
+                        </div>
+                        <p id="txt-bruto" class="text-3xl font-bold text-slate-800">R$ 0,00</p>
+                    </div>
+
+                    <div class="card p-5 border-l-4 border-l-teal-500">
+                        <div class="flex justify-between items-start mb-2 tooltip-container">
+                            <p class="text-teal-600 text-[10px] font-bold uppercase tracking-wider">Saldo Líquido</p>
+                            <i class="fa-solid fa-circle-info text-[10px] text-teal-300"></i>
+                            <span class="tooltip">Faturamento Bruto menos todos os gastos (essenciais e não essenciais).</span>
+                        </div>
+                        <p id="txt-saldo" class="text-3xl font-bold text-teal-700">R$ 0,00</p>
+                    </div>
+
+                    <div class="card p-5 border-l-4 border-l-sky-500">
+                        <div class="flex justify-between items-start mb-2 tooltip-container">
+                            <p class="text-sky-600 text-[10px] font-bold uppercase tracking-wider">Saldo c/ Provisão</p>
+                            <i class="fa-solid fa-circle-info text-[10px] text-sky-300"></i>
+                            <span class="tooltip">Saldo líquido menos uma reserva de R$0,20 por KM para manutenções futuras.</span>
+                        </div>
+                        <p id="txt-saldo-provisao" class="text-3xl font-bold text-sky-700">R$ 0,00</p>
+                    </div>
+
+                    <div class="card p-5 border-l-4 border-l-indigo-500">
+                        <div class="flex justify-between items-start mb-2 tooltip-container">
+                            <p class="text-indigo-600 text-[10px] font-bold uppercase tracking-wider">Eficiência (KM)</p>
+                            <i class="fa-solid fa-circle-info text-[10px] text-indigo-300"></i>
+                            <span class="tooltip">Quanto você fatura para cada KM que roda.</span>
+                        </div>
+                        <p id="txt-eficiencia" class="text-3xl font-bold text-indigo-700">R$ 0,00/km</p>
+                    </div>
+
+                    <div class="card p-5 border-l-4 border-l-indigo-500">
+                        <div class="flex justify-between items-start mb-2 tooltip-container">
+                            <p class="text-indigo-600 text-[10px] font-bold uppercase tracking-wider">Eficiência (Hora)</p>
+                            <i class="fa-solid fa-circle-info text-[10px] text-indigo-300"></i>
+                            <span class="tooltip">Seu ganho líquido por hora total de trabalho.</span>
+                        </div>
+                        <p id="txt-ganho-hora" class="text-3xl font-bold text-indigo-700">R$ 0,00/h</p>
+                    </div>
+
+                    <div class="card p-5 border-l-4 border-l-violet-500">
+                        <div class="flex justify-between items-start mb-2 tooltip-container">
+                            <p class="text-violet-600 text-[10px] font-bold uppercase tracking-wider">Eficiência na Rua</p>
+                            <i class="fa-solid fa-circle-info text-[10px] text-violet-300"></i>
+                            <span class="tooltip">Seu ganho bruto por hora em rota (descontando o tempo de espera no galpão).</span>
+                        </div>
+                        <p id="txt-ganho-hora-rua" class="text-3xl font-bold text-violet-700">R$ 0,00/h</p>
+                    </div>
                 </div>
 
-                <div id="daily-chart-container" class="card p-6" style="display: none;">
-                    <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance Diária (Mês Atual)</h3>
-                    <div class="relative w-full h-[300px]"><canvas id="chartDaily"></canvas></div>
-                </div>
-                <div id="apps-chart-container" class="card p-6" style="display: none;">
-                    <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance por Período</h3>
-                    <div class="relative w-full h-[300px]"><canvas id="chartApps"></canvas></div>
-                </div>
-                
+                <!-- Charts Row -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2 card p-6"><h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Detalhamento por App</h3><div id="list-apps" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div></div>
-                    <div class="card p-6 flex flex-col"><h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Distribuição de Gastos</h3><div class="relative w-full h-[200px] mb-6"><canvas id="chartGastos"></canvas></div></div>
+                    <div id="daily-chart-container" class="lg:col-span-2 card p-6" style="display: none;">
+                        <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Performance Diária (Mês Atual)</h3>
+                        <div class="relative w-full h-[300px]"><canvas id="chartDaily"></canvas></div>
+                    </div>
+                    <div id="apps-chart-container" class="lg:col-span-2 card p-6" style="display: none;">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 id="chart-title" class="font-bold text-slate-800 text-sm uppercase tracking-tight">Performance por Período</h3>
+                            <div id="chart-legend" class="flex gap-3"></div>
+                        </div>
+                        <div class="relative w-full h-[300px]"><canvas id="chartApps"></canvas></div>
+                    </div>
+
+                    <div class="card p-6 flex flex-col">
+                        <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Distribuição de Gastos</h3>
+                        <div class="relative w-full h-[200px] mb-6"><canvas id="chartGastos"></canvas></div>
+                        <div class="space-y-3 mt-auto">
+                            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                <span class="text-[10px] font-bold text-slate-500 uppercase">Essenciais</span>
+                                <span id="txt-essencial" class="text-xs font-bold text-slate-700">R$ 0,00</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                <span class="text-[10px] font-bold text-slate-500 uppercase">Não Essenciais</span>
+                                <span id="txt-nao-essencial" class="text-xs font-bold text-rose-600">R$ 0,00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- App Details & Waiting Time -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 card p-6">
+                        <h3 class="font-bold text-slate-800 text-sm mb-6 uppercase tracking-tight">Detalhamento por App</h3>
+                        <div id="list-apps" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    </div>
+
+                    <div class="card p-6 bg-amber-50/30 border-amber-100">
+                        <h3 class="font-bold text-amber-800 text-sm mb-4 uppercase tracking-tight">Eficiência de Galpão</h3>
+                        <div class="flex items-end gap-2 mb-2">
+                            <p id="txt-tempo-espera" class="text-3xl font-bold text-amber-700">0h</p>
+                            <p class="text-xs text-amber-500 font-bold mb-1 uppercase">Total Espera</p>
+                        </div>
+                        <div class="w-full bg-amber-100 rounded-full h-2 overflow-hidden mb-4">
+                            <div id="bar-espera" class="bg-amber-500 h-full transition-all" style="width: 0%"></div>
+                        </div>
+                        <p id="txt-tempo-total" class="text-[10px] text-slate-500 font-medium">Tempo Total: 0h</p>
+                    </div>
+                </div>
+
+                <!-- Strategic Analysis Section -->
+                <div id="insight-section" class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hidden">
+                    <div class="bg-teal-600 px-6 py-4 flex items-center justify-between">
+                        <h3 class="text-white font-bold text-sm uppercase tracking-wider flex items-center gap-2"> 
+                            <i class="fa-solid fa-robot"></i> Inteligência Artificial MeiBot
+                        </h3>
+                    </div>
+                    <div class="p-6 md:p-8 bg-slate-50/50">
+                        <div id="txt-insight" class="prose prose-sm max-w-none text-slate-700 leading-relaxed font-medium"></div>
+                    </div>
                 </div>
             </div>
-            
-            <div id="section-porteiros" class="hidden"></div>
+
+            <!-- SECTION: PORTEIROS -->
+            <div id="section-porteiros" class="hidden space-y-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">🗺️ Mapeamento de Porteiros</h3>
+                        <p id="porteiros-stats" class="text-slate-500 text-sm mt-1 font-medium">Carregando estatísticas...</p>
+                    </div>
+                    <div class="relative w-full md:w-96">
+                        <input type="text" id="search-porteiros" oninput="handleSearch(this.value)" 
+                            class="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-teal-500/20 focus:border-teal-500 focus:bg-white transition-all" 
+                            placeholder="Buscar prédio, rua ou porteiro...">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><i class="fa-solid fa-magnifying-glass text-slate-400"></i></div>
+                    </div>
+                </div>
+                <div class="space-y-4" id="porteiros-container"></div>
+            </div>
         </main>
 
         <script>
@@ -495,25 +618,61 @@ async def dashboard_page(whatsapp_number: str):
             const WHATSAPP_ID = '""" + whatsapp_number + """';
 
             function showSection(section) {
-                document.getElementById('section-performance').style.display = 'none';
-                document.getElementById('section-porteiros').style.display = 'none';
-                document.getElementById('section-' + section).style.display = 'block';
+                document.getElementById('section-performance').classList.toggle('hidden', section !== 'performance');
+                document.getElementById('section-porteiros').classList.toggle('hidden', section !== 'porteiros');
                 document.getElementById('main-title').innerText = section === 'performance' ? 'Visão Geral' : 'Diretório de Porteiros';
-                const btns = document.querySelectorAll('aside button');
-                btns.forEach(b => {
-                    const isTarget = b.getAttribute('onclick').includes(section);
-                    b.classList.toggle('bg-teal-50', isTarget);
-                    b.classList.toggle('text-teal-700', isTarget);
-                    b.classList.toggle('font-semibold', isTarget);
-                    b.classList.toggle('bg-transparent', !isTarget);
-                    b.classList.toggle('text-slate-600', !isTarget);
-                });
-                if (section === 'porteiros') renderPorteiros();
+                
+                const btnPerf = document.getElementById('btn-nav-performance');
+                const btnPort = document.getElementById('btn-nav-porteiros');
+                
+                if (section === 'performance') {
+                    btnPerf.className = "flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100";
+                    btnPort.className = "flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200";
+                } else {
+                    btnPerf.className = "flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm transition-colors hover:bg-slate-50 border border-transparent hover:border-slate-200";
+                    btnPort.className = "flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm transition-colors border border-teal-100";
+                    renderPorteiros();
+                }
             }
 
-            function renderPorteiros() {
-                // Logic for rendering porteiros - assuming it exists or will be added
-                document.getElementById('section-porteiros').innerHTML = '<p>Funcionalidade de porteiros a ser implementada aqui.</p>';
+            function handleSearch(query) { renderPorteiros(query); }
+
+            function renderPorteiros(filterText = '') {
+                const container = document.getElementById('porteiros-container');
+                const statsEl = document.getElementById('porteiros-stats');
+                if (!dashboardData?.porteiros?.length) return;
+                const query = (filterText || '').toLowerCase().trim();
+                const normalizeStreetLabel = (v) => {
+                    let text = (v || '').trim();
+                    const upper = text.toUpperCase();
+                    if (upper.includes('PAISANDU') || upper.includes('PAISSANDU')) return 'Rua Paissandu';
+                    if (upper.includes('VERGUEIRO')) return 'Rua Senador Vergueiro';
+                    return text.replace(/\b(r|r\.|rua)\b/gi, 'Rua').replace(/\b(av|av\.|avenida)\b/gi, 'Avenida');
+                };
+                const filtered = dashboardData.porteiros.filter(p => !query || `${p.rua} ${p.numero} ${p.nome_porteiro}`.toLowerCase().includes(query));
+                const grouped = {};
+                filtered.forEach(p => { const r = normalizeStreetLabel(p.rua); if(!grouped[r]) grouped[r]=[]; grouped[r].push(p); });
+                statsEl.innerText = `${dashboardData.porteiros.length} prédios cadastrados • ${Object.keys(grouped).length} ruas`;
+                container.innerHTML = '';
+                Object.keys(grouped).sort().forEach((rua, idx) => {
+                    const sectionId = `rua-${idx}`;
+                    let cardsHtml = '';
+                    grouped[rua].sort((a,b) => (parseInt(a.numero)||0) - (parseInt(b.numero)||0)).forEach(p => {
+                        cardsHtml += `
+                            <div class="bg-white rounded-xl p-4 border border-slate-100 flex flex-col justify-between hover:border-teal-200 transition-all">
+                                <div>
+                                    <p class="text-xs font-bold text-teal-600 uppercase tracking-wider">Nº ${p.numero}</p>
+                                    <h5 class="font-bold text-slate-800 leading-tight">${p.nome_porteiro || 'Porteiro'}</h5>
+                                    <p class="text-xs text-slate-500 mt-2 flex items-center gap-1.5"><i class="fa-solid fa-clock"></i> ${p.turno || 'Não inf.'}</p>
+                                </div>
+                                ${p.notas_predio ? `<div class="mt-3 pt-3 border-t border-slate-50"><p class="text-[11px] text-slate-600 italic leading-relaxed">"${p.notas_predio}"</p></div>` : ''}
+                            </div>`;
+                    });
+                    const accordion = document.createElement('div');
+                    accordion.className = 'bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm';
+                    accordion.innerHTML = `<button onclick="document.getElementById('${sectionId}').classList.toggle('hidden')" class="w-full px-6 py-4 flex items-center justify-between bg-white hover:bg-slate-50 transition-colors font-bold text-slate-800 uppercase tracking-tight"><span>${rua}</span><i class="fa-solid fa-chevron-down text-slate-300"></i></button><div id="${sectionId}" class="px-6 pb-6 pt-2 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">${cardsHtml}</div>`;
+                    container.appendChild(accordion);
+                });
             }
 
             const fmt = (val) => (val || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
@@ -524,24 +683,46 @@ async def dashboard_page(whatsapp_number: str):
                     const response = await fetch(url);
                     const data = await response.json();
                     if (data.error) throw new Error(data.error);
-
                     dashboardData = data;
                     const c = data.metrics.consolidado;
                     const apps = data.metrics.apps;
 
+                    document.getElementById('txt-periodo').innerText = 'Relatório de: ' + new Date(data.created_at).toLocaleDateString('pt-BR');
                     document.getElementById('txt-bruto').innerText = 'R$ ' + fmt(c.total_ganhos);
                     document.getElementById('txt-saldo').innerText = 'R$ ' + fmt(c.saldo);
                     document.getElementById('txt-saldo-provisao').innerText = 'R$ ' + fmt(c.saldo_com_provisao);
                     document.getElementById('txt-eficiencia').innerText = 'R$ ' + (c.total_ganhos / (c.km_total || 1)).toFixed(2) + '/km';
                     document.getElementById('txt-ganho-hora').innerText = 'R$ ' + fmt(c.ganho_por_hora) + '/h';
                     document.getElementById('txt-ganho-hora-rua').innerText = 'R$ ' + fmt(c.ganho_por_hora_rua) + '/h';
+                    document.getElementById('txt-essencial').innerText = 'R$ ' + fmt(c.gastos_essenciais);
+                    document.getElementById('txt-nao-essencial').innerText = 'R$ ' + fmt(c.gastos_nao_essenciais);
+                    document.getElementById('txt-tempo-espera').innerText = (c.tempo_espera_galpao || 0).toFixed(1) + 'h';
+                    document.getElementById('txt-tempo-total').innerText = 'Tempo Total: ' + (c.total_hours || 0).toFixed(1) + 'h';
+                    document.getElementById('bar-espera').style.width = Math.min((c.tempo_espera_galpao / (c.total_hours || 1)) * 100, 100) + '%';
+
+                    const insightSection = document.getElementById('insight-section');
+                    if (!data.is_live) { insightSection.classList.remove('hidden'); document.getElementById('txt-insight').innerHTML = marked.parse(data.insight || ""); }
+                    else { insightSection.classList.add('hidden'); }
 
                     const listContainer = document.getElementById('list-apps');
                     listContainer.innerHTML = '';
-                    for (const name in apps) {
+                    Object.keys(apps).filter(n => n !== 'Outros').sort((a,b) => apps[b].ganhos - apps[a].ganhos).forEach(name => {
                         const app = apps[name];
-                        listContainer.innerHTML += `<div class="p-4 rounded-xl bg-slate-50 border"><p class="font-bold text-sm">${name}</p><p class="text-teal-700">R$ ${fmt(app.ganhos)}</p></div>`;
-                    }
+                        const rkm = (app.ganhos / (app.km || 1)).toFixed(2);
+                        const rhora = (app.ganhos / (app.horas || 1)).toFixed(2);
+                        const percent = (app.ganhos / (c.total_ganhos || 1)) * 100;
+                        listContainer.innerHTML += `
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100 group hover:border-teal-200 transition-all shadow-sm">
+                                <div class="flex justify-between items-start mb-3">
+                                    <div><p class="font-bold text-slate-800 text-sm uppercase tracking-tight">${name}</p><p class="text-[10px] text-slate-500 font-bold uppercase">${app.km.toFixed(1)}km • ${app.horas.toFixed(1)}h</p></div>
+                                    <div class="text-right"><p class="font-bold text-teal-700 text-sm">R$ ${fmt(app.ganhos)}</p><p class="text-[10px] text-teal-500 font-bold uppercase">${percent.toFixed(0)}% do total</p></div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-4">
+                                    <div class="bg-white p-2 rounded-lg border border-slate-50 text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/KM</p><p class="text-xs font-bold text-slate-700">R$ ${rkm}</p></div>
+                                    <div class="bg-white p-2 rounded-lg border border-slate-50 text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/Hora</p><p class="text-xs font-bold text-slate-700">R$ ${rhora}</p></div>
+                                </div>
+                            </div>`;
+                    });
 
                     if (chartGastos) chartGastos.destroy();
                     chartGastos = new Chart(document.getElementById('chartGastos').getContext('2d'), {
@@ -553,29 +734,36 @@ async def dashboard_page(whatsapp_number: str):
                     const dailyContainer = document.getElementById('daily-chart-container');
                     const appsContainer = document.getElementById('apps-chart-container');
                     if (data.is_live && data.daily_performance?.length > 0) {
-                        dailyContainer.style.display = 'block';
-                        appsContainer.style.display = 'none';
+                        dailyContainer.style.display = 'block'; appsContainer.style.display = 'none';
                         if (dailyChart) dailyChart.destroy();
                         dailyChart = new Chart(document.getElementById('chartDaily').getContext('2d'), {
                             type: 'bar',
-                            data: {
-                                labels: data.daily_performance.map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit' })),
-                                datasets: [{ label: 'Faturamento Diário', data: data.daily_performance.map(d => d.ganho), backgroundColor: '#0f766e' }]
-                            },
+                            data: { labels: data.daily_performance.map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit' })), datasets: [{ label: 'Ganho', data: data.daily_performance.map(d => d.ganho), backgroundColor: '#0f766e', borderRadius: 4 }] },
                             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
                         });
                     } else {
-                        dailyContainer.style.display = 'none';
-                        appsContainer.style.display = 'block';
+                        dailyContainer.style.display = 'none'; appsContainer.style.display = 'block';
                         if (appsChart) appsChart.destroy();
-                        const sortedAppNames = Object.keys(apps).filter(name => name !== 'Outros').sort((a,b) => apps[b].ganhos - apps[a].ganhos);
+                        const sorted = Object.keys(apps).filter(n => n !== 'Outros').sort((a,b) => apps[b].ganhos - apps[a].ganhos);
                         appsChart = new Chart(document.getElementById('chartApps').getContext('2d'), {
                             type: 'bar',
-                            data: {
-                                labels: sortedAppNames,
-                                datasets: [{ data: sortedAppNames.map(name => apps[name].ganhos), backgroundColor: ['#0f766e', '#f97316', '#6366f1'] }]
-                            },
+                            data: { labels: sorted, datasets: [{ data: sorted.map(n => apps[n].ganhos), backgroundColor: ['#0f766e', '#f97316', '#6366f1'], borderRadius: 4 }] },
                             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                        });
+                    }
+
+                    if (data.history) {
+                        const histList = document.getElementById('history-list'); histList.innerHTML = '';
+                        const liveItem = document.createElement('div');
+                        liveItem.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col ${!analysisId ? 'bg-teal-50 border-teal-200' : 'bg-white border-slate-200'}`;
+                        liveItem.innerHTML = `<span class="text-[10px] font-bold uppercase ${!analysisId ? 'text-teal-600' : 'text-slate-500'}">AO VIVO</span><span class="text-xs font-medium">Mês Atual</span>`;
+                        liveItem.onclick = () => loadDashboard(); histList.appendChild(liveItem);
+                        data.history.forEach(h => {
+                            const active = analysisId === h.id;
+                            const btn = document.createElement('div');
+                            btn.className = `history-item p-2.5 rounded-lg border text-left cursor-pointer flex flex-col mt-2 ${active ? 'bg-teal-50 border-teal-200' : 'bg-white border-slate-200'}`;
+                            btn.innerHTML = `<span class="text-[10px] font-bold uppercase ${active ? 'text-teal-600' : 'text-slate-500'}">${h.periodo_tipo}</span><span class="text-xs font-medium">${new Date(h.created_at).toLocaleDateString('pt-BR')}</span>`;
+                            btn.onclick = () => loadDashboard(h.id); histList.appendChild(btn);
                         });
                     }
                 } catch (e) { console.error('Dashboard Error:', e); }
@@ -586,6 +774,7 @@ async def dashboard_page(whatsapp_number: str):
     </html>
     """
     return html
+
 
 if __name__ == "__main__":
     import uvicorn
