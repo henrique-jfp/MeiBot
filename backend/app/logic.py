@@ -94,16 +94,45 @@ class LogicService:
                 return datetime.datetime.fromisoformat(text).date() if 'T' in text else datetime.date.fromisoformat(text)
             except: return None
 
-        def add_duration_hours(start_val, end_val):
-            if not start_val or not end_val: return 0
+        def parse_event_datetime(value, base_date=None):
+            if not value:
+                return None
+            text = str(value).strip()
             try:
-                fmt = "%H:%M"
-                t1 = datetime.datetime.strptime(str(start_val), fmt)
-                t2 = datetime.datetime.strptime(str(end_val), fmt)
-                diff = (t2 - t1).total_seconds()
-                if diff < 0: diff += 24 * 3600
-                return max(diff, 0) / 3600
-            except: return 0
+                if "T" in text:
+                    return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+                if len(text) >= 10 and text[4] == "-" and text[7] == "-" and " " in text:
+                    return datetime.datetime.fromisoformat(text.replace(" ", "T"))
+            except:
+                return None
+
+            if not base_date:
+                return None
+            try:
+                fmt = "%H:%M:%S" if len(text.split(":")) == 3 else "%H:%M"
+                parsed_time = datetime.datetime.strptime(text, fmt).time()
+                return datetime.datetime.combine(base_date, parsed_time)
+            except:
+                return None
+
+        def get_event_date(ev):
+            return (
+                parse_date(ev.get("timestamp"))
+                or parse_date(ev.get("hora_inicio"))
+                or parse_date(ev.get("hora_fim"))
+                or parse_date(ev.get("hora_inicio_rota"))
+                or parse_date(ev.get("hora_fim_operacao"))
+            )
+
+        def add_duration_hours(start_val, end_val, base_date=None):
+            start_dt = parse_event_datetime(start_val, base_date)
+            end_dt = parse_event_datetime(end_val, base_date)
+            if not start_dt or not end_dt:
+                return 0
+            if end_dt < start_dt:
+                end_dt += datetime.timedelta(days=1)
+            diff = (end_dt - start_dt).total_seconds()
+            return max(diff, 0) / 3600
 
         intervals_per_day = defaultdict(list)
         for ev in events:
@@ -130,26 +159,33 @@ class LogicService:
                 else: consolidado["gastos_nao_essenciais"] += val
 
             if str(ev.get("sub_tipo")).lower() == "espera_galpao":
-                consolidado["tempo_espera_galpao"] += add_duration_hours(ev.get("hora_inicio"), ev.get("hora_fim"))
+                base_date = get_event_date(ev)
+                if not base_date and operations:
+                    base_date = parse_date(operations[0].get("data"))
+                consolidado["tempo_espera_galpao"] += add_duration_hours(
+                    ev.get("hora_inicio"),
+                    ev.get("hora_fim"),
+                    base_date
+                )
 
             h_ini = ev.get("hora_inicio_rota") or ev.get("hora_inicio")
             h_fim = ev.get("hora_fim_operacao") or ev.get("hora_fim")
             if h_ini and h_fim and (tipo in ["ganho", "rota"] or str(ev.get("sub_tipo")) == "espera_galpao"):
                 try:
-                    # Tenta pegar a data do evento; se não tiver, busca a data da operação correspondente
-                    ev_date = parse_date(ev.get("timestamp"))
+                    # Tenta pegar a data do evento; se nao tiver, busca a data da operacao correspondente
+                    ev_date = get_event_date(ev)
                     if not ev_date and operations:
                         op_date_str = operations[0].get("data") if operations else None
                         if op_date_str:
-                           ev_date = parse_date(op_date_str)
+                            ev_date = parse_date(op_date_str)
 
-                    if ev_date:
-                        fmt = "%H:%M"
-                        t1 = datetime.datetime.combine(ev_date, datetime.datetime.strptime(str(h_ini), fmt).time())
-                        t2 = datetime.datetime.combine(ev_date, datetime.datetime.strptime(str(h_fim), fmt).time())
-                        if t2 < t1: t2 += datetime.timedelta(days=1)
-                        intervals_per_day[ev_date].append((t1, t2))
-                        # A soma de horas por app é uma aproximação, pode haver sobreposição
+                    t1 = parse_event_datetime(h_ini, ev_date)
+                    t2 = parse_event_datetime(h_fim, ev_date)
+                    if t1 and t2:
+                        if t2 < t1:
+                            t2 += datetime.timedelta(days=1)
+                        intervals_per_day[t1.date()].append((t1, t2))
+                        # A soma de horas por app e uma aproximacao, pode haver sobreposicao
                         apps_data[app_name]["horas"] += (t2 - t1).total_seconds() / 3600
                 except Exception as e:
                     print(f"Error processing time event: {e}")

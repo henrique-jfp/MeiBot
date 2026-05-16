@@ -29,17 +29,27 @@ async def generate_automated_reports(periodo="semanal"):
             user_id = user["id"]
             whatsapp = user["whatsapp_number"]
             
-            # Define o período de busca (7 dias ou mes calendario)
+            # Define o periodo de busca (7 dias ou mes calendario)
             days = 7 if periodo == "semanal" else 30
             
             # Busca eventos e operações
+            period_start = None
+            period_end = None
+            period_label = None
+
             if periodo == "semanal":
+                today = datetime.date.today()
+                period_start = today - datetime.timedelta(days=today.weekday())
+                period_end = period_start + datetime.timedelta(days=6)
+                period_label = f"{period_start.strftime('%d/%m')} a {period_end.strftime('%d/%m')}"
                 events = db.get_weekly_summary(user_id)
             else:
                 today = datetime.date.today()
-                month_start = today.replace(day=1)
-                next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-                start_iso = month_start.isoformat() + "T00:00:00Z"
+                period_start = today.replace(day=1)
+                period_end = (period_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+                period_label = f"{period_start.strftime('%d/%m')} a {period_end.strftime('%d/%m')}"
+                next_month = (period_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+                start_iso = period_start.isoformat() + "T00:00:00Z"
                 end_iso = next_month.isoformat() + "T00:00:00Z"
                 events = db.supabase.table("eventos").select("*, apps(*)")\
                     .eq("user_id", user_id)\
@@ -62,6 +72,10 @@ async def generate_automated_reports(periodo="semanal"):
             
             # Calcula métricas
             metrics = LogicService.calculate_metrics_grouped(events, ops)
+            if period_label:
+                metrics["period_label"] = period_label
+                metrics["period_start"] = period_start.isoformat() if period_start else None
+                metrics["period_end"] = period_end.isoformat() if period_end else None
             
             # Gera Insight via IA (Groq 70b)
             label = "Semana Atual" if periodo == "semanal" else "Mês Atual"

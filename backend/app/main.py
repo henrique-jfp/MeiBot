@@ -101,7 +101,7 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
         res = db.supabase.table("historico_analises").select("*").eq("id", analysis_id).execute()
         if res.data:
             analysis = res.data[0]
-            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "is_live": False, "created_at": analysis["created_at"], "history": history, "porteiros": porteiros}
+            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "is_live": False, "created_at": analysis["created_at"], "periodo_tipo": analysis.get("periodo_tipo"), "history": history, "porteiros": porteiros}
     today = datetime.date.today()
     start_iso, end_iso = (today.replace(day=1).isoformat(), (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1).isoformat())
     ev_live = db.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", start_iso + "T00:00:00Z").lt("timestamp", end_iso + "T00:00:00Z").execute().data
@@ -111,7 +111,7 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
     for ev in ev_live:
         if str(ev.get("tipo", "")).lower() in ["ganho", "rota"]: daily_perf[ev["timestamp"].split("T")[0]] += float(ev.get("valor", 0))
     daily_list = sorted([{"date": d, "ganho": g} for d, g in daily_perf.items()], key=lambda x: x['date'])
-    return {"user": user, "metrics": metrics_live, "daily_performance": daily_list, "is_live": True, "history": history, "created_at": datetime.datetime.now().isoformat(), "porteiros": porteiros}
+    return {"user": user, "metrics": metrics_live, "daily_performance": daily_list, "is_live": True, "history": history, "created_at": datetime.datetime.now().isoformat(), "periodo_tipo": None, "porteiros": porteiros}
 
 @app.get("/dashboard/{whatsapp_number}", response_class=HTMLResponse)
 async def dashboard_page(whatsapp_number: str):
@@ -189,6 +189,32 @@ async def dashboard_page(whatsapp_number: str):
 
             function renderPorteiros(f = '') { /* ... porteiro logic ... */ }
 
+            function formatPeriodRange(data) {
+                const metrics = data && data.metrics ? data.metrics : {};
+                if (metrics.period_label) return metrics.period_label;
+                const createdAt = data && data.created_at ? new Date(data.created_at) : null;
+                if (!createdAt || Number.isNaN(createdAt.getTime())) return null;
+                const tipo = data.periodo_tipo;
+                if (tipo === 'semanal') {
+                    const day = (createdAt.getDay() + 6) % 7;
+                    const start = new Date(createdAt);
+                    start.setDate(createdAt.getDate() - day);
+                    const end = new Date(start);
+                    end.setDate(start.getDate() + 6);
+                    const startStr = start.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                    const endStr = end.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                    return `${startStr} a ${endStr}`;
+                }
+                if (tipo === 'mensal') {
+                    const start = new Date(createdAt.getFullYear(), createdAt.getMonth(), 1);
+                    const end = new Date(createdAt.getFullYear(), createdAt.getMonth() + 1, 0);
+                    const startStr = start.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                    const endStr = end.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                    return `${startStr} a ${endStr}`;
+                }
+                return createdAt.toLocaleDateString('pt-BR');
+            }
+
             async function loadDashboard(aid = null) {
                 try {
                     const res = await fetch(aid ? `/api/dashboard/${WHATSAPP_ID}?analysis_id=${aid}` : `/api/dashboard/${WHATSAPP_ID}`);
@@ -196,7 +222,8 @@ async def dashboard_page(whatsapp_number: str):
                     const c = data.metrics.consolidado, apps = data.metrics.apps;
                     
                     // Populate Header
-                    document.getElementById('txt-periodo').innerText = data.is_live ? 'Dados acumulados do mês' : `Análise de ${new Date(data.created_at).toLocaleDateString('pt-BR')}`;
+                    const periodo = data.is_live ? 'Dados acumulados do mes' : (formatPeriodRange(data) || `Analise de ${new Date(data.created_at).toLocaleDateString('pt-BR')}`);
+                    document.getElementById('txt-periodo').innerText = periodo;
                     
                     // Populate Metrics Grid
                     document.getElementById('txt-bruto').innerText = 'R$ ' + fmt(c.total_ganhos);
@@ -218,8 +245,14 @@ async def dashboard_page(whatsapp_number: str):
                     
                     // AI Insight
                     const ins = document.getElementById('insight-section');
-                    if (!data.is_live && data.insight) { ins.classList.remove('hidden'); document.getElementById('txt-insight').innerHTML = marked.parse(data.insight); } 
-                    else { ins.classList.add('hidden'); }
+                    if (!data.is_live) {
+                        ins.classList.remove('hidden');
+                        if (data.insight) {
+                            document.getElementById('txt-insight').innerHTML = marked.parse(data.insight);
+                        } else {
+                            document.getElementById('txt-insight').innerHTML = '<p>Analise indisponivel para este periodo. Reprocese para gerar.</p>';
+                        }
+                    } else { ins.classList.add('hidden'); }
                     
                     // App Details - Rich version
                     const list = document.getElementById('list-apps'); list.innerHTML = '';
@@ -253,7 +286,8 @@ async def dashboard_page(whatsapp_number: str):
                     data.history.forEach((h, i) => {
                         const btn = document.createElement('a'); btn.href = '#'; btn.className = 'history-item block p-3 rounded-lg mt-2 ' + (aid === h.id ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
                         const cti = data.history.filter((x, j) => x.periodo_tipo === h.periodo_tipo && j >= i).length;
-                        btn.innerHTML = `<span class="text-xs font-bold uppercase ${aid === h.id ? 'text-teal-600':'text-slate-500'}">${h.periodo_tipo} ${cti}</span><span class="block text-[11px] text-slate-500">Análise de ${new Date(h.created_at).toLocaleDateString('pt-BR')}</span>`;
+                        const periodLabel = formatPeriodRange(h) || `Analise de ${new Date(h.created_at).toLocaleDateString('pt-BR')}`;
+                        btn.innerHTML = `<span class="text-xs font-bold uppercase ${aid === h.id ? 'text-teal-600':'text-slate-500'}">${h.periodo_tipo} ${cti}</span><span class="block text-[11px] text-slate-500">${periodLabel}</span>`;
                         btn.onclick = (e) => { e.preventDefault(); loadDashboard(h.id); }; hlist.appendChild(btn);
                     });
                 } catch (e) { console.error('Dashboard load error:', e); }
