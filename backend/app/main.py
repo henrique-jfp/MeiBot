@@ -14,6 +14,7 @@ from collections import defaultdict
 app = FastAPI()
 db = DBService()
 ai = AIService()
+DEFAULT_IMAGE_MIME_TYPE = "image/jpeg"
 
 # Lock management
 user_locks = {}
@@ -79,6 +80,42 @@ async def process_interpreted_data(user, interpreted):
     if intencao == "pedir_link_dashboard": return f"📊 Dashboard: https://meibot.henriquedejesus.dev/dashboard/{whatsapp}"
     return "Processado."
 
+def decode_base64_content(content: str):
+    if not content:
+        raise ValueError("Recebi a mídia vazia. Tente enviar novamente.")
+    try:
+        return base64.b64decode(content)
+    except Exception as exc:
+        raise ValueError("Não consegui ler a mídia enviada. Tente reenviar.") from exc
+
+async def build_interpreted_payload(data: dict):
+    message_type = data.get("type")
+    content = data.get("content")
+
+    if message_type == "text":
+        text = (content or "").strip()
+        if not text:
+            raise ValueError("Recebi um texto vazio. Tente enviar novamente.")
+        interpreted = await ai.interpret_message(text)
+        interpreted["data_referencia"] = override_data_ref_from_text(text, interpreted.get("data_referencia"))
+        return interpreted
+
+    if message_type == "audio":
+        audio_bytes = decode_base64_content(content)
+        transcription = (await ai.transcribe_audio(audio_bytes) or "").strip()
+        if not transcription:
+            raise ValueError("Não consegui transcrever o áudio. Tente enviar em texto.")
+        interpreted = await ai.interpret_message(transcription)
+        interpreted["data_referencia"] = override_data_ref_from_text(transcription, interpreted.get("data_referencia"))
+        return interpreted
+
+    if message_type == "image":
+        image_bytes = decode_base64_content(content)
+        mime_type = data.get("mime_type") or DEFAULT_IMAGE_MIME_TYPE
+        return await ai.process_image(image_bytes, mime_type)
+
+    raise ValueError("Tipo de mensagem não suportado ainda.")
+
 # API Endpoints
 @app.post("/webhook")
 async def handle_webhook(request: Request):
@@ -89,12 +126,11 @@ async def handle_webhook(request: Request):
         if not user: user = db.create_user(whatsapp_number)
         lock = get_user_lock(user["id"])
         async with lock:
-            if data.get("type") == "text":
-                interpreted = await ai.interpret_message(data.get("content"))
-                interpreted["data_referencia"] = override_data_ref_from_text(data.get("content"), interpreted.get("data_referencia"))
-                response_text = await process_interpreted_data(user, interpreted)
-            else: response_text = "Tipo de mensagem não suportado ainda."
+            interpreted = await build_interpreted_payload(data)
+            response_text = await process_interpreted_data(user, interpreted)
         return {"reply": response_text}
+    except ValueError as e:
+        return {"reply": str(e)}
     except Exception as e:
         traceback.print_exc()
         return {"reply": "⚠️ Tive uma instabilidade. Tente de novo."}

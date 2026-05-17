@@ -198,7 +198,7 @@ async function connectToWhatsApp() {
 
         let from = '5521985287511'; // FIXO: Garante que o usuário correto seja sempre usado.
 
-        let payload = { from, type: 'text', content: '' };
+        let payload = { from, type: 'text', content: '', mime_type: null };
 
         try {
             // Captura de conteúdo
@@ -212,16 +212,23 @@ async function connectToWhatsApp() {
             if (messageContent) {
                 payload.content = messageContent;
                 payload.type = 'text';
+                payload.mime_type = 'text/plain';
             } 
             else if (msg.message.imageMessage || msg.message.ephemeralMessage?.message?.imageMessage || msg.message.viewOnceMessageV2?.message?.imageMessage) {
+                const imageMessage = msg.message.imageMessage ||
+                    msg.message.ephemeralMessage?.message?.imageMessage ||
+                    msg.message.viewOnceMessageV2?.message?.imageMessage;
                 const buffer = await downloadMediaMessage(msg, 'buffer', {});
                 payload.content = buffer.toString('base64');
                 payload.type = 'image';
+                payload.mime_type = imageMessage?.mimetype || 'image/jpeg';
             }
             else if (msg.message.audioMessage) {
+                const audioMessage = msg.message.audioMessage;
                 const buffer = await downloadMediaMessage(msg, 'buffer', {});
                 payload.content = buffer.toString('base64');
                 payload.type = 'audio';
+                payload.mime_type = audioMessage?.mimetype || 'audio/ogg';
             }
 
             if (payload.content) {

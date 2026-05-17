@@ -57,3 +57,26 @@ Este documento lista exemplos de como o MeiBot deve reagir a diferentes entradas
 *   **Entrada:** [Envia Print do App iFood com valor R$ 45,50]
 *   **IA Interpreta (Gemini Vision):** `{"tipo": "corrida", "valor": 45.50, "app": "iFood"}`
 *   **Resposta:** "✅ Boa! iFood: R$ 45.5 registrado."
+
+---
+
+## 5. Áudio
+
+### Áudio com Registro de Operação
+*   **Entrada:** [Áudio] "fiz correios, 154 pacotes, finalizei 18:45 e gastei 23 reais"
+*   **Ação Interna:** Bot envia `type="audio"` para o backend, backend transcreve o áudio e interpreta o texto resultante.
+*   **Resposta:** Confirmação de registro com os eventos extraídos do áudio.
+
+### Áudio sem Transcrição Útil
+*   **Entrada:** [Áudio com ruído ou vazio]
+*   **Ação Interna:** Backend tenta transcrever antes de interpretar.
+*   **Resposta:** "Não consegui transcrever o áudio. Tente enviar em texto."
+
+---
+
+## 6. Imagem sem Legenda
+
+### Print do App sem Texto
+*   **Entrada:** [Imagem sem legenda com comprovante/print do app]
+*   **Ação Interna:** Bot envia `type="image"` e `mime_type`, backend roda OCR e interpreta os dados detectados.
+*   **Resposta:** Confirmação de registro dos eventos encontrados na imagem ou resposta padrão de processamento.
