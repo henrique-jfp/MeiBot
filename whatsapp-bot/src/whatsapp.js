@@ -98,13 +98,27 @@ async function connectToWhatsApp() {
         const fromMe = msg.key.fromMe;
         const myId = sock.user?.id?.split(':')[0];
         const myLid = sock.user?.lid?.split(':')[0];
-
-        const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
+        const selfPhoneJid = myId ? `${myId}@s.whatsapp.net` : null;
+        const selfLidJid = myLid ? `${myLid}@lid` : null;
+        const isSelfChat = Boolean(
+            remoteJid && (
+                remoteJid === selfPhoneJid ||
+                remoteJid === selfLidJid ||
+                (myId && remoteJid.includes(myId)) ||
+                (myLid && remoteJid.includes(myLid))
+            )
+        );
 
         console.log(`[DEBUG-UPSERT] Nova mensagem de ${remoteJid} | fromMe: ${fromMe} | isSelfChat: ${isSelfChat}`);
 
         if (!remoteJid || !myId) {
             console.log('[DEBUG-UPSERT] Cancelado: remoteJid ou myId ausentes.');
+            return;
+        }
+
+        // --- FILTRO DE AUTO-MENSAGEM (Ignora o que não for SelfChat se for fromMe) ---
+        if (fromMe && !isSelfChat) {
+            console.log(`[DEBUG-UPSERT] Ignorado: Mensagem enviada fora do SelfChat (${remoteJid}).`);
             return;
         }
 
@@ -134,6 +148,12 @@ async function connectToWhatsApp() {
             remoteJid.endsWith('@broadcast')
         ) {
             console.log(`[DEBUG-UPSERT] Ignorado: Gateway privado barrou ${remoteJid}`);
+            return;
+        }
+
+        // --- TRAVA DE SEGURANÇA ESTRITA (Somente chat próprio na IA) ---
+        if (!isSelfChat) {
+            console.log('[DEBUG-UPSERT] Ignorado: Não é SelfChat.');
             return;
         }
 

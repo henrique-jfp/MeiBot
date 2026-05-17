@@ -32,6 +32,33 @@ def override_data_ref_from_text(content: str, data_ref: str):
     if "hoje" in text: return today.isoformat()
     return data_ref
 
+def to_float(value, default=0.0):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+async def build_operation_summary(operation: dict, title: str):
+    operation_id = operation.get("id") if operation else None
+    if not operation_id:
+        return "Não encontrei uma operação válida para resumir."
+
+    events = db.get_operation_summary(operation_id) or []
+    if not events:
+        return "Ainda não há eventos registrados para essa operação."
+
+    metrics = LogicService.calculate_metrics_grouped(events, [operation])
+    insight = await ai.generate_daily_insight(metrics.get("consolidado", {}))
+    return LogicService.format_summary(metrics, title, insight)
+
+def build_period_summary(events: list, operations: list, title: str):
+    if not events:
+        return None
+    metrics = LogicService.calculate_metrics_grouped(events, operations or [])
+    return LogicService.format_summary(metrics, title)
+
 async def process_interpreted_data(user, interpreted):
     intencao = interpreted.get("intencao")
     user_id = user["id"]
@@ -39,6 +66,47 @@ async def process_interpreted_data(user, interpreted):
     data_ref = interpreted.get("data_referencia")
     if data_ref == "null": data_ref = None
     eventos_brutos = interpreted.get("eventos", [])
+
+    if intencao == "iniciar":
+        active_op = db.get_active_operation(user_id)
+        if active_op and active_op.get("status") == "ativa":
+            return "🚀 A operação de hoje já está ativa, parceiro!"
+        db.start_operation(user_id)
+        return "🚀 Operação iniciada! Boa sorte nas entregas, parceiro!"
+
+    if intencao == "encerrar":
+        active_op = db.get_active_operation(user_id)
+        if not active_op or not active_op.get("id"):
+            return "Não encontrei uma operação ativa para encerrar."
+        ended_op = db.end_operation(active_op["id"]) or active_op
+        return await build_operation_summary(ended_op, "RESUMO DA OPERAÇÃO")
+
+    if intencao == "resumo_diario":
+        active_op = db.get_active_operation(user_id)
+        if not active_op or not active_op.get("id"):
+            return "Ainda não encontrei dados suficientes de hoje para resumir."
+        return await build_operation_summary(active_op, "RESUMO DO DIA")
+
+    if intencao == "resumo_semanal":
+        weekly_events = db.get_weekly_summary(user_id) or []
+        weekly_ops = db.get_operations_for_period(user_id, 7) or []
+        return build_period_summary(weekly_events, weekly_ops, "RESUMO SEMANAL") or "Ainda não há dados suficientes desta semana."
+
+    if intencao == "resumo_mensal":
+        monthly_events = db.get_monthly_summary(user_id) or []
+        monthly_ops = db.get_operations_for_period(user_id, 30) or []
+        return build_period_summary(monthly_events, monthly_ops, "RESUMO MENSAL") or "Ainda não há dados suficientes deste mês."
+
+    if intencao == "pergunta":
+        question = (interpreted.get("pergunta") or "").strip()
+        if not question:
+            return "Não consegui identificar sua pergunta no áudio. Tente novamente."
+        context_events = db.get_all_time_summary(user_id) or []
+        context_ops = db.get_operations_for_period(user_id, 30) or []
+        metrics = LogicService.calculate_metrics_grouped(context_events, context_ops)
+        context = json.dumps(metrics, ensure_ascii=False)
+        return await ai.answer_question(context, question)
+
     if data_ref: active_op = db.get_or_create_operation_by_date(user_id, data_ref)
     else:
         active_op = db.get_active_operation(user_id)
@@ -47,13 +115,13 @@ async def process_interpreted_data(user, interpreted):
     for ev in eventos_brutos:
         app_name_raw = str(ev.get("app") or "").lower()
         if not app_name_raw or app_name_raw == "none":
-            if float(ev.get("pacotes") or 0) > 0: ev["app"] = "Correios"
+            if to_float(ev.get("pacotes")) > 0: ev["app"] = "Correios"
         if "shopee" in str(ev.get("app")).lower():
-            ev.update({"app": "Shopee", "valor": 305.0 + float(ev.get("valor_extra", 0)), "km": 60.0, "tipo": "ganho"})
+            ev.update({"app": "Shopee", "valor": 305.0 + to_float(ev.get("valor_extra")), "km": 60.0, "tipo": "ganho"})
         elif "correio" in str(ev.get("app")).lower():
-            v, p = float(ev.get("valor", 0)), float(ev.get("pacotes", 0))
+            v, p = to_float(ev.get("valor")), to_float(ev.get("pacotes"))
             valor_calc = (p * 2.0) if (v == 0 or v == p) else v
-            ev.update({"app": "Correios", "km": 20.0, "tipo": "ganho", "valor": valor_calc + float(ev.get("valor_extra", 0))})
+            ev.update({"app": "Correios", "km": 20.0, "tipo": "ganho", "valor": valor_calc + to_float(ev.get("valor_extra"))})
         if active_op:
             h_chegada = ev.get("hora_chegada_galpao")
             h_saida_galpao = ev.get("hora_saida_galpao")
@@ -78,7 +146,7 @@ async def process_interpreted_data(user, interpreted):
             eventos_processados.append(ev)
     if intencao == "registro": return LogicService.format_events_confirmation(eventos_processados, "DADOS REGISTRADOS", data_ref)
     if intencao == "pedir_link_dashboard": return f"📊 Dashboard: https://meibot.henriquedejesus.dev/dashboard/{whatsapp}"
-    return "Processado."
+    return f"Entendi sua mensagem como '{intencao}', mas essa ação ainda não está conectada no backend."
 
 def decode_base64_content(content: str):
     if not content:
@@ -127,6 +195,7 @@ async def handle_webhook(request: Request):
         lock = get_user_lock(user["id"])
         async with lock:
             interpreted = await build_interpreted_payload(data)
+            print(f"[WEBHOOK] tipo={data.get('type')} intencao={interpreted.get('intencao')} eventos={len(interpreted.get('eventos', []))}")
             response_text = await process_interpreted_data(user, interpreted)
         return {"reply": response_text}
     except ValueError as e:
@@ -254,7 +323,7 @@ async def dashboard_page(whatsapp_number: str):
                     <div class="card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase">Pacotes / Hora (Rua)</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Quantos pacotes você entrega por hora efetivamente na rua, descontando o tempo de espera no galpão.</span></div><p id="txt-pacotes-hora-rua" class="text-2xl font-bold">0/h</p></div>
                     <div class="card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase">Eficiência (R$/KM)</p><p id="txt-eficiencia" class="text-2xl font-bold">R$ 0,00</p></div>
                     <div class="card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase">Eficiência (R$/Hora)</p><p id="txt-ganho-hora" class="text-2xl font-bold">R$ 0,00</p></div>
-                    <div class="card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase">Eficiência na Rua</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Seu faturamento bruto por hora em rota, uma medida real de produtividade.</span></div><p id="txt-ganho-hora-rua" class="text-2xl font-bold text-violet-700">R$ 0,00/h</p></div>
+                    <div class="card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase">Ganho Bruto / Hora (Rua)</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Faturamento bruto dividido apenas pelas horas em rota (descontando espera no galpão). Mostra sua produtividade real enquanto está entregando.</span></div><p id="txt-ganho-hora-rua" class="text-2xl font-bold text-violet-700">R$ 0,00/h</p></div>
                 </div>
 
                 <!-- CHARTS & DETAILS -->

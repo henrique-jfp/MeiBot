@@ -252,9 +252,23 @@ class AIService:
                 g = float(data.get("ganhos", 0) or 0)
                 k = float(data.get("km", 0) or 0)
                 h = float(data.get("horas", 0) or 0)
+                p = int(data.get("pacotes", 0) or 0)
+                espera = float(data.get("tempo_espera", 0) or 0)
+                dias_espera = int(data.get("dias_espera", 0) or 0)
+                h_rua = max(h - espera, 0)
                 r_km = g / k if k > 0 else 0
-                r_h = g / h if h > 0 else 0
-                apps_info.append(f"- {name}: Ganho R$ {g:.2f}, KM {k:.1f} (R$ {r_km:.2f}/km), Tempo {h:.1f}h (R$ {r_h:.2f}/h)")
+                r_h_total = g / h if h > 0 else 0
+                r_h_rua = g / h_rua if h_rua > 0 else 0
+                p_h_rua = p / h_rua if h_rua > 0 else 0
+                espera_str = (
+                    f", Espera galpão: {espera:.1f}h total "
+                    f"({espera/dias_espera:.1f}h/dia média em {dias_espera} dias)"
+                ) if dias_espera > 0 else ", Sem dados de espera registrados"
+                apps_info.append(
+                    f"- {name}: Ganho R$ {g:.2f} | {p} pacotes | {k:.0f}km\n"
+                    f"  Tempo total: {h:.1f}h (R$ {r_h_total:.2f}/h) | "
+                    f"Tempo rota: {h_rua:.1f}h (R$ {r_h_rua:.2f}/h, {p_h_rua:.1f} pac/h){espera_str}"
+                )
         
         apps_str = "\n".join(apps_info) if apps_info else "Sem dados detalhados por plataforma."
 
@@ -319,6 +333,10 @@ DADOS DA OPERAÇÃO ({period_type})
 
 GANHO BRUTO:
 R$ {curr['ganho']:.2f}
+
+DIAS TRABALHADOS: {c.get('days_worked', 1)}
+MÉDIA DIÁRIA: R$ {curr['ganho'] / max(c.get('days_worked', 1), 1):.2f}/dia
+CUSTO POR PACOTE ENTREGUE: R$ {(curr['gasto_essencial'] + curr['gasto_nao_essencial']) / max(int(c.get('total_pacotes', 1)), 1):.2f}
 
 LUCRO LÍQUIDO:
 R$ {curr['saldo']:.2f}
@@ -407,27 +425,27 @@ Exemplo:
 FORMATO OBRIGATÓRIO
 =========================
 
-ANÁLISE DA SHOPEE
-[TEXTO COMPLETO]
+Escreva em blocos com estes títulos EXATOS (apenas os apps que tiverem dados reais):
 
-ANÁLISE DOS CORREIOS
-[TEXTO COMPLETO]
+[NOME DO APP em maiúsculo]
+Análise detalhada desse app: eficiência real, tempo morto, comparação com o outro app, o que está funcionando e o que está drenando. Seja específico com os números — não repita o que o entregador já vê na tela, derive conclusões que ele não conseguiria sozinho. Mínimo 3 parágrafos.
 
-ANÁLISE GERAL DA EMPRESA
-[TEXTO COMPLETO]
+(repita para cada app com dados)
 
-DIAGNÓSTICO OPERACIONAL
-• Eficiência do tempo:
-• Eficiência do veículo:
-• Sustentabilidade:
-• Principal gargalo:
-• Principal acerto:
+OPERAÇÃO GERAL
+Visão consolidada da semana/mês. Quanto sobrou de verdade por dia trabalhado. Se o ritmo é sustentável. Se há risco de concentração num único app. Compare com o período anterior se disponível.
 
-RECOMENDAÇÕES ESTRATÉGICAS
-• [recomendação prática e objetiva]
-• [recomendação financeira]
-• [recomendação operacional]
+DIAGNÓSTICO
+- Eficiência do tempo: [avaliação + número concreto]
+- Eficiência do veículo: [avaliação + número concreto]  
+- Sustentabilidade: [avaliação + alerta se necessário]
+- Principal gargalo: [causa raiz, não sintoma]
+- Principal acerto: [o que deve ser mantido ou expandido]
 
+RECOMENDAÇÃO DA SEMANA
+Uma única ação prioritária, concreta e quantificada. Exemplo: "Reduzir 30min de espera nos Correios por dia = R$ X a mais no mês."
+
+NUNCA escreva seções vazias ou com texto genérico. Se não tiver dados suficientes para um app, diga isso em uma frase e passe para o próximo.
 A análise deve ser detalhada, útil, humana e parecer feita por um especialista real.
 """
         

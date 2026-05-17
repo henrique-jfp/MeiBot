@@ -67,10 +67,20 @@ Este documento lista exemplos de como o MeiBot deve reagir a diferentes entradas
 *   **Ação Interna:** Bot envia `type="audio"` para o backend, backend transcreve o áudio e interpreta o texto resultante.
 *   **Resposta:** Confirmação de registro com os eventos extraídos do áudio.
 
+### Áudio com Registro de Correios sem Valor Explícito
+*   **Entrada:** [Áudio] "fiz correios, 154 pacotes"
+*   **Ação Interna:** Backend precisa aceitar `valor=null` vindo da IA sem quebrar ao normalizar o evento.
+*   **Resposta:** Confirmação de registro usando o cálculo padrão de Correios.
+
 ### Áudio sem Transcrição Útil
 *   **Entrada:** [Áudio com ruído ou vazio]
 *   **Ação Interna:** Backend tenta transcrever antes de interpretar.
 *   **Resposta:** "Não consegui transcrever o áudio. Tente enviar em texto."
+
+### Áudio com Comando de Fluxo
+*   **Entrada:** [Áudio] "iniciar operação", "encerrar operação", "resumo da semana" ou "quanto ganhei hoje?"
+*   **Ação Interna:** Backend transcreve o áudio e trata a intenção retornada pela IA sem cair no fallback genérico `Processado.`.
+*   **Resposta:** Mensagem específica da ação pedida.
 
 ---
 
