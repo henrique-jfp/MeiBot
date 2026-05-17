@@ -191,10 +191,17 @@ async def dashboard_page(whatsapp_number: str):
         </style>
     </head>
     <body class="flex flex-col lg:flex-row min-h-screen">
-        <aside class="w-full lg:w-80 bg-white/95 backdrop-blur border-b lg:border-r border-slate-200 p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
-            <div class="flex items-center gap-3 mb-8"><div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-md"><i class="fa-solid fa-bolt"></i></div><div><h1 class="font-bold text-lg">MeiBot</h1><p class="text-xs text-slate-500 font-medium">Dashboard Analítico</p></div></div>
-            <div class="mb-6"><p class="text-[11px] font-bold text-slate-400 uppercase mb-3">Navegação</p><div class="flex flex-row lg:flex-col gap-2"><button id="btn-nav-performance" onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm border border-teal-100 w-full text-left"><i class="fa-solid fa-chart-pie w-4"></i> Performance</button><button id="btn-nav-porteiros" onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm hover:bg-slate-50 w-full text-left"><i class="fa-solid fa-map-location-dot w-4"></i> Porteiros</button></div></div>
-            <p class="text-[11px] font-bold text-slate-400 uppercase mb-3">Histórico</p><nav id="history-list" class="space-y-2"></nav>
+        <aside id="sidebar" class="w-full lg:w-80 bg-white/95 backdrop-blur border-b lg:border-r border-slate-200 p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
+            <div class="flex items-center justify-between mb-8">
+                <div class="flex items-center gap-3"><div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-md"><i class="fa-solid fa-bolt"></i></div><div><h1 class="font-bold text-lg">MeiBot</h1><p class="text-xs text-slate-500 font-medium">Dashboard Analítico</p></div></div>
+                <button id="btn-sidebar" onclick="toggleSidebar()" class="lg:hidden w-10 h-10 rounded-lg border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-50" aria-label="Abrir menu">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+            </div>
+            <div id="sidebar-content" class="hidden lg:block">
+                <div class="mb-6"><p class="text-[11px] font-bold text-slate-400 uppercase mb-3">Navegação</p><div class="flex flex-row lg:flex-col gap-2"><button id="btn-nav-performance" onclick="showSection('performance')" class="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 text-teal-700 font-semibold text-sm border border-teal-100 w-full text-left"><i class="fa-solid fa-chart-pie w-4"></i> Performance</button><button id="btn-nav-porteiros" onclick="showSection('porteiros')" class="flex items-center gap-3 p-2.5 rounded-lg bg-transparent text-slate-600 font-medium text-sm hover:bg-slate-50 w-full text-left"><i class="fa-solid fa-map-location-dot w-4"></i> Porteiros</button></div></div>
+                <p class="text-[11px] font-bold text-slate-400 uppercase mb-3">Histórico</p><nav id="history-list" class="space-y-2"></nav>
+            </div>
         </aside>
 
         <main class="flex-grow p-5 md:p-8 space-y-6 w-full max-w-7xl mx-auto">
@@ -280,11 +287,31 @@ async def dashboard_page(whatsapp_number: str):
             const WHATSAPP_ID = '""" + whatsapp_number + """';
             const fmt = (v, p=2) => (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: p});
 
+            function toggleSidebar() {
+                const content = document.getElementById('sidebar-content');
+                const isHidden = content.classList.contains('hidden');
+                content.classList.toggle('hidden', !isHidden);
+                const button = document.getElementById('btn-sidebar');
+                if (button) {
+                    button.setAttribute('aria-label', isHidden ? 'Fechar menu' : 'Abrir menu');
+                }
+            }
+
+            function closeSidebarIfMobile() {
+                if (window.innerWidth < 1024) {
+                    const content = document.getElementById('sidebar-content');
+                    content.classList.add('hidden');
+                    const button = document.getElementById('btn-sidebar');
+                    if (button) button.setAttribute('aria-label', 'Abrir menu');
+                }
+            }
+
             function showSection(s) {
                 document.getElementById('section-performance').classList.toggle('hidden', s !== 'performance');
                 document.getElementById('section-porteiros').classList.toggle('hidden', s !== 'porteiros');
                 document.getElementById('main-title').innerText = s === 'performance' ? 'Visão Geral' : 'Diretório de Porteiros';
                 if (s === 'porteiros') renderPorteiros();
+                closeSidebarIfMobile();
             }
 
             function handleSearch(query) {
@@ -595,13 +622,13 @@ async def dashboard_page(whatsapp_number: str):
                     const hlist = document.getElementById('history-list'); hlist.innerHTML = '';
                     const live = document.createElement('a'); live.href = '#'; live.className = 'history-item block p-3 rounded-lg ' + (!aid ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
                     live.innerHTML = `<span class="text-xs font-bold uppercase ${!aid ? 'text-teal-600' : 'text-slate-500'}">AO VIVO</span><span class="block text-xs font-medium ${!aid ? 'text-teal-800':'text-slate-700'}">Dashboard Atual</span>`;
-                    live.onclick = (e) => { e.preventDefault(); loadDashboard(); }; hlist.appendChild(live);
+                    live.onclick = (e) => { e.preventDefault(); loadDashboard(); closeSidebarIfMobile(); }; hlist.appendChild(live);
                     data.history.forEach((h, i) => {
                         const btn = document.createElement('a'); btn.href = '#'; btn.className = 'history-item block p-3 rounded-lg mt-2 ' + (aid === h.id ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
                         const cti = data.history.filter((x, j) => x.periodo_tipo === h.periodo_tipo && j >= i).length;
                         const periodLabel = formatPeriodRange(h) || `Analise de ${new Date(h.created_at).toLocaleDateString('pt-BR')}`;
                         btn.innerHTML = `<span class="text-xs font-bold uppercase ${aid === h.id ? 'text-teal-600':'text-slate-500'}">${h.periodo_tipo} ${cti}</span><span class="block text-[11px] text-slate-500">${periodLabel}</span>`;
-                        btn.onclick = (e) => { e.preventDefault(); loadDashboard(h.id); }; hlist.appendChild(btn);
+                        btn.onclick = (e) => { e.preventDefault(); loadDashboard(h.id); closeSidebarIfMobile(); }; hlist.appendChild(btn);
                     });
                     const sectionOpen = !document.getElementById('section-porteiros').classList.contains('hidden');
                     if (sectionOpen) {

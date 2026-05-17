@@ -149,6 +149,12 @@ class LogicService:
                 return "Correios"
             return None
 
+        def normalize_app_name(value):
+            text = (value or "").strip()
+            if not text:
+                return None
+            return text
+
         def add_duration_hours(start_val, end_val, base_date=None):
             start_dt = parse_event_datetime(start_val, base_date)
             end_dt = parse_event_datetime(end_val, base_date)
@@ -158,6 +164,17 @@ class LogicService:
                 end_dt += datetime.timedelta(days=1)
             diff = (end_dt - start_dt).total_seconds()
             return max(diff, 0) / 3600
+
+        day_apps = defaultdict(set)
+        for ev in events:
+            app_info = ev.get("apps")
+            app_name = app_info.get("nome") if isinstance(app_info, dict) else (ev.get("app") or "")
+            app_name = normalize_app_name(app_name)
+            tipo = str(ev.get("tipo") or "").lower()
+            if tipo in ["ganho", "rota", "corrida", "faturamento"] and app_name:
+                ev_day = get_event_date(ev)
+                if ev_day:
+                    day_apps[ev_day].add(app_name)
 
         intervals_per_day = defaultdict(list)
         for ev in events:
@@ -170,6 +187,12 @@ class LogicService:
                 inferred = infer_app_from_wait_desc(ev.get("descricao"))
                 if inferred:
                     app_name = inferred
+                else:
+                    ev_day = get_event_date(ev)
+                    if ev_day:
+                        candidates = list(day_apps.get(ev_day, set()))
+                        if len(candidates) == 1:
+                            app_name = candidates[0]
             
             tipo = str(ev.get("tipo") or "").lower()
             if app_name not in apps_data: apps_data[app_name] = {"ganhos": 0, "gastos": 0, "km": 0, "horas": 0, "pacotes": 0, "tempo_espera": 0}
