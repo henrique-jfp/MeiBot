@@ -394,19 +394,126 @@ async def dashboard_page(whatsapp_number: str):
         <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
-            body { font-family: 'Space Grotesk', sans-serif; background-color: #f8fafc; color: #0f172a; overflow-x: hidden; }
-            .card { background-color: white; border-radius: 1rem; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
+            @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+            :root {
+                --bg: #f7f5f2;
+                --card: rgba(255, 255, 255, 0.92);
+                --card-border: #e6e4df;
+                --text: #0f172a;
+                --muted: #64748b;
+                --brand-teal: #0f766e;
+                --brand-teal-soft: rgba(15, 118, 110, 0.12);
+                --brand-rose: #e11d48;
+                --shadow-soft: 0 14px 32px rgba(15, 23, 42, 0.08);
+                --shadow-tight: 0 6px 18px rgba(15, 23, 42, 0.08);
+            }
+            body {
+                font-family: 'Source Sans 3', sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                overflow-x: hidden;
+            }
+            body::before {
+                content: '';
+                position: fixed;
+                inset: 0;
+                z-index: -1;
+                background:
+                    radial-gradient(1200px 600px at 15% 0%, rgba(15, 118, 110, 0.10), transparent 60%),
+                    radial-gradient(900px 600px at 80% 10%, rgba(192, 132, 29, 0.10), transparent 55%),
+                    linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(247, 245, 242, 0.95));
+            }
+            h1, h2, h3, h4, h5 {
+                font-family: 'Space Grotesk', sans-serif;
+                letter-spacing: -0.01em;
+            }
+            .card {
+                background-color: var(--card);
+                border-radius: 1rem;
+                border: 1px solid var(--card-border);
+                box-shadow: var(--shadow-soft);
+                backdrop-filter: blur(6px);
+            }
+            .metric-card {
+                box-shadow: var(--shadow-tight);
+                transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            }
+            .metric-card:hover {
+                transform: translateY(-2px);
+                border-color: rgba(15, 118, 110, 0.25);
+                box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+            }
+            .metric-label {
+                letter-spacing: 0.08em;
+            }
+            .metric-value {
+                font-size: clamp(1.25rem, 1.6vw, 1.75rem);
+            }
             .tooltip-container { position: relative; display: inline-flex; align-items: center; gap: 4px; }
             .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; background-color: #1e293b; color: white; padding: 10px; border-radius: 8px; font-size: 11px; width: 240px; text-align: center; z-index: 100; font-weight: 500; pointer-events: none; }
             .tooltip-container:hover .tooltip { display: block; }
             .history-item { transition: all 0.2s; }
+            #sidebar {
+                background: rgba(255, 255, 255, 0.9);
+                box-shadow: 12px 0 32px rgba(15, 23, 42, 0.06);
+            }
+            .brand-icon {
+                background: linear-gradient(135deg, #0f766e, #0e7490);
+                box-shadow: 0 10px 24px rgba(15, 118, 110, 0.25);
+            }
+            .surface-warm {
+                background: linear-gradient(135deg, rgba(255, 244, 225, 0.9), rgba(255, 255, 255, 0.9));
+                border-color: rgba(192, 132, 29, 0.18);
+            }
+            .app-card {
+                position: relative;
+                background: rgba(255, 255, 255, 0.92);
+                border: 1px solid var(--card-border);
+                border-radius: 16px;
+                box-shadow: var(--shadow-tight);
+                transition: transform 0.2s ease, border-color 0.2s ease;
+            }
+            .app-card::before {
+                content: '';
+                position: absolute;
+                inset: 0 0 auto 0;
+                height: 3px;
+                background: var(--app-accent, var(--brand-teal));
+                border-radius: 16px 16px 0 0;
+            }
+            .app-card:hover {
+                transform: translateY(-2px);
+                border-color: var(--app-accent-border, rgba(15, 118, 110, 0.25));
+            }
+            .app-title {
+                color: var(--app-accent, var(--brand-teal));
+            }
+            .app-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 2px 8px;
+                border-radius: 999px;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                background: var(--app-accent-soft, rgba(15, 118, 110, 0.12));
+                color: var(--app-accent, var(--brand-teal));
+                border: 1px solid var(--app-accent-border, rgba(15, 118, 110, 0.2));
+            }
+            .app-pill .dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 999px;
+                background: var(--app-accent-2, var(--app-accent, var(--brand-teal)));
+            }
         </style>
     </head>
     <body class="flex flex-col lg:flex-row min-h-screen">
         <aside id="sidebar" class="w-full lg:w-80 bg-white/95 backdrop-blur border-b lg:border-r border-slate-200 p-6 flex-shrink-0 z-50 sticky top-0 lg:h-screen lg:overflow-y-auto">
             <div class="flex items-center justify-between mb-8">
-                <div class="flex items-center gap-3"><div class="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-md"><i class="fa-solid fa-bolt"></i></div><div><h1 class="font-bold text-lg">MeiBot</h1><p class="text-xs text-slate-500 font-medium">Dashboard Analítico</p></div></div>
+                <div class="flex items-center gap-3"><div class="w-10 h-10 rounded-lg flex items-center justify-center text-white brand-icon"><i class="fa-solid fa-bolt"></i></div><div><h1 class="font-bold text-lg">MeiBot</h1><p class="text-xs text-slate-500 font-medium">Dashboard Analítico</p></div></div>
                 <button id="btn-sidebar" onclick="toggleSidebar()" class="lg:hidden w-10 h-10 rounded-lg border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-50" aria-label="Abrir menu">
                     <i class="fa-solid fa-bars"></i>
                 </button>
@@ -423,15 +530,15 @@ async def dashboard_page(whatsapp_number: str):
             <div id="section-performance" class="space-y-6">
                 <!-- METRICS GRID -->
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div class="card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase">Faturamento Bruto</p><p id="txt-bruto" class="text-2xl font-bold">R$ 0,00</p></div>
-                    <div class="card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase">Saldo Líquido</p><p id="txt-saldo" class="text-2xl font-bold text-teal-700">R$ 0,00</p></div>
-                    <div class="card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase">Saldo c/ Provisão</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Seu saldo líquido menos R$ 0,20 por KM rodado para cobrir custos de manutenção futuros.</span></div><p id="txt-saldo-provisao" class="text-2xl font-bold text-sky-700">R$ 0,00</p></div>
-                    <div class="card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase">KM Total</p><p id="txt-km-total" class="text-2xl font-bold">0 km</p></div>
-                    <div class="card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase">Pacotes Entregues</p><p id="txt-pacotes-total" class="text-2xl font-bold">0</p></div>
-                    <div class="card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase">Pacotes / Hora (Rua)</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Quantos pacotes você entrega por hora efetivamente na rua, descontando o tempo de espera no galpão.</span></div><p id="txt-pacotes-hora-rua" class="text-2xl font-bold">0/h</p></div>
-                    <div class="card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase">Eficiência (R$/KM)</p><p id="txt-eficiencia" class="text-2xl font-bold">R$ 0,00</p></div>
-                    <div class="card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase">Eficiência (R$/Hora)</p><p id="txt-ganho-hora" class="text-2xl font-bold">R$ 0,00</p></div>
-                    <div class="card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase">Ganho Bruto / Hora (Rua)</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Faturamento bruto dividido apenas pelas horas em rota (descontando espera no galpão). Mostra sua produtividade real enquanto está entregando.</span></div><p id="txt-ganho-hora-rua" class="text-2xl font-bold text-violet-700">R$ 0,00/h</p></div>
+                    <div class="card metric-card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Faturamento Bruto</p><p id="txt-bruto" class="font-bold metric-value">R$ 0,00</p></div>
+                    <div class="card metric-card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Saldo Líquido</p><p id="txt-saldo" class="font-bold metric-value text-teal-700">R$ 0,00</p></div>
+                    <div class="card metric-card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Saldo c/ Provisão</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Seu saldo líquido menos R$ 0,20 por KM rodado para cobrir custos de manutenção futuros.</span></div><p id="txt-saldo-provisao" class="font-bold metric-value text-sky-700">R$ 0,00</p></div>
+                    <div class="card metric-card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">KM Total</p><p id="txt-km-total" class="font-bold metric-value">0 km</p></div>
+                    <div class="card metric-card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Pacotes Entregues</p><p id="txt-pacotes-total" class="font-bold metric-value">0</p></div>
+                    <div class="card metric-card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Pacotes / Hora (Rua)</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Quantos pacotes você entrega por hora efetivamente na rua, descontando o tempo de espera no galpão.</span></div><p id="txt-pacotes-hora-rua" class="font-bold metric-value">0/h</p></div>
+                    <div class="card metric-card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Eficiência (R$/KM)</p><p id="txt-eficiencia" class="font-bold metric-value">R$ 0,00</p></div>
+                    <div class="card metric-card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Eficiência (R$/Hora)</p><p id="txt-ganho-hora" class="font-bold metric-value">R$ 0,00</p></div>
+                    <div class="card metric-card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Ganho Bruto / Hora (Rua)</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Faturamento bruto dividido apenas pelas horas em rota (descontando espera no galpão). Mostra sua produtividade real enquanto está entregando.</span></div><p id="txt-ganho-hora-rua" class="font-bold metric-value text-violet-700">R$ 0,00/h</p></div>
                 </div>
 
                 <!-- CHARTS & DETAILS -->
@@ -442,7 +549,7 @@ async def dashboard_page(whatsapp_number: str):
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-2 card p-6"><h3 class="font-bold text-sm mb-6 uppercase">Detalhamento por App</h3><div id="list-apps" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div></div>
-                    <div class="card p-6 bg-amber-50/30 border-amber-100">
+                    <div class="card p-6 surface-warm">
                         <h3 class="font-bold text-amber-800 text-sm mb-4 uppercase">Eficiência de Galpão</h3>
                         <div class="flex items-end gap-2 mb-2">
                             <p id="txt-tempo-espera" class="text-3xl font-bold text-amber-700">0h</p>
@@ -499,6 +606,10 @@ async def dashboard_page(whatsapp_number: str):
             let dailyChart, appsChart, chartGastos, dashboardData;
             const WHATSAPP_ID = '""" + whatsapp_number + """';
             const fmt = (v, p=2) => (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: p});
+            const css = getComputedStyle(document.documentElement);
+            const brandTeal = css.getPropertyValue('--brand-teal').trim() || '#0f766e';
+            const brandTealSoft = css.getPropertyValue('--brand-teal-soft').trim() || 'rgba(15, 118, 110, 0.12)';
+            const brandRose = css.getPropertyValue('--brand-rose').trim() || '#e11d48';
 
             function toggleSidebar() {
                 const content = document.getElementById('sidebar-content');
@@ -787,16 +898,48 @@ async def dashboard_page(whatsapp_number: str):
                     
                     // App Details - Rich version
                     const list = document.getElementById('list-apps'); list.innerHTML = '';
+                    const getAppTone = (name) => {
+                        const lower = String(name || '').toLowerCase();
+                        if (lower.includes('shopee')) {
+                            return {
+                                accent: '#EE4D2D',
+                                accentSoft: '#FFE8E1',
+                                accentBorder: '#FFD1C7',
+                                accent2: '#FF8A65'
+                            };
+                        }
+                        if (lower.includes('correio')) {
+                            return {
+                                accent: '#0047BB',
+                                accentSoft: '#E8F0FF',
+                                accentBorder: '#B7CCFF',
+                                accent2: '#FFCC00'
+                            };
+                        }
+                        return {
+                            accent: brandTeal,
+                            accentSoft: brandTealSoft,
+                            accentBorder: 'rgba(15, 118, 110, 0.2)',
+                            accent2: brandTeal
+                        };
+                    };
                     Object.keys(apps).filter(n => apps[n].ganhos > 0).sort((a,b) => apps[b].ganhos - apps[a].ganhos).forEach(name => {
                         const app = apps[name];
                         const rkm = (app.ganhos / (app.km || 1));
                         const rhora = (app.ganhos / (app.horas || 1));
                         const percent = (app.ganhos / (c.total_ganhos || 1)) * 100;
+                        const tone = getAppTone(name);
                         list.innerHTML += `
-                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100 group hover:border-teal-200 transition-all shadow-sm">
+                            <div class="app-card p-4" style="--app-accent: ${tone.accent}; --app-accent-soft: ${tone.accentSoft}; --app-accent-border: ${tone.accentBorder}; --app-accent-2: ${tone.accent2};">
                                 <div class="flex justify-between items-start mb-3">
-                                    <div><p class="font-bold text-slate-800 text-sm uppercase">${name}</p><p class="text-[10px] text-slate-500 font-bold uppercase">${fmt(app.km,1)}km • ${fmt(app.horas,1)}h</p></div>
-                                    <div class="text-right"><p class="font-bold text-teal-700 text-sm">R$ ${fmt(app.ganhos)}</p><p class="text-[10px] text-teal-500 font-bold uppercase">${fmt(percent,0)}% do total</p></div>
+                                    <div>
+                                        <p class="font-bold text-sm uppercase app-title">${name}</p>
+                                        <p class="text-[10px] text-slate-500 font-bold uppercase">${fmt(app.km,1)}km • ${fmt(app.horas,1)}h</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="font-bold text-sm" style="color: ${tone.accent}">R$ ${fmt(app.ganhos)}</p>
+                                        <span class="app-pill"><span class="dot"></span>${fmt(percent,0)}% do total</span>
+                                    </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 mt-4">
                                     <div class="bg-white p-2 rounded-lg border text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/KM</p><p class="text-xs font-bold">R$ ${fmt(rkm)}</p></div>
@@ -820,7 +963,7 @@ async def dashboard_page(whatsapp_number: str):
                         if (dailyChart) dailyChart.destroy();
                         dailyChart = new Chart(document.getElementById('chartDaily').getContext('2d'), {
                             type: 'line',
-                            data: { labels: labels, datasets: [{ label: 'Ganho diario', data: values, borderColor: '#0f766e', backgroundColor: 'rgba(15,118,110,0.12)', tension: 0.3, fill: true, pointRadius: 3 }] },
+                            data: { labels: labels, datasets: [{ label: 'Ganho diario', data: values, borderColor: brandTeal, backgroundColor: brandTealSoft, tension: 0.3, fill: true, pointRadius: 3 }] },
                             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => 'R$ ' + fmt(v) } } } }
                         });
                     } else {
@@ -829,7 +972,7 @@ async def dashboard_page(whatsapp_number: str):
                     }
 
                     if (chartGastos) chartGastos.destroy();
-                    chartGastos = new Chart(document.getElementById('chartGastos').getContext('2d'), { type: 'doughnut', data: { labels: ['Essenciais', 'Não Essenciais'], datasets: [{ data: [c.gastos_essenciais, c.gastos_nao_essenciais], backgroundColor: ['#0f766e', '#e11d48'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } } });
+                    chartGastos = new Chart(document.getElementById('chartGastos').getContext('2d'), { type: 'doughnut', data: { labels: ['Essenciais', 'Não Essenciais'], datasets: [{ data: [c.gastos_essenciais, c.gastos_nao_essenciais], backgroundColor: [brandTeal, brandRose] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } } });
                     
                     // History Nav
                     const hlist = document.getElementById('history-list'); hlist.innerHTML = '';

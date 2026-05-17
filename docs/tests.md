@@ -90,3 +90,22 @@ Este documento lista exemplos de como o MeiBot deve reagir a diferentes entradas
 *   **Entrada:** [Imagem sem legenda com comprovante/print do app]
 *   **Ação Interna:** Bot envia `type="image"` e `mime_type`, backend roda OCR e interpreta os dados detectados.
 *   **Resposta:** Confirmação de registro dos eventos encontrados na imagem ou resposta padrão de processamento.
+
+---
+
+## 7. Porteiros
+
+### Cadastro de Porteiro por Áudio
+*   **Entrada:** [Áudio] "cadastra o porteiro João na Rua das Flores 123 no turno da noite"
+*   **Ação Interna:** Backend transcreve o áudio, interpreta `cadastrar_porteiro` e persiste o cadastro em `mapeamento_porteiros`.
+*   **Resposta:** Confirmação de cadastro com endereço e dados extraídos.
+
+### Consulta de Porteiro por Endereço
+*   **Entrada:** "quem é o porteiro da Rua das Flores 123?"
+*   **Ação Interna:** Backend interpreta `consultar_porteiro` e busca o endereço no banco.
+*   **Resposta:** Lista dos porteiros cadastrados naquele prédio ou mensagem de ausência.
+
+### Listagem de Porteiros
+*   **Entrada:** "porteiros" ou "meus porteiros"
+*   **Ação Interna:** Backend interpreta `listar_porteiros` e retorna todos os registros do usuário.
+*   **Resposta:** Lista formatada de porteiros ou aviso de que ainda não há mapeamento.

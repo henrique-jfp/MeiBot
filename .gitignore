@@ -19,3 +19,6 @@ venv/
 *.log
 logs.json
 C:\Users\henri\.gemini\tmp\meibot\logs.json
+
+# Poluição de arquivos
+imagensRotas/
