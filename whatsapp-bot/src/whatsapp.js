@@ -99,12 +99,7 @@ async function connectToWhatsApp() {
         const myId = sock.user?.id?.split(':')[0];
         const myLid = sock.user?.lid?.split(':')[0];
 
-        // --- FILTRO DE AUTO-MENSAGEM (Ignora o que não for SelfChat se for fromMe) ---
         const isSelfChat = remoteJid.includes(myId) || (myLid && remoteJid.includes(myLid));
-        
-        if (fromMe && !isSelfChat) {
-            return;
-        }
 
         console.log(`[DEBUG-UPSERT] Nova mensagem de ${remoteJid} | fromMe: ${fromMe} | isSelfChat: ${isSelfChat}`);
 
@@ -132,15 +127,13 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // --- GATEWAY DE GRUPOS ---
-        if (remoteJid.endsWith('@g.us')) {
-            console.log(`[DEBUG-UPSERT] Ignorado: Gateway de grupos barrou ${remoteJid}`);
-            return;
-        }
-        
-        // --- TRAVA DE SEGURANÇA ESTRITA (SOMENTE Chat Próprio) ---
-        if (!isSelfChat) {
-            console.log(`[DEBUG-UPSERT] Ignorado: Não é SelfChat.`);
+        // --- GATEWAY DE GRUPOS/BROADCAST ---
+        if (
+            remoteJid.endsWith('@g.us') ||
+            remoteJid === 'status@broadcast' ||
+            remoteJid.endsWith('@broadcast')
+        ) {
+            console.log(`[DEBUG-UPSERT] Ignorado: Gateway privado barrou ${remoteJid}`);
             return;
         }
 
