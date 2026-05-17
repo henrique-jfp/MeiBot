@@ -228,8 +228,19 @@ async def dashboard_page(whatsapp_number: str):
                             <p id="txt-tempo-espera" class="text-3xl font-bold text-amber-700">0h</p>
                             <p class="text-xs text-amber-500 font-bold mb-1 uppercase">Espera Total</p>
                         </div>
-                        
-                        <div id="espera-app-breakdown" class="space-y-1 border-t border-amber-200/60 pt-3 mt-3" style="display: none;">
+                        <p id="txt-tempo-espera-avg" class="text-[10px] text-amber-600 font-semibold uppercase">Media diaria: 0h/dia</p>
+
+                        <div class="grid grid-cols-2 gap-3 mt-4">
+                            <div class="bg-white/80 border border-amber-100 rounded-lg p-3">
+                                <p class="text-[10px] font-bold text-amber-500 uppercase">Shopee</p>
+                                <p id="txt-tempo-espera-shopee" class="text-lg font-bold text-amber-800">0h</p>
+                                <p id="txt-tempo-espera-avg-shopee" class="text-[10px] text-amber-600 font-semibold uppercase">Media: 0h/dia</p>
+                            </div>
+                            <div class="bg-white/80 border border-amber-100 rounded-lg p-3">
+                                <p class="text-[10px] font-bold text-amber-500 uppercase">Correios</p>
+                                <p id="txt-tempo-espera-correios" class="text-lg font-bold text-amber-800">0h</p>
+                                <p id="txt-tempo-espera-avg-correios" class="text-[10px] text-amber-600 font-semibold uppercase">Media: 0h/dia</p>
+                            </div>
                         </div>
 
                         <div class="w-full bg-amber-100 rounded-full h-2 my-4">
@@ -500,8 +511,28 @@ async def dashboard_page(whatsapp_number: str):
                     document.getElementById('txt-essencial').innerText = 'R$ ' + fmt(c.gastos_essenciais);
                     document.getElementById('txt-nao-essencial').innerText = 'R$ ' + fmt(c.gastos_nao_essenciais);
                     document.getElementById('txt-tempo-espera').innerText = fmt(c.tempo_espera_galpao, 1) + 'h';
+                    const esperaMedia = (c.tempo_espera_media_diaria !== undefined && c.tempo_espera_media_diaria !== null)
+                        ? c.tempo_espera_media_diaria
+                        : (c.tempo_espera_galpao / (c.days_worked || 1));
+                    document.getElementById('txt-tempo-espera-avg').innerText = 'Media diaria: ' + fmt(esperaMedia, 1) + 'h/dia';
                     document.getElementById('txt-tempo-total').innerText = 'Tempo Total: ' + fmt(c.total_hours, 1) + 'h';
                     document.getElementById('bar-espera').style.width = Math.min((c.tempo_espera_galpao / (c.total_hours || 1)) * 100, 100) + '%';
+
+                    const findAppStats = (aliases) => {
+                        const key = Object.keys(apps).find((name) => {
+                            const lower = String(name || '').toLowerCase();
+                            return aliases.some((alias) => lower.includes(alias));
+                        });
+                        return key ? apps[key] : null;
+                    };
+                    const shopee = findAppStats(['shopee']);
+                    const correios = findAppStats(['correio']);
+                    const shopeeAvg = shopee ? (shopee.media_diaria_espera ?? (shopee.tempo_espera / (c.days_worked || 1))) : 0;
+                    const correiosAvg = correios ? (correios.media_diaria_espera ?? (correios.tempo_espera / (c.days_worked || 1))) : 0;
+                    document.getElementById('txt-tempo-espera-shopee').innerText = fmt(shopee ? shopee.tempo_espera : 0, 1) + 'h';
+                    document.getElementById('txt-tempo-espera-avg-shopee').innerText = 'Media: ' + fmt(shopeeAvg, 1) + 'h/dia';
+                    document.getElementById('txt-tempo-espera-correios').innerText = fmt(correios ? correios.tempo_espera : 0, 1) + 'h';
+                    document.getElementById('txt-tempo-espera-avg-correios').innerText = 'Media: ' + fmt(correiosAvg, 1) + 'h/dia';
                     
                     // AI Insight
                     const ins = document.getElementById('insight-section');
@@ -533,25 +564,6 @@ async def dashboard_page(whatsapp_number: str):
                                 </div>
                             </div>`;
                     });
-
-                    // New: Wait Time Breakdown
-                    const esperaBreakdown = document.getElementById('espera-app-breakdown');
-                    esperaBreakdown.innerHTML = '';
-                    let waitBreakdownCount = 0;
-                    Object.keys(apps).forEach(name => {
-                        const app = apps[name];
-                        if (app.tempo_espera > 0) {
-                            waitBreakdownCount++;
-                            const div = document.createElement('div');
-                            div.className = 'flex justify-between items-center text-xs';
-                            div.innerHTML = `
-                                <span class="font-semibold text-amber-800/80">${name}</span>
-                                <span class="font-bold text-amber-700">${fmt(app.tempo_espera, 1)}h</span>
-                            `;
-                            esperaBreakdown.appendChild(div);
-                        }
-                    });
-                    esperaBreakdown.style.display = waitBreakdownCount > 0 ? 'block' : 'none';
 
                     // Charts
                     const dailyContainer = document.getElementById('daily-chart-container');

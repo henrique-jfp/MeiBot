@@ -84,8 +84,24 @@ class LogicService:
             "total_ganhos": 0, "total_gastos": 0, "gastos_essenciais": 0, "gastos_nao_essenciais": 0,
             "km_total": 0, "total_pacotes": 0, "saldo": 0, "total_hours": 0, "tempo_espera_galpao": 0,
             "days_worked": 0, "ganho_por_hora": 0, "custo_por_km": 0, "saldo_com_provisao": 0,
-            "ganho_por_hora_rua": 0, "pacotes_por_hora": 0, "pacotes_por_hora_rua": 0
+            "ganho_por_hora_rua": 0, "pacotes_por_hora": 0, "pacotes_por_hora_rua": 0,
+            "tempo_espera_media_diaria": 0
         }
+
+        op_date_by_id = {}
+        if operations:
+            for op in operations:
+                op_date = op.get("data") or op.get("hora_inicio") or op.get("hora_fim")
+                if not op_date:
+                    continue
+                try:
+                    parsed = datetime.date.fromisoformat(str(op_date)[:10])
+                except Exception:
+                    parsed = None
+                if parsed and op.get("id"):
+                    op_date_by_id[op["id"]] = parsed
+
+        wait_days_by_app = defaultdict(set)
 
         def parse_date(value):
             if not value: return None
@@ -122,7 +138,16 @@ class LogicService:
                 or parse_date(ev.get("hora_fim"))
                 or parse_date(ev.get("hora_inicio_rota"))
                 or parse_date(ev.get("hora_fim_operacao"))
+                or (op_date_by_id.get(ev.get("operacao_id")) if ev.get("operacao_id") else None)
             )
+
+        def infer_app_from_wait_desc(desc):
+            text = (desc or "").lower()
+            if "shopee" in text:
+                return "Shopee"
+            if "correio" in text:
+                return "Correios"
+            return None
 
         def add_duration_hours(start_val, end_val, base_date=None):
             start_dt = parse_event_datetime(start_val, base_date)
@@ -141,6 +166,10 @@ class LogicService:
             pac_val = int(ev.get("pacotes") or 0)
             app_info = ev.get("apps")
             app_name = app_info.get("nome") if isinstance(app_info, dict) else (ev.get("app") or "Outros")
+            if str(ev.get("sub_tipo")).lower() == "espera_galpao" and (not app_name or app_name == "Outros"):
+                inferred = infer_app_from_wait_desc(ev.get("descricao"))
+                if inferred:
+                    app_name = inferred
             
             tipo = str(ev.get("tipo") or "").lower()
             if app_name not in apps_data: apps_data[app_name] = {"ganhos": 0, "gastos": 0, "km": 0, "horas": 0, "pacotes": 0, "tempo_espera": 0}
@@ -170,6 +199,8 @@ class LogicService:
                 consolidado["tempo_espera_galpao"] += duration
                 if app_name and app_name in apps_data:
                     apps_data[app_name]["tempo_espera"] += duration
+                    if base_date:
+                        wait_days_by_app[app_name].add(base_date)
 
             h_ini = ev.get("hora_inicio_rota") or ev.get("hora_inicio")
             h_fim = ev.get("hora_fim_operacao") or ev.get("hora_fim")
@@ -207,6 +238,9 @@ class LogicService:
         consolidado["total_hours"] = total_unique_hours
         consolidado["saldo"] = consolidado["total_ganhos"] - consolidado["total_gastos"]
         consolidado["saldo_com_provisao"] = consolidado["saldo"] - (consolidado["km_total"] * CUSTO_PROVISAO_KM)
+
+        if consolidado["days_worked"] > 0:
+            consolidado["tempo_espera_media_diaria"] = consolidado["tempo_espera_galpao"] / consolidado["days_worked"]
         
         if consolidado["total_hours"] > 0:
             consolidado["ganho_por_hora"] = consolidado["saldo"] / consolidado["total_hours"]
@@ -216,6 +250,11 @@ class LogicService:
         if horas_na_rua > 0:
             consolidado["ganho_por_hora_rua"] = consolidado["total_ganhos"] / horas_na_rua
             consolidado["pacotes_por_hora_rua"] = consolidado["total_pacotes"] / horas_na_rua
+
+        for app_name, data in apps_data.items():
+            dias_espera = len(wait_days_by_app.get(app_name, set()))
+            data["dias_espera"] = dias_espera
+            data["media_diaria_espera"] = (data["tempo_espera"] / dias_espera) if dias_espera > 0 else 0
         
         return {"consolidado": consolidado, "apps": apps_data}
 
