@@ -224,15 +224,16 @@ class AIService:
             return response.text
 
     async def generate_analyst_insight(self, current_metrics: dict, previous_metrics: dict = None, period_type: str = "Semana", app_metrics: dict = None):
+        c = current_metrics or {}
         curr = {
-            "ganho": current_metrics.get("total_ganhos", 0),
-            "gasto_essencial": current_metrics.get("gastos_essenciais", 0),
-            "gasto_nao_essencial": current_metrics.get("gastos_nao_essenciais", 0),
-            "saldo": current_metrics.get("saldo", 0),
-            "km": current_metrics.get("km_total", 0),
-            "horas": current_metrics.get("total_hours", 0),
-            "rs_hora": current_metrics.get("ganho_por_hora", 0),
-            "rs_km": (current_metrics.get("total_ganhos", 0) / current_metrics.get("km_total")) if current_metrics.get("km_total", 0) > 0 else 0
+            "ganho": c.get("total_ganhos", 0),
+            "gasto_essencial": c.get("gastos_essenciais", 0),
+            "gasto_nao_essencial": c.get("gastos_nao_essenciais", 0),
+            "saldo": c.get("saldo", 0),
+            "km": c.get("km_total", 0),
+            "horas": c.get("total_hours", 0),
+            "rs_hora": c.get("ganho_por_hora", 0),
+            "rs_km": (c.get("total_ganhos", 0) / c.get("km_total")) if c.get("km_total", 0) > 0 else 0
         }
         
         perc_nao_essencial = (curr["gasto_nao_essencial"] / curr["ganho"] * 100) if curr["ganho"] > 0 else 0
@@ -453,11 +454,11 @@ A análise deve ser detalhada, útil, humana e parecer feita por um especialista
             completion = self.groq_client.chat.completions.create(
                 model=self.groq_model_smart,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.7, # Aumentado para soar mais natural e variado
-                max_tokens=800
+                temperature=0.7,
+                max_tokens=1500
             )
             return completion.choices[0].message.content
         except Exception as e:
-            print(f"Groq insight failed: {e}. Falling back to Gemini...")
+            print(f"Groq insight    ailed: {e}. Falling back to Gemini...")
             response = self.gemini_model.generate_content(prompt)
             return response.text

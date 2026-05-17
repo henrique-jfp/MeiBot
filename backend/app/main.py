@@ -59,6 +59,38 @@ def build_period_summary(events: list, operations: list, title: str):
     metrics = LogicService.calculate_metrics_grouped(events, operations or [])
     return LogicService.format_summary(metrics, title)
 
+def get_porteiro_info(interpreted: dict):
+    info = interpreted.get("porteiro_info") or {}
+    return {
+        "rua": str(info.get("rua") or "").strip(),
+        "numero": str(info.get("numero") or "").strip(),
+        "nome": str(info.get("nome") or "").strip(),
+        "turno": str(info.get("turno") or "").strip(),
+        "notas": str(info.get("notas") or "").strip(),
+        "nome_antigo": str(info.get("nome_antigo") or "").strip(),
+    }
+
+def format_porteiro_endereco(rua: str, numero: str):
+    if rua and numero:
+        return f"{rua}, {numero}"
+    return rua or numero or "endereço não informado"
+
+def format_porteiro_item(porteiro: dict):
+    extras = []
+    if porteiro.get("turno"):
+        extras.append(f"turno: {porteiro['turno']}")
+    if porteiro.get("notas_predio"):
+        extras.append(f"notas: {porteiro['notas_predio']}")
+    extras_texto = f" ({' | '.join(extras)})" if extras else ""
+    endereco = format_porteiro_endereco(porteiro.get("rua"), porteiro.get("numero"))
+    nome = porteiro.get("nome_porteiro") or "Porteiro não informado"
+    return f"- {endereco}: {nome}{extras_texto}"
+
+def format_porteiro_listagem(porteiros: list, titulo: str):
+    linhas = [titulo]
+    linhas.extend(format_porteiro_item(porteiro) for porteiro in porteiros)
+    return "\n".join(linhas)
+
 async def process_interpreted_data(user, interpreted):
     intencao = interpreted.get("intencao")
     user_id = user["id"]
@@ -106,6 +138,82 @@ async def process_interpreted_data(user, interpreted):
         metrics = LogicService.calculate_metrics_grouped(context_events, context_ops)
         context = json.dumps(metrics, ensure_ascii=False)
         return await ai.answer_question(context, question)
+
+    if intencao == "listar_porteiros":
+        porteiros = db.get_all_porteiros(user_id) or []
+        if not porteiros:
+            return "Ainda não há porteiros mapeados."
+        return format_porteiro_listagem(porteiros, "Porteiros mapeados:")
+
+    if intencao == "consultar_porteiro":
+        porteiro_info = get_porteiro_info(interpreted)
+        rua = porteiro_info["rua"]
+        numero = porteiro_info["numero"]
+        if not rua or not numero:
+            return "Para consultar porteiro, me diga a rua e o número do prédio."
+        porteiros = db.get_porteiros_by_address(user_id, rua, numero) or []
+        if not porteiros:
+            return f"Não encontrei porteiros mapeados em {format_porteiro_endereco(rua, numero)}."
+        titulo = f"Porteiros em {format_porteiro_endereco(rua, numero)}:"
+        return format_porteiro_listagem(porteiros, titulo)
+
+    if intencao == "cadastrar_porteiro":
+        porteiro_info = get_porteiro_info(interpreted)
+        rua = porteiro_info["rua"]
+        numero = porteiro_info["numero"]
+        nome = porteiro_info["nome"]
+        turno = porteiro_info["turno"] or None
+        notas = porteiro_info["notas"] or None
+        if not rua or not numero or not nome:
+            return "Para cadastrar um porteiro, preciso da rua, número e nome."
+        created = db.add_porteiro(user_id, rua, numero, nome, turno=turno, notas=notas)
+        endereco = format_porteiro_endereco(rua, numero)
+        if created == "DUPLICATE":
+            return f"Esse porteiro já está mapeado em {endereco}."
+        if not created:
+            return "Não consegui salvar o porteiro agora. Tente novamente."
+        detalhes = []
+        if turno:
+            detalhes.append(f"turno: {turno}")
+        if notas:
+            detalhes.append(f"notas: {notas}")
+        detalhes_texto = f" ({' | '.join(detalhes)})" if detalhes else ""
+        return f"Porteiro cadastrado em {endereco}: {nome}{detalhes_texto}."
+
+    if intencao == "corrigir_porteiro":
+        porteiro_info = get_porteiro_info(interpreted)
+        rua = porteiro_info["rua"]
+        numero = porteiro_info["numero"]
+        nome_antigo = porteiro_info["nome_antigo"]
+        novo_nome = porteiro_info["nome"] or None
+        novo_turno = porteiro_info["turno"] or None
+        novas_notas = porteiro_info["notas"] or None
+        if not rua or not numero or not nome_antigo:
+            return "Para corrigir um porteiro, preciso da rua, número e nome atual."
+        if not any([novo_nome, novo_turno, novas_notas]):
+            return "Não identifiquei o que você quer corrigir no cadastro do porteiro."
+        updated = db.update_porteiro(
+            user_id,
+            rua,
+            numero,
+            nome_antigo,
+            novo_nome=novo_nome,
+            novo_turno=novo_turno,
+            novas_notas=novas_notas,
+        )
+        endereco = format_porteiro_endereco(rua, numero)
+        if updated is None:
+            return "Não consegui atualizar o porteiro agora. Tente novamente."
+        if not updated:
+            return f"Não encontrei o porteiro {nome_antigo} em {endereco}."
+        mudancas = []
+        if novo_nome:
+            mudancas.append(f"nome: {novo_nome}")
+        if novo_turno:
+            mudancas.append(f"turno: {novo_turno}")
+        if novas_notas:
+            mudancas.append(f"notas: {novas_notas}")
+        return f"Porteiro atualizado em {endereco}: {', '.join(mudancas)}."
 
     if data_ref: active_op = db.get_or_create_operation_by_date(user_id, data_ref)
     else:
