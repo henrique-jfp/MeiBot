@@ -227,7 +227,7 @@ class LogicService:
 
             h_ini = ev.get("hora_inicio_rota") or ev.get("hora_inicio")
             h_fim = ev.get("hora_fim_operacao") or ev.get("hora_fim")
-            if h_ini and h_fim and (tipo in ["ganho", "rota"] or str(ev.get("sub_tipo")) == "espera_galpao"):
+            if h_ini and h_fim and tipo in ["ganho", "rota"]:
                 try:
                     # Tenta pegar a data do evento; se nao tiver, busca a data da operacao correspondente
                     ev_date = get_event_date(ev)

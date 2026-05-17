@@ -96,8 +96,8 @@ async function connectToWhatsApp() {
 
         const remoteJid = msg.key.remoteJid;
         const fromMe = msg.key.fromMe;
-        const myId = sock.user?.id?.split(':')[0];
-        const myLid = sock.user?.lid?.split(':')[0];
+        const myId = sock.user?.id?.split(':')[0] || state.creds?.me?.id?.split(':')[0];
+        const myLid = sock.user?.lid?.split(':')[0] || state.creds?.me?.lid?.split(':')[0];
         const selfPhoneJid = myId ? `${myId}@s.whatsapp.net` : null;
         const selfLidJid = myLid ? `${myLid}@lid` : null;
         const isSelfChat = Boolean(
