@@ -12,6 +12,7 @@ import asyncio
 from collections import defaultdict
 
 app = FastAPI()
+app.include_router(routes_claim_router)
 db = DBService()
 ai = AIService()
 DEFAULT_IMAGE_MIME_TYPE = "image/jpeg"
