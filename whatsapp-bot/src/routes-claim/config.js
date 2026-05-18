@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 const ROUTES_CONFIG = {
-    testGroupName: 'Documento',
-    prodGroupNames: ['ROTAS E DISTRIBUIÇÃO ILHA - 2026', 'SPX Motorista'],
+    testGroupName: 'Documentos',
+    prodGroupNames: ['ROTAS E DISTRIBUIÇÃO ILHA - 2026'],
     timezone: 'America/Sao_Paulo',
     schedule: {
         enabledInProd: true,
