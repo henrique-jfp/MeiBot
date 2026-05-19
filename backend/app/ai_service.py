@@ -57,12 +57,15 @@ class AIService:
         - 'consultar_porteiro': Para buscar porteiros de um endereço específico.
         - 'cadastrar_porteiro': Para mapear um novo porteiro em um endereço.
         - 'corrigir_porteiro': Para atualizar informações de um porteiro já cadastrado.
+        - 'corrigir_registro': Para corrigir dados já lançados de uma operação ou registro existente, como horário, valor, km, pacotes ou gasto lançado errado.
         - 'pedir_link_dashboard': Quando o usuário pede o link do dashboard, mapa de porteiros, ou painel.
 
         Regras de Negócio Pessoais (OBRIGATÓRIO):
         - Se o usuário disser apenas "Porteiro" ou "Porteiros", use intencao: 'listar_porteiros'.
         - Se o usuário pedir o link do mapa ou dashboard, use intencao: 'pedir_link_dashboard'.
-        - Se a mensagem contiver um endereço (rua e número) e um nome de pessoa associado a "porteiro", use SEMPRE 'cadastrar_porteiro'.
+        - Se a mensagem contiver um endereço (rua e número) e um nome de pessoa associado a "porteiro", e NÃO for um pedido de correção, use SEMPRE 'cadastrar_porteiro'.
+        - Se o usuário pedir para corrigir ou ajustar um porteiro já existente, use SEMPRE 'corrigir_porteiro', mesmo que ele informe apenas o nome correto.
+        - Se o usuário pedir para corrigir ou ajustar um registro já lançado da operação, como horário, valor, KM, pacotes ou gasto, use SEMPRE 'corrigir_registro' e NUNCA 'corrigir_porteiro'.
 
         Regras de Extração de Eventos (OBRIGATÓRIO):
         1. SEPARAÇÃO DE EVENTOS: O usuário frequentemente relata rotas e gastos no mesmo texto. Você DEVE extrair CADA EVENTO como um objeto separado na lista 'eventos'. (Ex: Se ele fez Correios e comprou cigarro, gere DOIS eventos, um 'ganho' e um 'gasto').
@@ -80,8 +83,8 @@ class AIService:
         - intencao: Uma das intenções acima.
         - data_referencia: YYYY-MM-DD (obrigatório se mencionado data ou "ontem", "anteontem", "dia X").
         - pergunta: O texto da pergunta (se intencao for 'pergunta').
-        - porteiro_info: objeto {{'rua': str, 'numero': str, 'nome': str, 'turno': str, 'notas': str, 'nome_antigo': str}} (obrigatório para intenções de porteiro).
-        - eventos: lista de objetos {{'app': str, 'tipo': 'ganho'|'gasto', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': str, 'hora_saida_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'categoria': str, 'descricao': str}}
+        - porteiro_info: objeto {{'rua': str, 'numero': str, 'nome': str, 'turno': str, 'notas': str, 'nome_antigo': str}} (obrigatório para intenções de porteiro). Em 'corrigir_porteiro', use 'nome' para o dado correto e preencha 'nome_antigo' apenas se o usuário disser explicitamente o nome anterior.
+        - eventos: lista de objetos {{'app': str, 'tipo': 'ganho'|'gasto', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': str, 'hora_saida_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'categoria': str, 'descricao': str}}. Em 'corrigir_registro', devolva somente os campos corrigidos e o app quando ele for citado.
         
         Texto do usuário: "{text}"
         """

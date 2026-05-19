@@ -106,6 +106,35 @@ class DBService:
             print(f"Error ending op: {e}")
         return None
 
+    def get_operation_by_date(self, user_id: str, date_str: str):
+        if not user_id or not date_str:
+            return None
+        try:
+            response = self.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).eq("data", date_str).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+            print(f"Error getting op by date: {e}")
+        return None
+
+    def update_operation_times(self, operation_id: str, date_str: str = None, hora_inicio: str = None, hora_fim: str = None):
+        if not operation_id:
+            return None
+        try:
+            data = {}
+            if hora_inicio:
+                data["hora_inicio"] = self._normalize_event_time(hora_inicio, date_str)
+            if hora_fim:
+                data["hora_fim"] = self._normalize_event_time(hora_fim, date_str)
+            if not data:
+                return None
+            response = self.supabase.table("operacoes_dia").update(data).eq("id", operation_id).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+            print(f"Error updating operation times: {e}")
+        return None
+
     def get_app_by_name(self, app_name: str):
         if not app_name: return None
         try:
@@ -201,6 +230,62 @@ class DBService:
                 return response.data[0]
         except Exception as e:
             print(f"Error adding event: {e}")
+        return None
+
+    def update_event(self, event_id: str, event_data: dict, data_ref: str = None):
+        if not event_id:
+            return None
+        try:
+            data = {}
+
+            if "app" in event_data and event_data.get("app"):
+                app_info = self.get_app_by_name(event_data.get("app"))
+                data["app_id"] = app_info["id"] if app_info else None
+
+            if "valor" in event_data:
+                try:
+                    data["valor"] = float(event_data.get("valor") or 0)
+                except Exception:
+                    data["valor"] = 0.0
+
+            if "km" in event_data or "km_rota" in event_data:
+                try:
+                    data["km"] = float(event_data.get("km") or event_data.get("km_rota") or 0)
+                except Exception:
+                    data["km"] = 0.0
+
+            if "pacotes" in event_data:
+                try:
+                    data["pacotes"] = int(event_data.get("pacotes") or 0)
+                except Exception:
+                    data["pacotes"] = 0
+
+            if "descricao" in event_data:
+                data["descricao"] = event_data.get("descricao")
+
+            if "categoria" in event_data:
+                data["categoria"] = event_data.get("categoria")
+
+            if "hora_inicio" in event_data or "hora_inicio_rota" in event_data:
+                data["hora_inicio"] = self._normalize_event_time(
+                    event_data.get("hora_inicio") or event_data.get("hora_inicio_rota"),
+                    data_ref
+                )
+
+            if "hora_fim" in event_data or "hora_fim_operacao" in event_data:
+                data["hora_fim"] = self._normalize_event_time(
+                    event_data.get("hora_fim") or event_data.get("hora_fim_operacao"),
+                    data_ref
+                )
+
+            if not data:
+                return None
+
+            response = self.supabase.table("eventos").update(data).eq("id", event_id).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+            print(f"Error updating event: {e}")
         return None
 
     def add_entregador(self, user_id: str, nome: str, valor_diaria: float):

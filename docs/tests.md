@@ -109,3 +109,13 @@ Este documento lista exemplos de como o MeiBot deve reagir a diferentes entradas
 *   **Entrada:** "porteiros" ou "meus porteiros"
 *   **Ação Interna:** Backend interpreta `listar_porteiros` e retorna todos os registros do usuário.
 *   **Resposta:** Lista formatada de porteiros ou aviso de que ainda não há mapeamento.
+
+### Correção de Porteiro sem Nome Atual
+*   **Entrada:** "Corrigir nome do porteiro da Rua Senador Vergueiro, 85. O nome correto é Joyce Cerqueira"
+*   **Ação Interna:** Backend interpreta `corrigir_porteiro`, busca o endereço e, se houver apenas um cadastro naquele prédio, corrige o nome mesmo sem o usuário informar o nome antigo.
+*   **Resposta:** Confirmação da atualização do porteiro com o nome corrigido.
+
+### Correção de Horário de Operação
+*   **Entrada:** "Corrigir horário de início da operação dos Correios de hoje, o horário correto é 15:20"
+*   **Ação Interna:** Backend interpreta `corrigir_registro`, identifica a operação do dia e atualiza o horário do registro compatível, além do horário da operação quando aplicável.
+*   **Resposta:** Confirmação da correção com o campo ajustado.

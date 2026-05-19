@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from .ai_service import AIService
+from .corrections import enrich_interpreted_payload, normalize_user_text
 from .db import DBService
 from .logic import LogicService
 from .routes_claim.router import router as routes_claim_router
@@ -91,6 +92,61 @@ def format_porteiro_listagem(porteiros: list, titulo: str):
     linhas = [titulo]
     linhas.extend(format_porteiro_item(porteiro) for porteiro in porteiros)
     return "\n".join(linhas)
+
+def format_data_br(data_ref: str):
+    if not data_ref:
+        return "hoje"
+    try:
+        return datetime.date.fromisoformat(str(data_ref)[:10]).strftime("%d/%m/%Y")
+    except Exception:
+        return str(data_ref)
+
+def get_event_app_name(evento: dict):
+    app_info = evento.get("apps")
+    if isinstance(app_info, dict) and app_info.get("nome"):
+        return app_info.get("nome")
+    return evento.get("app")
+
+def select_event_for_correction(eventos: list, app_alvo: str = None, tipo_alvo: str = "ganho"):
+    tipos_ganho = {"ganho", "rota", "corrida", "faturamento"}
+    tipos_gasto = {"gasto", "despesa"}
+    tipos_validos = tipos_gasto if tipo_alvo == "gasto" else tipos_ganho
+    candidatos = [
+        evento for evento in (eventos or [])
+        if str(evento.get("tipo") or "").lower() in tipos_validos
+        and str(evento.get("sub_tipo") or "").lower() != "espera_galpao"
+    ]
+
+    if app_alvo:
+        app_alvo_norm = normalize_user_text(app_alvo)
+        candidatos = [
+            evento for evento in candidatos
+            if normalize_user_text(get_event_app_name(evento) or "") == app_alvo_norm
+        ]
+
+    if len(candidatos) == 1:
+        return candidatos[0], None
+    if len(candidatos) > 1:
+        return None, "MULTIPLE"
+
+    if not app_alvo and len(eventos or []) == 1:
+        return (eventos or [None])[0], None
+
+    return None, None
+
+def build_correction_changes(campos: dict):
+    mudancas = []
+    if "hora_inicio" in campos:
+        mudancas.append(f"horário de início: {campos['hora_inicio']}")
+    if "hora_fim" in campos:
+        mudancas.append(f"horário de fim: {campos['hora_fim']}")
+    if "valor" in campos:
+        mudancas.append(f"valor: {LogicService.format_brl(campos['valor'])}")
+    if "km" in campos:
+        mudancas.append(f"km: {LogicService.format_decimal(campos['km'])} km")
+    if "pacotes" in campos:
+        mudancas.append(f"pacotes: {int(campos['pacotes'])}")
+    return mudancas
 
 async def process_interpreted_data(user, interpreted):
     intencao = interpreted.get("intencao")
@@ -189,8 +245,17 @@ async def process_interpreted_data(user, interpreted):
         novo_nome = porteiro_info["nome"] or None
         novo_turno = porteiro_info["turno"] or None
         novas_notas = porteiro_info["notas"] or None
-        if not rua or not numero or not nome_antigo:
-            return "Para corrigir um porteiro, preciso da rua, número e nome atual."
+        if not rua or not numero:
+            return "Para corrigir um porteiro, preciso da rua e do número do prédio."
+        porteiros = db.get_porteiros_by_address(user_id, rua, numero) or []
+        endereco = format_porteiro_endereco(rua, numero)
+        if not porteiros:
+            return f"Não encontrei porteiros mapeados em {endereco}."
+        if not nome_antigo:
+            if len(porteiros) == 1:
+                nome_antigo = porteiros[0].get("nome_porteiro")
+            else:
+                return f"Encontrei mais de um porteiro em {endereco}. Me diga o nome atual para eu saber qual corrigir."
         if not any([novo_nome, novo_turno, novas_notas]):
             return "Não identifiquei o que você quer corrigir no cadastro do porteiro."
         updated = db.update_porteiro(
@@ -202,7 +267,6 @@ async def process_interpreted_data(user, interpreted):
             novo_turno=novo_turno,
             novas_notas=novas_notas,
         )
-        endereco = format_porteiro_endereco(rua, numero)
         if updated is None:
             return "Não consegui atualizar o porteiro agora. Tente novamente."
         if not updated:
@@ -215,6 +279,57 @@ async def process_interpreted_data(user, interpreted):
         if novas_notas:
             mudancas.append(f"notas: {novas_notas}")
         return f"Porteiro atualizado em {endereco}: {', '.join(mudancas)}."
+
+    if intencao == "corrigir_registro":
+        correcao_info = interpreted.get("correcao_info") or {}
+        campos = correcao_info.get("campos") or {}
+        if not campos:
+            return "Não identifiquei quais dados da operação você quer corrigir."
+
+        data_alvo = data_ref or datetime.date.today().isoformat()
+        operacao = db.get_operation_by_date(user_id, data_alvo)
+        if not operacao and not data_ref:
+            operacao = db.get_active_operation(user_id)
+            if operacao and operacao.get("data"):
+                data_alvo = operacao.get("data")
+        if not operacao:
+            return f"Não encontrei uma operação em {format_data_br(data_alvo)} para corrigir."
+
+        app_alvo = correcao_info.get("app")
+        eventos_operacao = db.get_operation_summary(operacao["id"]) or []
+        evento_alvo, status_selecao = select_event_for_correction(
+            eventos_operacao,
+            app_alvo,
+            correcao_info.get("tipo_alvo") or "ganho",
+        )
+        if status_selecao == "MULTIPLE":
+            alvo = app_alvo or "essa operação"
+            return f"Encontrei mais de um registro compatível de {alvo} em {format_data_br(data_alvo)}. Me diga qual lançamento devo corrigir."
+
+        evento_corrigido = None
+        campos_evento = {
+            key: value for key, value in campos.items()
+            if key in {"hora_inicio", "hora_fim", "valor", "km", "pacotes"}
+        }
+        if campos_evento and evento_alvo:
+            evento_corrigido = db.update_event(evento_alvo["id"], campos_evento, data_alvo)
+
+        operacao_corrigida = None
+        if correcao_info.get("atualizar_operacao"):
+            operacao_corrigida = db.update_operation_times(
+                operacao["id"],
+                date_str=data_alvo,
+                hora_inicio=campos.get("hora_inicio"),
+                hora_fim=campos.get("hora_fim"),
+            )
+
+        if not evento_corrigido and not operacao_corrigida:
+            alvo = app_alvo or "operação"
+            return f"Não encontrei um registro compatível de {alvo} em {format_data_br(data_alvo)} para corrigir."
+
+        mudancas = build_correction_changes(campos)
+        alvo = app_alvo or "operação"
+        return f"Registro corrigido em {format_data_br(data_alvo)} ({alvo}): {', '.join(mudancas)}."
 
     if data_ref: active_op = db.get_or_create_operation_by_date(user_id, data_ref)
     else:
@@ -275,7 +390,7 @@ async def build_interpreted_payload(data: dict):
             raise ValueError("Recebi um texto vazio. Tente enviar novamente.")
         interpreted = await ai.interpret_message(text)
         interpreted["data_referencia"] = override_data_ref_from_text(text, interpreted.get("data_referencia"))
-        return interpreted
+        return enrich_interpreted_payload(text, interpreted)
 
     if message_type == "audio":
         audio_bytes = decode_base64_content(content)
@@ -284,7 +399,7 @@ async def build_interpreted_payload(data: dict):
             raise ValueError("Não consegui transcrever o áudio. Tente enviar em texto.")
         interpreted = await ai.interpret_message(transcription)
         interpreted["data_referencia"] = override_data_ref_from_text(transcription, interpreted.get("data_referencia"))
-        return interpreted
+        return enrich_interpreted_payload(transcription, interpreted)
 
     if message_type == "image":
         image_bytes = decode_base64_content(content)

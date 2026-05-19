@@ -132,7 +132,8 @@ Mande no WhatsApp:
 4.  **Gasto:** "abasteci 50 reais"
 5.  **Print:** Envie um print da tela de ganhos do seu App.
 6.  **Pergunta:** "quanto ganhei hoje?" ou "qual app tá melhor esse mês?"
-7.  **Encerrar:** "encerrar operação" (Você receberá um resumo detalhado).
+7.  **Correções:** "Corrigir horário de início da operação dos Correios de hoje, o horário correto é 15:20" ou "Corrigir nome do porteiro da Rua Senador Vergueiro, 85. O nome correto é Joyce Cerqueira"
+8.  **Encerrar:** "encerrar operação" (Você receberá um resumo detalhado).
 
 ---
 
