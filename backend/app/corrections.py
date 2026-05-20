@@ -21,6 +21,11 @@ CORRECTION_KEYWORDS = (
     "ajustar",
     "ajuste",
     "ajusta",
+    "apagar",
+    "excluir",
+    "deletar",
+    "remover",
+    "cancelar",
 )
 
 PORTEIRO_KEYWORDS = ("porteiro", "porteiros")
@@ -66,6 +71,11 @@ def infer_correction_intent(text: str):
     normalized = normalize_user_text(text)
     if not has_correction_keyword(normalized):
         return None
+    
+    # Prioridade para exclusão
+    if any(k in normalized for k in ("apagar", "excluir", "deletar", "remover")):
+        return "excluir_registro"
+
     if any(keyword in normalized for keyword in PORTEIRO_KEYWORDS):
         return "corrigir_porteiro"
     if any(keyword in normalized for keyword in REGISTRO_KEYWORDS):
@@ -90,14 +100,18 @@ def _parse_decimal(value: str):
 def extract_time_value(text: str):
     if not text:
         return None
-    match = re.search(r"\b(\d{1,2})\s*(?:[:h])\s*(\d{2})\b", normalize_user_text(text))
-    if not match:
+    # Busca todos os horários no texto
+    matches = re.findall(r"\b(\d{1,2})\s*(?:[:h])\s*(\d{2})\b", normalize_user_text(text))
+    if not matches:
         return None
-    hh = int(match.group(1))
-    mm = int(match.group(2))
-    if not (0 <= hh <= 23 and 0 <= mm <= 59):
-        return None
-    return f"{hh:02d}:{mm:02d}"
+    
+    results = []
+    for hh_str, mm_str in matches:
+        hh, mm = int(hh_str), int(mm_str)
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            results.append(f"{hh:02d}:{mm:02d}")
+    
+    return results[0] if results else None
 
 
 def extract_package_count(text: str):
@@ -134,7 +148,7 @@ def extract_money_value(text: str):
 
 def infer_time_field(text: str):
     normalized = normalize_user_text(text)
-    start_keywords = ("inicio", "comeco", "comecei", "entrada")
+    start_keywords = ("inicio", "comeco", "comecei", "entrada", "chegada", "cheguei")
     end_keywords = ("fim", "termino", "finalizei", "encerrei", "saida", "saí", "sai")
     if any(keyword in normalized for keyword in start_keywords):
         return "hora_inicio"
@@ -150,6 +164,9 @@ def _merge_ai_event_fields(interpreted: dict, campos: dict):
 
     evento = eventos[0]
     merged = dict(campos)
+    
+    # Se a IA já extraiu os campos corretamente (pelo prompt novo), priorizamos o que está em 'evento'
+    # mas mantemos a heurística se a IA falhar.
     if "hora_inicio" not in merged and evento.get("hora_inicio_rota"):
         merged["hora_inicio"] = evento["hora_inicio_rota"]
     if "hora_fim" not in merged and evento.get("hora_fim_operacao"):
@@ -164,26 +181,28 @@ def _merge_ai_event_fields(interpreted: dict, campos: dict):
 
 
 def build_correction_info(text: str, interpreted: dict = None):
-    if infer_correction_intent(text) != "corrigir_registro":
+    intent = infer_correction_intent(text)
+    if intent not in ("corrigir_registro", "excluir_registro"):
         return None
 
     campos = {}
-    time_field = infer_time_field(text)
-    time_value = extract_time_value(text)
-    if time_field and time_value:
-        campos[time_field] = time_value
+    if intent == "corrigir_registro":
+        time_field = infer_time_field(text)
+        time_value = extract_time_value(text)
+        if time_field and time_value:
+            campos[time_field] = time_value
 
-    packages = extract_package_count(text)
-    if packages is not None:
-        campos["pacotes"] = packages
+        packages = extract_package_count(text)
+        if packages is not None:
+            campos["pacotes"] = packages
 
-    km_value = extract_km_value(text)
-    if km_value is not None:
-        campos["km"] = km_value
+        km_value = extract_km_value(text)
+        if km_value is not None:
+            campos["km"] = km_value
 
-    money_value = extract_money_value(text)
-    if money_value is not None:
-        campos["valor"] = money_value
+        money_value = extract_money_value(text)
+        if money_value is not None:
+            campos["valor"] = money_value
 
     interpreted = interpreted or {}
     campos = _merge_ai_event_fields(interpreted, campos)
@@ -193,7 +212,7 @@ def build_correction_info(text: str, interpreted: dict = None):
     if not app_name and eventos:
         app_name = eventos[0].get("app")
 
-    if not campos and not app_name:
+    if intent == "corrigir_registro" and not campos and not app_name:
         return None
 
     normalized = normalize_user_text(text)

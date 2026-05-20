@@ -283,10 +283,10 @@ async def process_interpreted_data(user, interpreted):
             mudancas.append(f"notas: {novas_notas}")
         return f"Porteiro atualizado em {endereco}: {', '.join(mudancas)}."
 
-    if intencao == "corrigir_registro":
+    if intencao in ("corrigir_registro", "excluir_registro"):
         correcao_info = interpreted.get("correcao_info") or {}
         campos = correcao_info.get("campos") or {}
-        if not campos:
+        if intencao == "corrigir_registro" and not campos:
             return "Não identifiquei quais dados da operação você quer corrigir."
 
         data_alvo = data_ref or datetime.date.today().isoformat()
@@ -308,6 +308,17 @@ async def process_interpreted_data(user, interpreted):
         if status_selecao == "MULTIPLE":
             alvo = app_alvo or "essa operação"
             return f"Encontrei mais de um registro compatível de {alvo} em {format_data_br(data_alvo)}. Me diga qual lançamento devo corrigir."
+
+        if not evento_alvo:
+            alvo = app_alvo or "operação"
+            return f"Não encontrei um registro compatível de {alvo} em {format_data_br(data_alvo)} para realizar a ação."
+
+        if intencao == "excluir_registro":
+            success = db.delete_event(evento_alvo["id"])
+            if success:
+                alvo = get_event_app_name(evento_alvo) or "registro"
+                return f"Lançamento de {alvo} excluído com sucesso do dia {format_data_br(data_alvo)}."
+            return "Não consegui excluir o registro agora. Tente novamente."
 
         evento_corrigido = None
         campos_evento = {
@@ -338,17 +349,51 @@ async def process_interpreted_data(user, interpreted):
     else:
         active_op = db.get_active_operation(user_id)
         if not active_op and len(eventos_brutos) > 0: active_op = db.start_operation(user_id)
+    
     eventos_processados = []
     for ev in eventos_brutos:
-        app_name_raw = str(ev.get("app") or "").lower()
-        if not app_name_raw or app_name_raw == "none":
-            if to_float(ev.get("pacotes")) > 0: ev["app"] = "Correios"
-        if "shopee" in str(ev.get("app")).lower():
-            ev.update({"app": "Shopee", "valor": 305.0 + to_float(ev.get("valor_extra")), "km": 60.0, "tipo": "ganho"})
-        elif "correio" in str(ev.get("app")).lower():
-            v, p = to_float(ev.get("valor")), to_float(ev.get("pacotes"))
-            valor_calc = (p * 2.0) if (v == 0 or v == p) else v
-            ev.update({"app": "Correios", "km": 20.0, "tipo": "ganho", "valor": valor_calc + to_float(ev.get("valor_extra"))})
+        app_name_raw = str(ev.get("app") or "").strip()
+        app_info = db.get_app_by_name(app_name_raw) if app_name_raw and app_name_raw.lower() != "none" else None
+        
+        # Se for ganho e tiver App, aplica automações do banco
+        if str(ev.get("tipo")).lower() == "ganho" and app_info:
+            ev["app"] = app_info["nome"]
+            
+            # Automação de Valor e KM (Preenche se a IA não pegou nada explícito)
+            val_ia = to_float(ev.get("valor"))
+            pac_ia = to_float(ev.get("pacotes"))
+            
+            if val_ia == 0 or val_ia == pac_ia: # Se não disse valor ou confundiu valor com pacotes
+                if app_info.get("tipo_remuneracao") == "rota":
+                    ev["valor"] = to_float(app_info.get("valor_base"))
+                elif app_info.get("tipo_remuneracao") == "pacote":
+                    ev["valor"] = pac_ia * to_float(app_info.get("valor_base", 2.0))
+            
+            # Adiciona bônus se houver
+            ev["valor"] = to_float(ev.get("valor")) + to_float(ev.get("valor_extra"))
+            
+            if to_float(ev.get("km")) == 0:
+                # Se for Shopee e não informou KM, usa o padrão histórico (60km) ou do banco
+                if "shopee" in app_info["nome"].lower():
+                    ev["km"] = 60.0
+                elif "correio" in app_info["nome"].lower():
+                    ev["km"] = 20.0
+            
+            # Automação de Salário de Ajudante
+            if app_info.get("entregador_padrao_id"):
+                entregador = db.get_entregador_by_id(app_info["entregador_padrao_id"])
+                if entregador:
+                    salario_gasto = {
+                        "tipo": "gasto",
+                        "valor": to_float(entregador.get("valor_diaria")),
+                        "categoria": "Essencial",
+                        "descricao": f"Pagamento ajudante {entregador['nome']} (Auto)",
+                        "app": app_info["nome"]
+                    }
+                    if data_ref: salario_gasto["data_referencia"] = data_ref
+                    db.add_event(user_id, active_op["id"], salario_gasto)
+                    eventos_processados.append(salario_gasto)
+
         if active_op:
             h_chegada = ev.get("hora_chegada_galpao")
             h_saida_galpao = ev.get("hora_saida_galpao")

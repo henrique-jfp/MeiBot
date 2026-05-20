@@ -182,6 +182,25 @@ class DBService:
             
         return None
 
+    def get_entregador_by_id(self, entregador_id: str):
+        try:
+            response = self.supabase.table("entregadores").select("*").eq("id", entregador_id).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+            print(f"Error getting entregador by id: {e}")
+        return None
+
+    def delete_event(self, event_id: str):
+        if not event_id:
+            return False
+        try:
+            response = self.supabase.table("eventos").delete().eq("id", event_id).execute()
+            return True
+        except Exception as e:
+            print(f"Error deleting event: {e}")
+        return False
+
     def add_event(self, user_id: str, operacao_id: str, event_data: dict):
         if not user_id or not operacao_id: 
             print(f"DEBUG DB: Falha ao salvar evento. User: {user_id}, Op: {operacao_id}")
