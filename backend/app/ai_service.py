@@ -86,8 +86,8 @@ class AIService:
         - intencao: Uma das intenções acima.
         - data_referencia: YYYY-MM-DD (obrigatório se mencionado data ou "ontem", "anteontem", "dia X").
         - pergunta: O texto da pergunta (se intencao for 'pergunta').
-        - porteiro_info: objeto {'rua': str, 'numero': str, 'nome': str, 'turno': str, 'notas': str, 'nome_antigo': str} (obrigatório para intenções de porteiro).
-        - eventos: lista de objetos {'app': str, 'tipo': 'ganho'|'gasto', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': str, 'hora_saida_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'categoria': str, 'descricao': str}. Em 'corrigir_registro', devolva APENAS os campos que o usuário pediu para corrigir. NÃO preencha campos não mencionados. Em 'excluir_registro', devolva o 'app' e o 'tipo' do registro que deve ser apagado.
+        - porteiro_info: objeto {{'rua': 'str', 'numero': 'str', 'nome': 'str', 'turno': 'str', 'notas': 'str', 'nome_antigo': 'str'}} (obrigatório para intenções de porteiro).
+        - eventos: lista de objetos {{'app': 'str', 'tipo': 'ganho'|'gasto', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': 'str', 'hora_saida_galpao': 'str', 'hora_inicio_rota': 'str', 'hora_fim_operacao': 'str', 'categoria': 'str', 'descricao': 'str'}}. Em 'corrigir_registro', devolva APENAS os campos que o usuário pediu para corrigir. NÃO preencha campos não mencionados. Em 'excluir_registro', devolva o 'app' e o 'tipo' do registro que deve ser apagado.
         
         Texto do usuário: "{text}"
         """
