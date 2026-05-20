@@ -415,7 +415,7 @@ class DBService:
         if any(x in text_upper for x in ["PAISANDU", "PAISSANDU", "PAYSANDU", "BAISSANDU", "PAISSÃO", "PASSANDU"]):
             return "Rua Paissandu"
         
-        if any(x in text_upper for x in ["VERGUEIRO", "BERGUEIRO"]):
+        if any(x in text_upper for x in ["VERGUEIRO", "BERGUEIRO", "VERGUEIRA"]):
             return "Rua Senador Vergueiro"
             
         if "BARATA" in text_upper and "RIBEIRO" in text_upper:

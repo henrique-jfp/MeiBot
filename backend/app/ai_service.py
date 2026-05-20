@@ -85,7 +85,7 @@ class AIService:
         - data_referencia: YYYY-MM-DD (obrigatório se mencionado data ou "ontem", "anteontem", "dia X").
         - pergunta: O texto da pergunta (se intencao for 'pergunta').
         - porteiro_info: objeto {{'rua': str, 'numero': str, 'nome': str, 'turno': str, 'notas': str, 'nome_antigo': str}} (obrigatório para intenções de porteiro). Em 'corrigir_porteiro', use 'nome' para o dado correto e preencha 'nome_antigo' apenas se o usuário disser explicitamente o nome anterior.
-        - eventos: lista de objetos {{'app': str, 'tipo': 'ganho'|'gasto', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': str, 'hora_saida_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'categoria': str, 'descricao': str}}. Em 'corrigir_registro', devolva somente os campos corrigidos e o app quando ele for citado.
+        - eventos: lista de objetos {{'app': str, 'tipo': 'ganho'|'gasto', 'valor': float, 'km': float, 'pacotes': int, 'hora_chegada_galpao': str, 'hora_saida_galpao': str, 'hora_inicio_rota': str, 'hora_fim_operacao': str, 'categoria': str, 'descricao': str}}. Em 'corrigir_registro', devolva APENAS os campos que o usuário pediu para corrigir. Ex: se o usuário pediu para corrigir o 'horário de início', o JSON deve conter APENAS 'hora_inicio_rota'. NÃO preencha 'hora_fim_operacao' ou outros campos que não foram mencionados.
         
         Texto do usuário: "{text}"
         """
