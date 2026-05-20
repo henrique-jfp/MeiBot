@@ -255,7 +255,10 @@ async def process_interpreted_data(user, interpreted):
             if len(porteiros) == 1:
                 nome_antigo = porteiros[0].get("nome_porteiro")
             else:
-                return f"Encontrei mais de um porteiro em {endereco}. Me diga o nome atual para eu saber qual corrigir."
+                nomes_porteiros = ", ".join([p.get('nome_porteiro', '') for p in porteiros])
+                return (f"Encontrei mais de um porteiro em {endereco}: {nomes_porteiros}. "
+                        "Para corrigir, por favor, me diga o nome antigo e o novo. "
+                        "Exemplo: 'Corrigir o porteiro Carlos para José na rua X, 123'.")
         if not any([novo_nome, novo_turno, novas_notas]):
             return "Não identifiquei o que você quer corrigir no cadastro do porteiro."
         updated = db.update_porteiro(

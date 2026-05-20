@@ -64,8 +64,9 @@ class AIService:
         - Se o usuário disser apenas "Porteiro" ou "Porteiros", use intencao: 'listar_porteiros'.
         - Se o usuário pedir o link do mapa ou dashboard, use intencao: 'pedir_link_dashboard'.
         - Se a mensagem contiver um endereço (rua e número) e um nome de pessoa associado a "porteiro", e NÃO for um pedido de correção, use SEMPRE 'cadastrar_porteiro'.
-        - Se o usuário pedir para corrigir ou ajustar um porteiro já existente, use SEMPRE 'corrigir_porteiro', mesmo que ele informe apenas o nome correto.
-        - Se o usuário pedir para corrigir ou ajustar um registro já lançado da operação, como horário, valor, KM, pacotes ou gasto, use SEMPRE 'corrigir_registro' e NUNCA 'corrigir_porteiro'.
+        - Se o usuário pedir para corrigir ou ajustar um porteiro já existente, use SEMPRE 'corrigir_porteiro'. Esta intenção é EXCLUSIVA para endereços e nomes de pessoas.
+        - Se o usuário pedir para corrigir ou ajustar um registro já lançado de uma OPERAÇÃO (Correios, Shopee, etc), como horário, valor, KM, pacotes ou gasto, use SEMPRE 'corrigir_registro'. NUNCA use 'corrigir_porteiro' para correções de operação.
+        - Exemplo de confusão a EVITAR: "corrigir horário da operação" é 'corrigir_registro', NUNCA 'corrigir_porteiro'.
 
         Regras de Extração de Eventos (OBRIGATÓRIO):
         1. SEPARAÇÃO DE EVENTOS: O usuário frequentemente relata rotas e gastos no mesmo texto. Você DEVE extrair CADA EVENTO como um objeto separado na lista 'eventos'. (Ex: Se ele fez Correios e comprou cigarro, gere DOIS eventos, um 'ganho' e um 'gasto').
