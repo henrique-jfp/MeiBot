@@ -218,6 +218,12 @@ class DBService:
                 try: return float(v or 0)
                 except: return 0.0
 
+            # Mapeamento robusto de horários:
+            # Para a Rota (ganho), priorizamos hora_inicio_rota e hora_fim_operacao.
+            # Se faltar hora_inicio_rota, usamos hora_saida_galpao como fallback.
+            h_ini_raw = event_data.get("hora_inicio") or event_data.get("hora_inicio_rota") or event_data.get("hora_saida_galpao")
+            h_fim_raw = event_data.get("hora_fim") or event_data.get("hora_fim_operacao")
+
             data = {
                 "user_id": user_id,
                 "operacao_id": operacao_id,
@@ -229,14 +235,8 @@ class DBService:
                 "pacotes": int(event_data.get("pacotes") or 0),
                 "descricao": event_data.get("descricao") or event_data.get("pergunta"),
                 "categoria": event_data.get("categoria"),
-                "hora_inicio": self._normalize_event_time(
-                    event_data.get("hora_inicio") or event_data.get("hora_inicio_rota"),
-                    data_ref
-                ),
-                "hora_fim": self._normalize_event_time(
-                    event_data.get("hora_fim") or event_data.get("hora_fim_operacao"),
-                    data_ref
-                )
+                "hora_inicio": self._normalize_event_time(h_ini_raw, data_ref),
+                "hora_fim": self._normalize_event_time(h_fim_raw, data_ref)
             }
             
             # Se tiver data específica no evento
@@ -285,17 +285,15 @@ class DBService:
             if "categoria" in event_data:
                 data["categoria"] = event_data.get("categoria")
 
-            if "hora_inicio" in event_data or "hora_inicio_rota" in event_data:
-                data["hora_inicio"] = self._normalize_event_time(
-                    event_data.get("hora_inicio") or event_data.get("hora_inicio_rota"),
-                    data_ref
-                )
+            # Mapeamento robusto na correção
+            h_ini_raw = event_data.get("hora_inicio") or event_data.get("hora_inicio_rota") or event_data.get("hora_saida_galpao")
+            h_fim_raw = event_data.get("hora_fim") or event_data.get("hora_fim_operacao")
 
-            if "hora_fim" in event_data or "hora_fim_operacao" in event_data:
-                data["hora_fim"] = self._normalize_event_time(
-                    event_data.get("hora_fim") or event_data.get("hora_fim_operacao"),
-                    data_ref
-                )
+            if h_ini_raw:
+                data["hora_inicio"] = self._normalize_event_time(h_ini_raw, data_ref)
+
+            if h_fim_raw:
+                data["hora_fim"] = self._normalize_event_time(h_fim_raw, data_ref)
 
             if not data:
                 return None
@@ -306,6 +304,7 @@ class DBService:
         except Exception as e:
             print(f"Error updating event: {e}")
         return None
+
 
     def add_entregador(self, user_id: str, nome: str, valor_diaria: float):
         try:
@@ -423,6 +422,7 @@ class DBService:
         # Remove números perdidos no final do nome da rua
         text = re.sub(r"\s+\d+$", "", text)
 
+        # Normalização de prefixos
         text = re.sub(r"\b(r|r\.)\b", "Rua", text, flags=re.IGNORECASE)
         text = re.sub(r"\b(av|av\.|avenida)\b", "Avenida", text, flags=re.IGNORECASE)
         text = re.sub(r"\b(trav|trav\.|travessa)\b", "Travessa", text, flags=re.IGNORECASE)
@@ -430,8 +430,8 @@ class DBService:
 
         text_upper = text.upper()
         
-        # Normalização agressiva para ruas conhecidas com muitos erros
-        if any(x in text_upper for x in ["PAISANDU", "PAISSANDU", "PAYSANDU", "BAISSANDU", "PAISSÃO", "PASSANDU"]):
+        # Normalização agressiva para ruas conhecidas com muitos erros (Rio de Janeiro / Copacabana / Flamengo)
+        if any(x in text_upper for x in ["PAISANDU", "PAISSANDU", "PAYSANDU", "BAISSANDU", "PAISSÃO", "PASSANDU", "PAIS SANDU"]):
             return "Rua Paissandu"
         
         if any(x in text_upper for x in ["VERGUEIRO", "BERGUEIRO", "VERGUEIRA"]):
@@ -442,9 +442,16 @@ class DBService:
             
         if "SANTA" in text_upper and "CLARA" in text_upper:
             return "Rua Santa Clara"
+
+        if "IPANEMA" in text_upper and "BARAO" in text_upper:
+            return "Rua Barão de Ipanema"
             
-        if "COPACABANA" in text_upper and any(x in text_upper for x in ["AV", "AVENIDA"]):
+        if "COPACABANA" in text_upper and any(x in text_upper for x in ["AV", "AVENIDA", "NOSSA SRA"]):
             return "Avenida Nossa Sra. de Copacabana"
+
+        # Se começar com "Barão de Ipanema" (sem prefixo Rua), adiciona
+        if text_upper.startswith("BARAO DE IPANEMA"):
+            return "Rua Barão de Ipanema"
 
         return cls._title_keep_small_words(text)
 
@@ -453,7 +460,8 @@ class DBService:
         text = cls._clean_text(numero)
         if not text:
             return "Sem Numero"
-        text = re.sub(r"^(n|n\.|nº|no|n°)\s*", "", text, flags=re.IGNORECASE)
+        # Remove prefixos como N., No, Numero, etc
+        text = re.sub(r"^(n|n\.|nº|no|n°|numero|número)\s*", "", text, flags=re.IGNORECASE)
         text = text.replace("N°", "").replace("Nº", "")
         text = re.sub(r"\s+", " ", text).strip()
         return text.upper() if text else "Sem Numero"
@@ -463,7 +471,8 @@ class DBService:
         text = cls._clean_text(nome)
         if not text:
             return "Porteiro Desconhecido"
-        text = text.strip('"“”')
+        # Remove aspas
+        text = text.strip('"“”\'')
         return cls._title_keep_small_words(text)
 
     # --- MAPEAMENTO DE PORTEIROS ---
@@ -513,6 +522,7 @@ class DBService:
         except Exception as e:
             print(f"Error getting porteiros: {e}")
             return []
+
 
     def get_all_porteiros(self, user_id: str):
         try:

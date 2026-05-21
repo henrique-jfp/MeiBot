@@ -83,6 +83,8 @@ class AIService:
         - 'Shopee', 'Correios', 'Mercado Livre', 'iFood', 'Uber', 'Loggi', 'Lalamove'.
 
         Campos do JSON:
+        7. CONTEXTO GEOGRÁFICO (RIO DE JANEIRO): Se o texto parecer um endereço mas estiver confuso, prefira nomes comuns da região como: "Rua Paissandu", "Rua Barata Ribeiro", "Rua Santa Clara", "Rua Senador Vergueiro", "Avenida Nossa Sra. de Copacabana", "Rua Barão de Ipanema". Corrija erros de transcrição óbvios (ex: "Pais Sandu" -> "Paissandu").
+
         - intencao: Uma das intenções acima.
         - data_referencia: YYYY-MM-DD (obrigatório se mencionado data ou "ontem", "anteontem", "dia X").
         - pergunta: O texto da pergunta (se intencao for 'pergunta').

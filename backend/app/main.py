@@ -136,16 +136,30 @@ def select_event_for_correction(eventos: list, app_alvo: str = None, tipo_alvo: 
 
 def build_correction_changes(campos: dict):
     mudancas = []
-    if "hora_inicio" in campos:
-        mudancas.append(f"horário de início: {campos['hora_inicio']}")
-    if "hora_fim" in campos:
-        mudancas.append(f"horário de fim: {campos['hora_fim']}")
-    if "valor" in campos:
-        mudancas.append(f"valor: {LogicService.format_brl(campos['valor'])}")
-    if "km" in campos:
-        mudancas.append(f"km: {LogicService.format_decimal(campos['km'])} km")
-    if "pacotes" in campos:
-        mudancas.append(f"pacotes: {int(campos['pacotes'])}")
+    # Mapeamento amigável para o log de mudanças
+    labels = {
+        "hora_inicio": "horário de início",
+        "hora_inicio_rota": "horário de início da rota",
+        "hora_chegada_galpao": "chegada no galpão",
+        "hora_saida_galpao": "saída do galpão",
+        "hora_fim": "horário de fim",
+        "hora_fim_operacao": "término da operação",
+        "valor": "valor",
+        "km": "km",
+        "pacotes": "pacotes"
+    }
+    
+    for key, label in labels.items():
+        if key in campos:
+            val = campos[key]
+            if key == "valor":
+                mudancas.append(f"{label}: {LogicService.format_brl(val)}")
+            elif key == "km":
+                mudancas.append(f"{label}: {LogicService.format_decimal(val)} km")
+            elif key == "pacotes":
+                mudancas.append(f"{label}: {int(val)}")
+            else:
+                mudancas.append(f"{label}: {val}")
     return mudancas
 
 async def process_interpreted_data(user, interpreted):
@@ -323,7 +337,11 @@ async def process_interpreted_data(user, interpreted):
         evento_corrigido = None
         campos_evento = {
             key: value for key, value in campos.items()
-            if key in {"hora_inicio", "hora_fim", "valor", "km", "pacotes"}
+            if key in {
+                "hora_inicio", "hora_fim", "valor", "km", "pacotes", 
+                "hora_inicio_rota", "hora_fim_operacao", 
+                "hora_chegada_galpao", "hora_saida_galpao"
+            }
         }
         if campos_evento and evento_alvo:
             evento_corrigido = db.update_event(evento_alvo["id"], campos_evento, data_alvo)
