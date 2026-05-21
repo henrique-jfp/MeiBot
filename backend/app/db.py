@@ -428,29 +428,37 @@ class DBService:
         text = re.sub(r"\b(trav|trav\.|travessa)\b", "Travessa", text, flags=re.IGNORECASE)
         text = re.sub(r"\s+", " ", text).strip()
 
-        text_upper = text.upper()
+        # Versao para busca (sem acentos e em caixa alta)
+        def remove_accents(input_str):
+            nfkd_form = unicodedata.normalize('NFKD', input_str)
+            return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+            
+        search_text = remove_accents(text).upper()
         
         # Normalização agressiva para ruas conhecidas com muitos erros (Rio de Janeiro / Copacabana / Flamengo)
-        if any(x in text_upper for x in ["PAISANDU", "PAISSANDU", "PAYSANDU", "BAISSANDU", "PAISSÃO", "PASSANDU", "PAIS SANDU"]):
+        if any(x in search_text for x in ["PAISANDU", "PAISSANDU", "PAYSANDU", "BAISSANDU", "PAISSAO", "PASSANDU", "PAIS SANDU", "APARECAO"]):
             return "Rua Paissandu"
         
-        if any(x in text_upper for x in ["VERGUEIRO", "BERGUEIRO", "VERGUEIRA"]):
+        if any(x in search_text for x in ["VERGUEIRO", "BERGUEIRO", "VERGUEIRA", "VIRGUEIRO", "BERRIGUEIRO"]):
             return "Rua Senador Vergueiro"
             
-        if "BARATA" in text_upper and "RIBEIRO" in text_upper:
+        if "BARATA" in search_text and "RIBEIRO" in search_text:
             return "Rua Barata Ribeiro"
             
-        if "SANTA" in text_upper and "CLARA" in text_upper:
+        if "SANTA" in search_text and "CLARA" in search_text:
             return "Rua Santa Clara"
 
-        if "IPANEMA" in text_upper and "BARAO" in text_upper:
+        if "IPANEMA" in search_text and "BARAO" in search_text:
             return "Rua Barão de Ipanema"
+
+        if "FLAMENGO" in search_text and "BARAO" in search_text:
+            return "Rua Barão do Flamengo"
             
-        if "COPACABANA" in text_upper and any(x in text_upper for x in ["AV", "AVENIDA", "NOSSA SRA"]):
+        if "COPACABANA" in search_text and any(x in search_text for x in ["AV", "AVENIDA", "NOSSA SRA"]):
             return "Avenida Nossa Sra. de Copacabana"
 
         # Se começar com "Barão de Ipanema" (sem prefixo Rua), adiciona
-        if text_upper.startswith("BARAO DE IPANEMA"):
+        if search_text.startswith("BARAO DE IPANEMA"):
             return "Rua Barão de Ipanema"
 
         return cls._title_keep_small_words(text)
