@@ -941,10 +941,27 @@ async def dashboard_page(whatsapp_number: str):
                         redWords.forEach(w => { if (notes.includes(w)) tags.push({ text: w, color: 'bg-rose-50 text-rose-700 border-rose-100' }); });
 
                         const tagsHtml = tags.map(t => `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-tight ${t.color}">${t.text}</span>`).join('');
+                        const escapeRegExp = (value) => {
+                            return String(value || '')
+                                .replaceAll('\\', '\\\\')
+                                .replaceAll('.', '\\.')
+                                .replaceAll('*', '\\*')
+                                .replaceAll('+', '\\+')
+                                .replaceAll('?', '\\?')
+                                .replaceAll('^', '\\^')
+                                .replaceAll('$', '\\$')
+                                .replaceAll('{', '\\{')
+                                .replaceAll('}', '\\}')
+                                .replaceAll('(', '\\(')
+                                .replaceAll(')', '\\)')
+                                .replaceAll('|', '\\|')
+                                .replaceAll('[', '\\[')
+                                .replaceAll(']', '\\]');
+                        };
                         const cleanNote = (value) => {
                             let cleaned = value || '';
                             tagWords.forEach((word) => {
-                                const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                const escaped = escapeRegExp(word);
                                 const pattern = new RegExp(`(?:^|\\b)${escaped}(?:\\b|$)`, 'gi');
                                 cleaned = cleaned.replace(pattern, ' ');
                             });
