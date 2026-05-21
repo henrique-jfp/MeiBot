@@ -62,6 +62,9 @@ class AIService:
         - 'pedir_link_dashboard': Quando o usuário pede o link do dashboard, mapa de porteiros, ou painel.
 
         Regras de Negócio Pessoais (OBRIGATÓRIO):
+        - NOMES DE PORTEIROS: Capture o nome completo mencionado (ex: "Allan Kardec" não deve virar "Lan Kardec").
+        - TURNO VS NOTAS: O campo 'turno' deve conter apenas períodos simples (ex: "Manhã", "Noite", "12h às 18h"). Se o usuário descrever horários complexos, saídas para almoço, ou comportamentos ("sai meio dia", "volta tal hora", "não recebe pacote"), coloque TUDO isso no campo 'notas'. 
+        - NOTAS: Ignore frases de comando como "adicionaram uma nota" ou "anota aí". Capture apenas o CONTEÚDO da observação.
         - Se o usuário disser "apagar", "remover", "excluir" ou "deletar" um registro, use intencao: 'excluir_registro'.
         - Se o usuário disser apenas "Porteiro" ou "Porteiros", use intencao: 'listar_porteiros'.
         - Se o usuário pedir o link do mapa ou dashboard, use intencao: 'pedir_link_dashboard'.
