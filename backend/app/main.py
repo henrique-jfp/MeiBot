@@ -928,17 +928,33 @@ async def dashboard_page(whatsapp_number: str):
                     let cardsHtml = '';
                     items.forEach(p => {
                         const tags = [];
-                        const notes = (p.notas_predio || '').toLowerCase();
+                        const rawNotes = String(p.notas_predio || '').trim();
+                        const notes = rawNotes.toLowerCase();
 
                         const greenWords = ['banheiro', 'bebedouro', 'recebe pacote', 'facil', 'tranquilo', '24h', 'liberado'];
                         const yellowWords = ['troca', 'atencao', 'limite', 'horario', 'esperar'];
                         const redWords = ['nao recebe', 'dificil', 'complicado', 'ruim', 'problema', 'evitar'];
+                        const tagWords = [...greenWords, ...yellowWords, ...redWords];
 
                         greenWords.forEach(w => { if (notes.includes(w)) tags.push({ text: w, color: 'bg-emerald-50 text-emerald-700 border-emerald-100' }); });
                         yellowWords.forEach(w => { if (notes.includes(w)) tags.push({ text: w, color: 'bg-amber-50 text-amber-700 border-amber-100' }); });
                         redWords.forEach(w => { if (notes.includes(w)) tags.push({ text: w, color: 'bg-rose-50 text-rose-700 border-rose-100' }); });
 
                         const tagsHtml = tags.map(t => `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-tight ${t.color}">${t.text}</span>`).join('');
+                        const cleanNote = (value) => {
+                            let cleaned = value || '';
+                            tagWords.forEach((word) => {
+                                const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                const pattern = new RegExp(`(?:^|\\b)${escaped}(?:\\b|$)`, 'gi');
+                                cleaned = cleaned.replace(pattern, ' ');
+                            });
+                            return cleaned
+                                .replace(/[,;|]+/g, ' ')
+                                .replace(/\s{2,}/g, ' ')
+                                .replace(/^[-–—]+/g, '')
+                                .trim();
+                        };
+                        const notesCleaned = cleanNote(rawNotes);
 
                         let predioNome = 'Edificio';
                         const predioMatch = p.notas_predio ? p.notas_predio.match(/edificio\s+([^,.-]+)/i) || p.notas_predio.match(/residencial\s+([^,.-]+)/i) : null;
@@ -970,20 +986,22 @@ async def dashboard_page(whatsapp_number: str):
                                         ` : ''}
                                     </div>
 
-                                    <div class="flex flex-wrap gap-1.5 mb-4">
-                                        ${tagsHtml}
-                                    </div>
+                                    ${tagsHtml ? `
+                                        <div class="flex flex-wrap gap-1.5 mb-4">
+                                            ${tagsHtml}
+                                        </div>
+                                    ` : ''}
                                 </div>
 
-                                ${p.notas_predio ? `
+                                ${notesCleaned ? `
                                     <details class="mt-auto border-t border-slate-100 pt-3 group/details">
                                         <summary class="list-none cursor-pointer flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-teal-600 transition-colors">
                                             <i class="fa-solid fa-note-sticky text-[10px]"></i>
-                                            VER OBSERVACOES
+                                            OBSERVACOES COMPLEMENTARES
                                             <i class="fa-solid fa-chevron-down text-[10px] ml-auto transition-transform group-open/details:rotate-180"></i>
                                         </summary>
                                         <div class="mt-2 p-3 bg-white rounded-lg border border-slate-100 shadow-inner">
-                                            <p class="text-xs text-slate-600 leading-relaxed italic">"${p.notas_predio}"</p>
+                                            <p class="text-xs text-slate-600 leading-relaxed italic">"${notesCleaned}"</p>
                                         </div>
                                     </details>
                                 ` : ''}
