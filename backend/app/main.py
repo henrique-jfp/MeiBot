@@ -297,6 +297,28 @@ async def process_interpreted_data(user, interpreted):
             mudancas.append(f"notas: {novas_notas}")
         return f"Porteiro atualizado em {endereco}: {', '.join(mudancas)}."
 
+    if intencao == "excluir_porteiro":
+        porteiro_info = get_porteiro_info(interpreted)
+        rua = porteiro_info["rua"]
+        numero = porteiro_info["numero"]
+        nome = porteiro_info["nome"]
+        if not rua or not numero:
+            return "Para excluir um porteiro ou prédio, preciso da rua e do número."
+        
+        deleted = db.delete_porteiro(user_id, rua, numero, nome if nome else None)
+        endereco = format_porteiro_endereco(rua, numero)
+        
+        if deleted is None:
+            return "Não consegui realizar a exclusão agora. Tente novamente."
+        
+        if not deleted:
+            msg = f"Não encontrei registros para excluir em {endereco}"
+            if nome: msg += f" com o nome {nome}"
+            return msg + "."
+            
+        unidade = "porteiro" if nome else "prédio/endereço"
+        return f"Sucesso! O {unidade} em {endereco} foi removido do seu mapeamento."
+
     if intencao in ("corrigir_registro", "excluir_registro"):
         correcao_info = interpreted.get("correcao_info") or {}
         campos = correcao_info.get("campos") or {}

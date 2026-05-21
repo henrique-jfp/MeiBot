@@ -201,6 +201,20 @@ class DBService:
             print(f"Error deleting event: {e}")
         return False
 
+    def delete_porteiro(self, user_id: str, rua: str, numero: str, nome: str = None):
+        try:
+            rua_norm = self.normalize_porteiro_rua(rua)
+            numero_norm = self.normalize_porteiro_numero(numero)
+            query = self.supabase.table("mapeamento_porteiros").delete().eq("user_id", user_id).eq("rua", rua_norm).eq("numero", numero_norm)
+            if nome:
+                nome_norm = self.normalize_porteiro_nome(nome)
+                query = query.eq("nome_porteiro", nome_norm)
+            response = query.execute()
+            return response.data
+        except Exception as e:
+            print(f"Error deleting porteiro: {e}")
+            return None
+
     def add_event(self, user_id: str, operacao_id: str, event_data: dict):
         if not user_id or not operacao_id: 
             print(f"DEBUG DB: Falha ao salvar evento. User: {user_id}, Op: {operacao_id}")

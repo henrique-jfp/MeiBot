@@ -58,10 +58,12 @@ class AIService:
         - 'cadastrar_porteiro': Para mapear um novo porteiro em um endereço.
         - 'corrigir_porteiro': Para atualizar informações de um porteiro já cadastrado.
         - 'corrigir_registro': Para corrigir dados já lançados de uma operação ou registro existente, como horário, valor, km, pacotes ou gasto lançado errado.
-        - 'excluir_registro': Para apagar, remover, deletar ou cancelar um lançamento de ganho ou gasto já feito.
+        - 'excluir_registro': Para apagar, remover, deletar ou cancelar um lançamento de ganho ou gasto já feito de uma OPERAÇÃO.
+        - 'excluir_porteiro': Para apagar ou remover um porteiro ou prédio cadastrado no mapeamento de endereços.
         - 'pedir_link_dashboard': Quando o usuário pede o link do dashboard, mapa de porteiros, ou painel.
 
         Regras de Negócio Pessoais (OBRIGATÓRIO):
+        - EXCLUSÃO: Se o usuário quiser apagar um "porteiro", "prédio" ou "endereço", use 'excluir_porteiro'. Se quiser apagar um "gasto", "ganho", "corrida" ou "operação", use 'excluir_registro'.
         - NOMES DE PORTEIROS: Capture o nome completo mencionado (ex: "Allan Kardec" não deve virar "Lan Kardec").
         - TURNO VS NOTAS: O campo 'turno' deve conter apenas períodos simples (ex: "Manhã", "Noite", "12h às 18h"). Se o usuário descrever horários complexos, saídas para almoço, ou comportamentos ("sai meio dia", "volta tal hora", "não recebe pacote"), coloque TUDO isso no campo 'notas'. 
         - NOTAS: Ignore frases de comando como "adicionaram uma nota" ou "anota aí". Capture apenas o CONTEÚDO da observação.
