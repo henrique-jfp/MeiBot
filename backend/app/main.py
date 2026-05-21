@@ -941,29 +941,23 @@ async def dashboard_page(whatsapp_number: str):
                         redWords.forEach(w => { if (notes.includes(w)) tags.push({ text: w, color: 'bg-rose-50 text-rose-700 border-rose-100' }); });
 
                         const tagsHtml = tags.map(t => `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-tight ${t.color}">${t.text}</span>`).join('');
-                        const escapeRegExp = (value) => {
-                            return String(value || '')
-                                .replaceAll('\\', '\\\\')
-                                .replaceAll('.', '\\.')
-                                .replaceAll('*', '\\*')
-                                .replaceAll('+', '\\+')
-                                .replaceAll('?', '\\?')
-                                .replaceAll('^', '\\^')
-                                .replaceAll('$', '\\$')
-                                .replaceAll('{', '\\{')
-                                .replaceAll('}', '\\}')
-                                .replaceAll('(', '\\(')
-                                .replaceAll(')', '\\)')
-                                .replaceAll('|', '\\|')
-                                .replaceAll('[', '\\[')
-                                .replaceAll(']', '\\]');
+                        const removeInsensitive = (text, needle) => {
+                            if (!needle) return text;
+                            let result = String(text || '');
+                            let lower = result.toLowerCase();
+                            const needleLower = String(needle || '').toLowerCase();
+                            let idx = lower.indexOf(needleLower);
+                            while (idx !== -1) {
+                                result = result.slice(0, idx) + ' ' + result.slice(idx + needleLower.length);
+                                lower = result.toLowerCase();
+                                idx = lower.indexOf(needleLower);
+                            }
+                            return result;
                         };
                         const cleanNote = (value) => {
                             let cleaned = value || '';
                             tagWords.forEach((word) => {
-                                const escaped = escapeRegExp(word);
-                                const pattern = new RegExp(`(?:^|\\b)${escaped}(?:\\b|$)`, 'gi');
-                                cleaned = cleaned.replace(pattern, ' ');
+                                cleaned = removeInsensitive(cleaned, word);
                             });
                             return cleaned
                                 .replace(/[,;|]+/g, ' ')
