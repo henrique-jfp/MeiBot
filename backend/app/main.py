@@ -862,11 +862,11 @@ async def dashboard_page(whatsapp_number: str):
                 border-color: #E6B800;
             }
             .pay-card.correios .pay-value {
-                color: #CC9900;
+                color: #FFCC00;
             }
             .pay-card.correios .pay-date,
             .pay-card.correios .pay-sub {
-                color: #997300;
+                color: #FFCC00;
             }
             .pay-card.shopee {
                 color: #EE4D2D;
