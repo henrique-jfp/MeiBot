@@ -204,6 +204,24 @@ class LogicService:
                 consolidado["total_pacotes"] += pac_val
                 consolidado["km_total"] += km_val
                 apps_data[app_name]["km"] += km_val
+
+                # Adiciona o cálculo do tempo de espera a partir do evento de ganho
+                h_chegada = ev.get("hora_chegada_galpao")
+                h_inicio_rota = ev.get("hora_inicio_rota") or ev.get("hora_inicio") # Usa fallback se necessário
+                ev_date = get_event_date(ev)
+
+                if h_chegada and h_inicio_rota and ev_date:
+                    wait_duration_hours = add_duration_hours(
+                        h_chegada,
+                        h_inicio_rota,
+                        ev_date
+                    )
+                    if wait_duration_hours > 0 and wait_duration_hours < 12: # Sanity check
+                        consolidado["tempo_espera_galpao"] += wait_duration_hours
+                        if app_name and app_name in apps_data:
+                            apps_data[app_name]["tempo_espera"] += wait_duration_hours
+                            wait_days_by_app[app_name].add(ev_date)
+
             elif tipo in ["gasto", "despesa"]:
                 consolidado["total_gastos"] += val
                 desc = str(ev.get("descricao") or "").lower()

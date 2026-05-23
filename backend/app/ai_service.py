@@ -81,7 +81,11 @@ class AIService:
         3. EXTRAÇÃO PURA (SEM MATEMÁTICA): Você é APENAS UM EXTRATOR DE DADOS. NUNCA calcule ganhos ou faça contas. Se o usuário disse "150 pacotes" mas não disse quantos reais ganhou, DEIXE o campo 'valor' como null ou 0. O cálculo será feito pelo backend. Apenas extraia o que foi DITO EXPLICITAMENTE.
         4. GASTOS E DESPESAS IMPLÍCITAS: Textos como "20 reais com cigarro" DEVEM ser interpretados como tipo: 'gasto'. (MUITO IMPORTANTE: Tempos de espera no galpão como "cheguei às 5:00" NUNCA devem ser interpretados como tipo: 'gasto', use apenas os campos de horário no evento de 'ganho').
         5. CATEGORIAS DE GASTOS: Para tipo: 'gasto', classifique a 'categoria' rigorosamente como uma destas: 'Combustível', 'Alimentação', 'Manutenção', 'Essencial', ou 'Outros'.
-        6. HORÁRIOS: Identifique "cheguei" (ou tempo de espera no galpão) como `hora_chegada_galpao`, "saí do galpão" como `hora_saida_galpao`, "comecei a rota" como `hora_inicio_rota`, e "finalizei" como `hora_fim_operacao`. (Retorne TODOS os horários EXCLUSIVAMENTE no formato militar 24h: 'HH:MM'). Se houver múltiplos horários numa CORREÇÃO, mapeie-os para os campos correspondentes.
+        6. HORÁRIOS: Identifique os 3 momentos chave da operação e mapeie para os seguintes campos. Ignore o campo legado `hora_saida_galpao`:
+           - **`hora_chegada_galpao`**: Use para "cheguei", "cheguei no galpão", "na base às".
+           - **`hora_inicio_rota`**: Use para "saí pra rota", "comecei a rota", "sai com a rota", "saí do galpão".
+           - **`hora_fim_operacao`**: Use para "finalizei", "terminei a rota", "terminei".
+           Retorne TODOS os horários EXCLUSIVAMENTE no formato militar 24h: 'HH:MM'.
         7. DATAS (CUIDADO): O entregador escreve datas no formato BRASILEIRO DD/MM/YYYY. Por exemplo, 04/05/2026 é 4 de Maio (e não 5 de Abril). O campo `data_referencia` deve ser RIGOROSAMENTE retornado em ISO: YYYY-MM-DD.
 
         Nomes de APP padronizados (use EXATAMENTE estes):
