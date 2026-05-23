@@ -287,7 +287,8 @@ class LogicService:
             consolidado["ganho_por_hora"] = consolidado["saldo"] / consolidado["total_hours"]
             consolidado["pacotes_por_hora"] = consolidado["total_pacotes"] / consolidado["total_hours"]
         
-        horas_na_rua = consolidado["total_hours"] - consolidado["tempo_espera_galpao"]
+        # total_hours ja representa tempo efetivo em rota (intervalos de inicio/fim da rota).
+        horas_na_rua = consolidado["total_hours"]
         if horas_na_rua > 0:
             consolidado["ganho_por_hora_rua"] = consolidado["total_ganhos"] / horas_na_rua
             consolidado["pacotes_por_hora_rua"] = consolidado["total_pacotes"] / horas_na_rua
