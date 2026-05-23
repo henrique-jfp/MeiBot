@@ -66,7 +66,7 @@ async def generate_automated_reports(periodo="semanal"):
             else:
                 ops = db.supabase.table("operacoes_dia").select("*")\
                     .eq("user_id", user_id)\
-                    .gte("data", month_start.isoformat())\
+                    .gte("data", period_start.isoformat())\
                     .lt("data", next_month.isoformat())\
                     .execute().data
             
