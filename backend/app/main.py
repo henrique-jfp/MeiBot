@@ -853,12 +853,13 @@ async def dashboard_page(whatsapp_number: str):
             .pay-card.correios {
                 color: #0047BB;
                 border: 1px solid #E8F0FF;
+                border-bottom: 4px solid #FFCC00;
                 background: linear-gradient(180deg, #ffffff 0%, #E8F0FF 100%);
             }
             .pay-card.correios .pay-badge {
                 color: #0047BB;
-                background: rgba(0, 71, 187, 0.12);
-                border-color: #B7CCFF;
+                background: #FFCC00;
+                border-color: #E6B800;
             }
             .pay-card.shopee {
                 color: #EE4D2D;
