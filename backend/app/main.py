@@ -101,6 +101,90 @@ def format_data_br(data_ref: str):
     except Exception:
         return str(data_ref)
 
+BRT_TZ = datetime.timezone(datetime.timedelta(hours=-3))
+
+def to_brt_date(value):
+    if not value:
+        return None
+    try:
+        text = str(value).replace("Z", "+00:00")
+        dt = datetime.datetime.fromisoformat(text)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(BRT_TZ).date()
+
+def month_last_day(date_obj: datetime.date):
+    return (date_obj.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+
+def correios_pay_date(event_date: datetime.date):
+    if event_date.day <= 15:
+        last_day = month_last_day(event_date)
+        pay_day = 30 if last_day.day >= 30 else last_day.day
+        return datetime.date(event_date.year, event_date.month, pay_day)
+    next_month = (event_date.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+    return datetime.date(next_month.year, next_month.month, 15)
+
+def shopee_pay_date(event_date: datetime.date):
+    week_start = event_date - datetime.timedelta(days=event_date.weekday())
+    return week_start + datetime.timedelta(days=10)
+
+def calculate_next_receivables(events: list, now_date: datetime.date = None):
+    if now_date is None:
+        now_date = datetime.datetime.now(BRT_TZ).date()
+
+    totals = {
+        "correios": defaultdict(float),
+        "shopee": defaultdict(float),
+    }
+
+    for ev in events or []:
+        tipo = str(ev.get("tipo") or "").lower()
+        if tipo not in {"ganho", "rota", "corrida", "faturamento"}:
+            continue
+
+        app_name = get_event_app_name(ev) or ""
+        desc = ev.get("descricao") or ""
+        lower = f"{app_name} {desc}".lower()
+        is_correios = "correio" in lower
+        is_shopee = "shopee" in lower
+        if not (is_correios or is_shopee):
+            continue
+
+        event_date = to_brt_date(ev.get("timestamp")) or to_brt_date(ev.get("hora_inicio"))
+        if not event_date:
+            continue
+
+        valor = to_float(ev.get("valor"))
+        if is_correios:
+            pay_date = correios_pay_date(event_date)
+            totals["correios"][pay_date] += valor
+        if is_shopee:
+            pay_date = shopee_pay_date(event_date)
+            totals["shopee"][pay_date] += valor
+
+    def pick_next(bucket: dict):
+        future = [d for d in bucket.keys() if d >= now_date]
+        if not future:
+            return None, 0.0
+        next_date = min(future)
+        return next_date, bucket.get(next_date, 0.0)
+
+    correios_date, correios_total = pick_next(totals["correios"])
+    shopee_date, shopee_total = pick_next(totals["shopee"])
+
+    return {
+        "correios": {
+            "date": correios_date.isoformat() if correios_date else None,
+            "total": round(correios_total, 2)
+        },
+        "shopee": {
+            "date": shopee_date.isoformat() if shopee_date else None,
+            "total": round(shopee_total, 2)
+        }
+    }
+
 def get_event_app_name(evento: dict):
     app_info = evento.get("apps")
     if isinstance(app_info, dict) and app_info.get("nome"):
@@ -572,17 +656,18 @@ async def get_dashboard_data(whatsapp_number: str, analysis_id: str = None):
                         daily_perf[ev["timestamp"].split("T")[0]] += float(ev.get("valor", 0))
                 daily_list = sorted([{"date": d, "ganho": g} for d, g in daily_perf.items()], key=lambda x: x["date"])
 
-            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "is_live": False, "created_at": analysis["created_at"], "periodo_tipo": analysis.get("periodo_tipo"), "daily_performance": daily_list, "history": history, "porteiros": porteiros}
+            return {"user": user, "metrics": analysis["metrics"], "insight": analysis["insight"], "is_live": False, "created_at": analysis["created_at"], "periodo_tipo": analysis.get("periodo_tipo"), "daily_performance": daily_list, "history": history, "porteiros": porteiros, "next_receivables": None}
     today = datetime.date.today()
     start_iso, end_iso = (today.replace(day=1).isoformat(), (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1).isoformat())
     ev_live = db.supabase.table("eventos").select("*, apps(*)").eq("user_id", user_id).gte("timestamp", start_iso + "T00:00:00Z").lt("timestamp", end_iso + "T00:00:00Z").execute().data
     op_live = db.supabase.table("operacoes_dia").select("*").eq("user_id", user_id).gte("data", start_iso).lt("data", end_iso).execute().data
     metrics_live = LogicService.calculate_metrics_grouped(ev_live, op_live)
+    next_receivables = calculate_next_receivables(ev_live)
     daily_perf = {ev["timestamp"].split("T")[0]: 0 for ev in ev_live if str(ev.get("tipo", "")).lower() in ["ganho", "rota"]}
     for ev in ev_live:
         if str(ev.get("tipo", "")).lower() in ["ganho", "rota"]: daily_perf[ev["timestamp"].split("T")[0]] += float(ev.get("valor", 0))
     daily_list = sorted([{"date": d, "ganho": g} for d, g in daily_perf.items()], key=lambda x: x['date'])
-    return {"user": user, "metrics": metrics_live, "daily_performance": daily_list, "is_live": True, "history": history, "created_at": datetime.datetime.now().isoformat(), "periodo_tipo": None, "porteiros": porteiros}
+    return {"user": user, "metrics": metrics_live, "daily_performance": daily_list, "is_live": True, "history": history, "created_at": datetime.datetime.now().isoformat(), "periodo_tipo": None, "porteiros": porteiros, "next_receivables": next_receivables}
 
 @app.get("/dashboard/{whatsapp_number}", response_class=HTMLResponse)
 async def dashboard_page(whatsapp_number: str):
@@ -712,6 +797,79 @@ async def dashboard_page(whatsapp_number: str):
                 border-radius: 999px;
                 background: var(--app-accent-2, var(--app-accent, var(--brand-teal)));
             }
+            .pay-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                gap: 16px;
+            }
+            .pay-card {
+                position: relative;
+                overflow: hidden;
+                border-radius: 18px;
+                padding: 20px 22px;
+                background: #ffffff;
+                box-shadow: var(--shadow-soft);
+            }
+            .pay-card::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                opacity: 0.12;
+                background: radial-gradient(120% 120% at 100% 0%, currentColor 0%, transparent 60%);
+                pointer-events: none;
+            }
+            .pay-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+            .pay-badge {
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                padding: 6px 10px;
+                border-radius: 999px;
+                border: 1px solid transparent;
+            }
+            .pay-date {
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--muted);
+            }
+            .pay-value {
+                font-family: 'Space Grotesk', sans-serif;
+                font-size: 28px;
+                font-weight: 700;
+                margin-top: 12px;
+            }
+            .pay-sub {
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--muted);
+                margin-top: 4px;
+            }
+            .pay-card.correios {
+                color: #0047BB;
+                border: 1px solid #E8F0FF;
+                background: linear-gradient(180deg, #ffffff 0%, #E8F0FF 100%);
+            }
+            .pay-card.correios .pay-badge {
+                color: #0047BB;
+                background: rgba(0, 71, 187, 0.12);
+                border-color: #B7CCFF;
+            }
+            .pay-card.shopee {
+                color: #EE4D2D;
+                border: 1px solid #FFE8E1;
+                background: linear-gradient(180deg, #ffffff 0%, #FFE8E1 100%);
+            }
+            .pay-card.shopee .pay-badge {
+                color: #EE4D2D;
+                background: rgba(238, 77, 45, 0.12);
+                border-color: #FFD1C7;
+            }
         </style>
     </head>
     <body class="flex flex-col lg:flex-row min-h-screen">
@@ -743,6 +901,25 @@ async def dashboard_page(whatsapp_number: str):
                     <div class="card metric-card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Eficiência (R$/KM)</p><p id="txt-eficiencia" class="font-bold metric-value">R$ 0,00</p></div>
                     <div class="card metric-card p-5"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Eficiência (R$/Hora)</p><p id="txt-ganho-hora" class="font-bold metric-value">R$ 0,00</p></div>
                     <div class="card metric-card p-5"><div class="tooltip-container"><p class="text-slate-500 text-[10px] font-bold uppercase metric-label">Ganho Bruto / Hora (Rua)</p><i class="fa-solid fa-circle-info text-[10px] text-slate-300"></i><span class="tooltip">Faturamento bruto dividido apenas pelas horas em rota (descontando espera no galpão). Mostra sua produtividade real enquanto está entregando.</span></div><p id="txt-ganho-hora-rua" class="font-bold metric-value text-violet-700">R$ 0,00/h</p></div>
+                </div>
+
+                <div id="next-receivables-section" class="pay-grid" style="display:none;">
+                    <article class="pay-card correios">
+                        <div class="pay-head">
+                            <div class="pay-badge">Correios</div>
+                            <div id="txt-next-correios-date" class="pay-date">Proximo recebimento: --/--</div>
+                        </div>
+                        <div id="txt-next-correios-valor" class="pay-value">R$ 0,00</div>
+                        <div class="pay-sub">Valor bruto previsto</div>
+                    </article>
+                    <article class="pay-card shopee">
+                        <div class="pay-head">
+                            <div class="pay-badge">Shopee</div>
+                            <div id="txt-next-shopee-date" class="pay-date">Proximo recebimento: --/--</div>
+                        </div>
+                        <div id="txt-next-shopee-valor" class="pay-value">R$ 0,00</div>
+                        <div class="pay-sub">Valor bruto previsto</div>
+                    </article>
                 </div>
 
                 <!-- CHARTS & DETAILS -->
@@ -810,6 +987,12 @@ async def dashboard_page(whatsapp_number: str):
             let dailyChart, appsChart, chartGastos, dashboardData;
             const WHATSAPP_ID = '""" + whatsapp_number + """';
             const fmt = (v, p=2) => (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: p});
+            const fmtDate = (iso) => {
+                if (!iso) return '--/--';
+                const dt = new Date(iso);
+                if (Number.isNaN(dt.getTime())) return '--/--';
+                return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            };
             const css = getComputedStyle(document.documentElement);
             const brandTeal = css.getPropertyValue('--brand-teal').trim() || '#0f766e';
             const brandTealSoft = css.getPropertyValue('--brand-teal-soft').trim() || 'rgba(15, 118, 110, 0.12)';
@@ -1090,6 +1273,20 @@ async def dashboard_page(whatsapp_number: str):
                     document.getElementById('txt-eficiencia').innerText = 'R$ ' + fmt(c.total_ganhos / (c.km_total || 1));
                     document.getElementById('txt-ganho-hora').innerText = 'R$ ' + fmt(c.ganho_por_hora);
                     document.getElementById('txt-ganho-hora-rua').innerText = 'R$ ' + fmt(c.ganho_por_hora_rua);
+
+                    const receivables = data.next_receivables || null;
+                    const receivablesSection = document.getElementById('next-receivables-section');
+                    if (data.is_live && receivables) {
+                        receivablesSection.style.display = '';
+                        const correios = receivables.correios || {};
+                        const shopee = receivables.shopee || {};
+                        document.getElementById('txt-next-correios-date').innerText = 'Proximo recebimento: ' + fmtDate(correios.date);
+                        document.getElementById('txt-next-correios-valor').innerText = 'R$ ' + fmt(correios.total);
+                        document.getElementById('txt-next-shopee-date').innerText = 'Proximo recebimento: ' + fmtDate(shopee.date);
+                        document.getElementById('txt-next-shopee-valor').innerText = 'R$ ' + fmt(shopee.total);
+                    } else {
+                        receivablesSection.style.display = 'none';
+                    }
                     
                     // Populate Details
                     document.getElementById('txt-essencial').innerText = 'R$ ' + fmt(c.gastos_essenciais);
