@@ -858,15 +858,15 @@ async def dashboard_page(whatsapp_number: str):
             }
             .pay-card.correios .pay-badge {
                 color: #0047BB;
-                background: #FFCC00;
+                background: #ffd32c;
                 border-color: #E6B800;
             }
             .pay-card.correios .pay-value {
-                color: #FFCC00;
+                color: #ffd32c;
             }
             .pay-card.correios .pay-date,
             .pay-card.correios .pay-sub {
-                color: #FFCC00;
+                color: #ffd32c;
             }
             .pay-card.shopee {
                 color: #EE4D2D;
