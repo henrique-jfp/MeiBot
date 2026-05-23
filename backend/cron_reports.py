@@ -82,8 +82,34 @@ async def generate_automated_reports(periodo="semanal"):
             print(f"Gerando insight para {whatsapp}...")
             insight = await ai.generate_analyst_insight(metrics["consolidado"], None, label, metrics.get("apps"))
             
-            # Salva permanentemente no histórico
-            db.save_analysis(user_id, periodo, metrics, insight)
+            # Salva/Atualiza permanentemente no histórico
+            history = db.get_analysis_history(user_id, limit=15)
+            analysis_to_update = None
+            for h in history:
+                if h.get('periodo_tipo') == periodo:
+                    # Para o mensal, só pode haver um por mês. Para o semanal, pode ser o da semana atual.
+                    h_metrics = h.get('metrics', {})
+                    if h_metrics and h_metrics.get('period_start') == metrics.get('period_start'):
+                        analysis_to_update = h
+                        break
+
+            data_to_save = {
+                "metrics": metrics,
+                "insight": insight
+            }
+
+            if analysis_to_update:
+                print(f"Atualizando análise existente de {periodo} (ID: {analysis_to_update['id']})")
+                response = db.supabase.table("historico_analises").update(data_to_save).eq("id", analysis_to_update['id']).execute()
+            else:
+                print(f"Criando nova análise de {periodo}...")
+                data_to_save['user_id'] = user_id
+                data_to_save['periodo_tipo'] = periodo
+                data_to_save['created_at'] = datetime.datetime.now().isoformat()
+                response = db.supabase.table("historico_analises").insert(data_to_save).execute()
+            
+            if not response.data:
+                print(f"!!!!!! Falha ao salvar/atualizar análise para {whatsapp}: {getattr(response, 'error', 'sem erro')}")
             
             # Envia para o WhatsApp via Bot (Node.js na porta 3000)
             url = f"https://meibot.henriquedejesus.dev/dashboard/{whatsapp}"
