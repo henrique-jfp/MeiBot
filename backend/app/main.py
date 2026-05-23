@@ -852,21 +852,21 @@ async def dashboard_page(whatsapp_number: str):
             }
             .pay-card.correios {
                 color: #0047BB;
-                border: 1px solid #E8F0FF;
+                border: 1px solid #FFF5CC;
                 border-bottom: 4px solid #0047BB;
-                background: linear-gradient(180deg, #ffffff 0%, #E8F0FF 100%);
+                background: linear-gradient(180deg, #ffffff 0%, #FFF5CC 100%);
             }
             .pay-card.correios .pay-badge {
-                color: #0047BB;
-                background: #ffd32c;
-                border-color: #E6B800;
+                color: #ffd32c;
+                background: #0047BB;
+                border-color: #003388;
             }
             .pay-card.correios .pay-value {
-                color: #ffd32c;
+                color: #0047BB;
             }
             .pay-card.correios .pay-date,
             .pay-card.correios .pay-sub {
-                color: #ffd32c;
+                color: #0047BB;
             }
             .pay-card.shopee {
                 color: #EE4D2D;
