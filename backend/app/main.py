@@ -871,6 +871,7 @@ async def dashboard_page(whatsapp_number: str):
             .pay-card.shopee {
                 color: #EE4D2D;
                 border: 1px solid #FFE8E1;
+                border-bottom: 4px solid #EE4D2D;
                 background: linear-gradient(180deg, #ffffff 0%, #FFE8E1 100%);
             }
             .pay-card.shopee .pay-badge {
