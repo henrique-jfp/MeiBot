@@ -15,31 +15,17 @@ const data = {
     ]
 };
 
-let weekCounters = {};
-const weeklyAnalyses = data.history.filter(h => h.periodo_tipo === 'semanal').sort((a, b) => {
-    const dateA = a.metrics && a.metrics.period_start ? a.metrics.period_start : a.created_at;
-    const dateB = b.metrics && b.metrics.period_start ? b.metrics.period_start : b.created_at;
-    return dateA.localeCompare(dateB);
-});
-
-weeklyAnalyses.forEach(h => {
-    let dateStr = h.metrics && h.metrics.period_start ? h.metrics.period_start : h.created_at;
-    if (dateStr && dateStr.length === 10) dateStr += 'T12:00:00';
-    const d = new Date(dateStr);
-    if (!Number.isNaN(d.getTime())) {
-        const monthKey = d.getFullYear() + '-' + d.getMonth();
-        if (!weekCounters[monthKey]) weekCounters[monthKey] = 0;
-        weekCounters[monthKey]++;
-        h._week_num = weekCounters[monthKey];
-    }
-});
-
 data.history.forEach((h, i) => {
     let cti = '';
     if (h.periodo_tipo === 'semanal') {
-        cti = h._week_num || '';
-    } else {
-        cti = data.history.filter((x, j) => x.periodo_tipo === h.periodo_tipo && j >= i).length;
+        let dateStr = h.metrics && h.metrics.period_start ? h.metrics.period_start : h.created_at;
+        if (dateStr && dateStr.length === 10) dateStr += 'T12:00:00';
+        const d = new Date(dateStr);
+        if (!Number.isNaN(d.getTime())) {
+            cti = Math.ceil(d.getDate() / 7);
+        } else {
+            cti = '?';
+        }
     }
     console.log(`h.id=${h.id}, cti=${cti}, period_start=${h.metrics.period_start}`);
 });
