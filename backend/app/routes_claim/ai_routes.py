@@ -32,10 +32,9 @@ except ImportError:
 
 load_dotenv()
 
-TARGET_ALIASES = ("rocinha", "roc")
 MIN_DETERMINISTIC_CONFIDENCE = 0.75
 IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-PARSER_VERSION = "routes-claim-2026-05-10-pdfplumber-v1"
+PARSER_VERSION = "routes-claim-2026-05-24-agnostic-v1"
 ROUTES_ENABLE_GEMINI_OCR_FALLBACK = os.getenv("ROUTES_ENABLE_GEMINI_OCR_FALLBACK", "false").lower() == "true"
 ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK = os.getenv("ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK", "false").lower() == "true"
 VISION_STATUS = {
@@ -89,16 +88,6 @@ def _normalize(value):
     text = unicodedata.normalize("NFD", str(value))
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
     return re.sub(r"\s+", " ", text.lower()).strip()
-
-
-def _has_target(text):
-    normalized = _normalize(text)
-    return any(
-        re.search(rf"\b{re.escape(alias)}\b", normalized)
-        if len(alias) <= 3
-        else alias in normalized
-        for alias in TARGET_ALIASES
-    )
 
 
 def _parse_int(value):
@@ -173,34 +162,6 @@ def _route_rows_from_vision_response(response):
     return row_texts
 
 
-def _extract_rocinha_count(line):
-    normalized = _normalize(line)
-    colon_matches = []
-    for pattern in (r"\brocinha\b\s*[:=-]\s*(\d{1,4})", r"\broc\b\s*[:=-]\s*(\d{1,4})"):
-        colon_matches.extend(re.findall(pattern, normalized))
-    if colon_matches:
-        return _parse_int(colon_matches[-1])
-
-    if "dissec" in normalized:
-        tail = re.split(r"dissec\w*", normalized, maxsplit=1)[-1]
-        for pattern in (r"\brocinha\b\D{0,12}(\d{1,4})", r"\broc\b\D{0,12}(\d{1,4})"):
-            match = re.search(pattern, tail)
-            if match:
-                return _parse_int(match.group(1))
-
-    patterns = (
-        r"\brocinha\b\D{0,12}(\d{1,4})",
-        r"\broc\b\D{0,12}(\d{1,4})",
-        r"(\d{1,4})\D{0,12}\brocinha\b",
-        r"(\d{1,4})\D{0,12}\broc\b",
-    )
-    for pattern in patterns:
-        match = re.search(pattern, normalized)
-        if match:
-            return _parse_int(match.group(1))
-    return None
-
-
 def _extract_total_packages(line):
     normalized = _normalize(line)
     total_patterns = (
@@ -245,32 +206,18 @@ def _parse_routes_from_lines(lines, source):
         if not gaiola:
             continue
 
-        has_target = _has_target(line)
-        rocinha_count = _extract_rocinha_count(line) if has_target else None
-        dissecacao = {"Rocinha": rocinha_count} if rocinha_count is not None else {}
         cluster = _extract_cluster(line, gaiola)
-
         routes.append(
             {
                 "gaiola": gaiola,
-                "bairro": "Rocinha" if has_target else cluster,
+                "bairro": cluster,
                 "pacotes_total": _extract_total_packages(line),
-                "dissecacao": dissecacao,
+                "dissecacao": {}, # OCR determinístico raramente pega dissecação bem
             }
         )
 
-    target_routes = [
-        route
-        for route in routes
-        if _has_target(route.get("bairro")) or "Rocinha" in route.get("dissecacao", {})
-    ]
-
-    if target_routes and any(route.get("dissecacao") for route in target_routes):
-        confidence = 0.9
-    elif target_routes:
-        confidence = 0.8
-    elif routes:
-        confidence = 0.55
+    if routes:
+        confidence = 0.6 # OCR puro é menos confiável que IA para lógica complexa
     else:
         confidence = 0.0
 
@@ -321,8 +268,7 @@ def _compact_ocr_for_gemini(ocr_text):
         normalized = _normalize(line)
         if (
             re.search(r"\b[a-z]\s*[-–]?\s*\d{1,3}[a-z]{0,3}\b", normalized)
-            or _has_target(line)
-            or any(token in normalized for token in ("pacote", "total", "dissec"))
+            or any(token in normalized for token in ("pacote", "total", "dissec", "bairro", "rota"))
         ):
             relevant.append(line.strip())
 
@@ -351,21 +297,12 @@ def _normalize_ai_routes(parsed):
         if not isinstance(dissecacao, dict):
             dissecacao = {}
 
-        normalized_dissecacao = {}
-        for key, value in dissecacao.items():
-            if _has_target(key):
-                normalized_dissecacao["Rocinha"] = _parse_int(value)
-            else:
-                normalized_dissecacao[str(key)] = _parse_int(value)
-
-        bairro = item.get("bairro") or item.get("cluster") or item.get("Cluster")
-        if _has_target(bairro):
-            bairro = "Rocinha"
+        normalized_dissecacao = {str(k): _parse_int(v) for k, v in dissecacao.items()}
 
         routes.append(
             {
                 "gaiola": gaiola,
-                "bairro": bairro,
+                "bairro": item.get("bairro") or item.get("cluster") or item.get("Cluster"),
                 "pacotes_total": _parse_int(
                     item.get("pacotes_total")
                     or item.get("spr")
@@ -380,19 +317,8 @@ def _normalize_ai_routes(parsed):
 
 
 def _confidence_for_routes(routes, source):
-    target_routes = [
-        route
-        for route in routes
-        if _has_target(route.get("bairro")) or "Rocinha" in route.get("dissecacao", {})
-    ]
-    if target_routes and any(route.get("dissecacao") for route in target_routes):
-        return 0.9
-    if target_routes:
-        return 0.8
-    if routes and source == "gemini_image_fallback":
-        return 0.6
     if routes:
-        return 0.55
+        return 0.9 if source.startswith("gemini") else 0.6
     return 0.0
 
 
@@ -401,17 +327,18 @@ def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
         return {"routes": [], "confidence": 0.0, "source": "no_gemini"}
 
     prompt = (
-        "Voce esta lendo uma planilha de rotas em imagem. O layout tem colunas "
-        "GAIOLA, SPR, CLUSTER, BAIRROS, TIPO DE VEICULO e TRANSPORTADORA. "
-        "Extraia TODAS as linhas de rota visiveis. Responda somente JSON valido: "
-        '{"routes":[{"gaiola":"B-41","bairro":"Rocinha","pacotes_total":124,'
-        '"dissecacao":{"Rocinha":57,"Gavea":30}}]}. '
-        "Regras: gaiola pode ter sufixo como G-48NS; SPR e o total de pacotes; "
-        "CLUSTER vira bairro; BAIRROS contem a dissecacao por bairro. "
-        "Se BAIRROS tiver 'Rocinha: 5', coloque dissecacao.Rocinha=5, mesmo que "
-        "antes apareca 'Gavea: 93'. Se CLUSTER for Rocinha, bairro='Rocinha'. "
-        "Use null quando faltar numero e {} quando nao houver dissecacao. "
-        "Nao explique, nao use markdown."
+        "Voce é um especialista em transcrição de planilhas de rotas logísticas. "
+        "O layout tem colunas GAIOLA, SPR (total de pacotes), CLUSTER (bairro principal) e BAIRROS (detalhamento/dissecação). "
+        "Extraia TODAS as linhas de rota visíveis. "
+        "Regras cruciais: "
+        "1. Seja LITERAL: transcreva os nomes dos bairros exatamente como aparecem. "
+        "2. GAIOLA pode ter sufixos (ex: B-41, G-48NS). "
+        "3. SPR é o total de pacotes da rota. "
+        "4. BAIRROS contém a dissecação por sub-bairro (ex: 'Copacabana: 20, Leme: 5'). "
+        "Retorne APENAS um JSON no formato: "
+        '{"routes":[{"gaiola":"B-41","bairro":"Copacabana","pacotes_total":124,'
+        '"dissecacao":{"Copacabana":57,"Leme":30,"Tabajaras":37}}]}. '
+        "Use null quando faltar número e {} quando não houver dissecação."
     )
 
     source = "gemini_ocr_fallback" if ocr_text else "gemini_image_fallback"
@@ -500,11 +427,6 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
             deterministic["ocr_text_len"] = len(ocr_text or "")
             deterministic["ocr_rows"] = len(ocr_rows)
             
-            if deterministic["confidence"] < MIN_DETERMINISTIC_CONFIDENCE and ocr_rows:
-                print(f"[ROUTE-CLAIM] Low confidence ({deterministic['confidence']}). First 3 rows: {ocr_rows[:3]}")
-                if _has_target(ocr_text or ""):
-                    print("[ROUTE-CLAIM] Target keyword found in raw text but not associated with routes.")
-
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
                 return deterministic
         if ocr_text:

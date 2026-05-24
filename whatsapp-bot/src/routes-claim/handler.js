@@ -304,12 +304,12 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
 
         const candidates = buildCandidates(parsed.routes);
         if (candidates.length === 0) {
-            console.log(`[DEBUG-ROUTE] Nenhuma rota para Rocinha encontrada na lista. Grupo: ${groupName}`);
+            console.log(`[DEBUG-ROUTE] Nenhuma rota de interesse (Tiers 1-4) encontrada na lista. Grupo: ${groupName}`);
             return true;
         }
 
         const picked = pickCandidate(candidates);
-        const claimSignature = `${picked.selected.gaiola}:${picked.selected.rocinha_pacotes ?? ''}:${picked.selected.pacotes_total ?? ''}`;
+        const claimSignature = `${picked.selected.gaiola}:T${picked.selected.tier}:${picked.selected.target_count}:${picked.selected.pacotes_total}`;
         const now = Date.now();
         
         if (
@@ -326,8 +326,8 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
         groupState.lastClaimAt = now;
         
         console.log(
-            `[ROUTE-CLAIM] Capturando rota gaiola=${picked.selected.gaiola} ` +
-            `rocinha=${picked.selected.rocinha_pacotes ?? 'n/a'} total=${picked.selected.pacotes_total} no grupo: ${groupName}`
+            `[ROUTE-CLAIM] Selecionada Gaiola=${picked.selected.gaiola} Tier=${picked.selected.tier} ` +
+            `Bairro=${picked.selected.bairro} (Alvo=${picked.selected.target_count}) Total=${picked.selected.pacotes_total} no grupo: ${groupName}`
         );
         await sendClaimMessage(sock, groupJid, picked.selected);
         return true;

@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const ROUTES_CONFIG = {
     testGroupName: 'Documentos',
-    prodGroupNames: ['ROTAS E DISTRIBUIÇÃO ILHA - 2026'],
+    prodGroupNames: ['SPX Motorista'],
     timezone: 'America/Sao_Paulo',
     schedule: {
         enabledInProd: true,
@@ -11,7 +11,14 @@ const ROUTES_CONFIG = {
         weekdaysOnly: true
     },
     minConfidence: 0.75,
-    targetNeighborhoodAliases: ['rocinha', 'roc'],
+    tierConfig: {
+        // Tier 1: Prioridade Máxima (Tabajara no principal)
+        tier1_primary: ['tabajara', 'tabajaras'],
+        // Tier 2 e 3: Base Copacabana
+        tier_base: ['copacabana', 'copa', 'copacabana 1', 'copacabana 2'],
+        // Tier 4: Fallback
+        tier4_fallback: ['botafogo', 'ipanema']
+    },
     preferredGaiolas: [],
     blockedGaiolas: [],
     authorizedSenders: [],
