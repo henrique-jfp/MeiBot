@@ -1425,7 +1425,19 @@ async def dashboard_page(whatsapp_number: str):
                     live.onclick = (e) => { e.preventDefault(); loadDashboard(); closeSidebarIfMobile(); }; hlist.appendChild(live);
                     data.history.forEach((h, i) => {
                         const btn = document.createElement('a'); btn.href = '#'; btn.className = 'history-item block p-3 rounded-lg mt-2 ' + (aid === h.id ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
-                        const cti = data.history.filter((x, j) => x.periodo_tipo === h.periodo_tipo && j >= i).length;
+                        let cti = '';
+                        if (h.periodo_tipo === 'semanal') {
+                            let dateStr = h.metrics && h.metrics.period_start ? h.metrics.period_start : h.created_at;
+                            if (dateStr && dateStr.length === 10) dateStr += 'T12:00:00';
+                            const hDate = new Date(dateStr);
+                            if (!Number.isNaN(hDate.getTime())) {
+                                cti = Math.ceil(hDate.getDate() / 7);
+                            } else {
+                                cti = data.history.filter((x, j) => x.periodo_tipo === h.periodo_tipo && j >= i).length;
+                            }
+                        } else {
+                            cti = data.history.filter((x, j) => x.periodo_tipo === h.periodo_tipo && j >= i).length;
+                        }
                         const periodLabel = formatPeriodRange(h) || `Analise de ${new Date(h.created_at).toLocaleDateString('pt-BR')}`;
                         btn.innerHTML = `<span class="text-xs font-bold uppercase ${aid === h.id ? 'text-teal-600':'text-slate-500'}">${h.periodo_tipo} ${cti}</span><span class="block text-[11px] text-slate-500">${periodLabel}</span>`;
                         btn.onclick = (e) => { e.preventDefault(); loadDashboard(h.id); closeSidebarIfMobile(); }; hlist.appendChild(btn);
