@@ -866,7 +866,7 @@ async def dashboard_page(whatsapp_number: str):
             }
             .pay-card.correios .pay-date,
             .pay-card.correios .pay-sub {
-                color: #0047BB;
+                color: #EE4D2D;
             }
             .pay-card.shopee {
                 color: #EE4D2D;
