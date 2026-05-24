@@ -1336,54 +1336,54 @@ async def dashboard_page(whatsapp_number: str):
                     
                     // App Details - Rich version
                     const list = document.getElementById('list-apps'); list.innerHTML = '';
-                    const getAppTone = (name) => {
-                        const lower = String(name || '').toLowerCase();
-                        if (lower.includes('shopee')) {
-                            return {
-                                accent: '#EE4D2D',
-                                accentSoft: '#FFE8E1',
-                                accentBorder: '#FFD1C7',
-                                accent2: '#FF8A65'
-                            };
-                        }
-                        if (lower.includes('correio')) {
-                            return {
-                                accent: '#0047BB',
-                                accentSoft: '#E8F0FF',
-                                accentBorder: '#B7CCFF',
-                                accent2: '#FFCC00'
-                            };
-                        }
-                        return {
-                            accent: brandTeal,
-                            accentSoft: brandTealSoft,
-                            accentBorder: 'rgba(15, 118, 110, 0.2)',
-                            accent2: brandTeal
-                        };
-                    };
                     Object.keys(apps).filter(n => apps[n].ganhos > 0).sort((a,b) => apps[b].ganhos - apps[a].ganhos).forEach(name => {
                         const app = apps[name];
                         const rkm = (app.ganhos / (app.km || 1));
                         const rhora = (app.ganhos / (app.horas || 1));
                         const percent = (app.ganhos / (c.total_ganhos || 1)) * 100;
-                        const tone = getAppTone(name);
-                        list.innerHTML += `
-                            <div class="app-card p-4" style="--app-accent: ${tone.accent}; --app-accent-soft: ${tone.accentSoft}; --app-accent-border: ${tone.accentBorder}; --app-accent-2: ${tone.accent2};">
-                                <div class="flex justify-between items-start mb-3">
-                                    <div>
-                                        <p class="font-bold text-sm uppercase app-title">${name}</p>
-                                        <p class="text-[10px] text-slate-500 font-bold uppercase">${fmt(app.km,1)}km • ${fmt(app.horas,1)}h</p>
+                        const lower = String(name || '').toLowerCase();
+                        
+                        if (lower.includes('shopee') || lower.includes('correio')) {
+                            const appClass = lower.includes('shopee') ? 'shopee' : 'correios';
+                            list.innerHTML += `
+                                <article class="pay-card ${appClass}">
+                                    <div class="pay-head">
+                                        <div class="pay-badge">${name}</div>
+                                        <div class="pay-date">${fmt(app.km,1)}km • ${fmt(app.horas,1)}h</div>
                                     </div>
-                                    <div class="text-right">
-                                        <p class="font-bold text-sm" style="color: ${tone.accent}">R$ ${fmt(app.ganhos)}</p>
-                                        <span class="app-pill"><span class="dot"></span>${fmt(percent,0)}% do total</span>
+                                    <div class="pay-value">R$ ${fmt(app.ganhos)}</div>
+                                    <div class="pay-sub">${fmt(percent,0)}% do faturamento total</div>
+                                    <div class="grid grid-cols-2 gap-2 mt-4">
+                                        <div class="bg-white/60 p-2 rounded-lg border border-white/40 text-center shadow-sm">
+                                            <p class="text-[9px] font-bold uppercase opacity-70">R$/KM</p>
+                                            <p class="text-xs font-bold">R$ ${fmt(rkm)}</p>
+                                        </div>
+                                        <div class="bg-white/60 p-2 rounded-lg border border-white/40 text-center shadow-sm">
+                                            <p class="text-[9px] font-bold uppercase opacity-70">R$/Hora</p>
+                                            <p class="text-xs font-bold">R$ ${fmt(rhora)}</p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="grid grid-cols-2 gap-2 mt-4">
-                                    <div class="bg-white p-2 rounded-lg border text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/KM</p><p class="text-xs font-bold">R$ ${fmt(rkm)}</p></div>
-                                    <div class="bg-white p-2 rounded-lg border text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/Hora</p><p class="text-xs font-bold">R$ ${fmt(rhora)}</p></div>
-                                </div>
-                            </div>`;
+                                </article>`;
+                        } else {
+                            const tone = { accent: brandTeal, accentSoft: brandTealSoft, accentBorder: 'rgba(15, 118, 110, 0.2)', accent2: brandTeal };
+                            list.innerHTML += `
+                                <div class="app-card p-4" style="--app-accent: ${tone.accent}; --app-accent-soft: ${tone.accentSoft}; --app-accent-border: ${tone.accentBorder}; --app-accent-2: ${tone.accent2};">
+                                    <div class="flex justify-between items-start mb-3">
+                                        <div>
+                                            <p class="font-bold text-sm uppercase app-title">${name}</p>
+                                            <p class="text-[10px] text-slate-500 font-bold uppercase">${fmt(app.km,1)}km • ${fmt(app.horas,1)}h</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="font-bold text-sm" style="color: ${tone.accent}">R$ ${fmt(app.ganhos)}</p>
+                                            <span class="app-pill"><span class="dot"></span>${fmt(percent,0)}% do total</span>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2 mt-4">
+                                        <div class="bg-white p-2 rounded-lg border text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/KM</p><p class="text-xs font-bold">R$ ${fmt(rkm)}</p></div>
+                                        <div class="bg-white p-2 rounded-lg border text-center shadow-inner"><p class="text-[9px] font-bold text-slate-400 uppercase">R$/Hora</p><p class="text-xs font-bold">R$ ${fmt(rhora)}</p></div>
+                                    </div>
+                                </div>`;
+                        }
                     });
 
                     // Charts
