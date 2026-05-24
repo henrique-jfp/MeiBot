@@ -866,7 +866,7 @@ async def dashboard_page(whatsapp_number: str):
             }
             .pay-card.correios .pay-date,
             .pay-card.correios .pay-sub {
-                color: #EE4D2D;
+                color: #0047BB;
             }
             .pay-card.shopee {
                 color: #EE4D2D;
@@ -879,6 +879,11 @@ async def dashboard_page(whatsapp_number: str):
                 background: rgba(238, 77, 45, 0.12);
                 border-color: #FFD1C7;
             }
+            .pay-card.shopee .pay-date,
+            .pay-card.shopee .pay-sub {
+                color: #EE4D2D;
+            }
+
         </style>
     </head>
     <body class="flex flex-col lg:flex-row min-h-screen">
