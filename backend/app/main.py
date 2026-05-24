@@ -1424,18 +1424,31 @@ async def dashboard_page(whatsapp_number: str):
                     live.innerHTML = `<span class="text-xs font-bold uppercase ${!aid ? 'text-teal-600' : 'text-slate-500'}">AO VIVO</span><span class="block text-xs font-medium ${!aid ? 'text-teal-800':'text-slate-700'}">Dashboard Atual</span>`;
                     live.onclick = (e) => { e.preventDefault(); loadDashboard(); closeSidebarIfMobile(); }; hlist.appendChild(live);
                     
-                    data.history.forEach((h, i) => {
-                        const btn = document.createElement('a'); btn.href = '#'; btn.className = 'history-item block p-3 rounded-lg mt-2 ' + (aid === h.id ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
-                        let cti = '';
+                    data.history.sort((a, b) => {
+                        const getRefDate = (h) => h.metrics && h.metrics.period_start ? h.metrics.period_start : h.created_at;
+                        return getRefDate(b).localeCompare(getRefDate(a));
+                    });
+
+                    let weekCounters = {};
+                    [...data.history].reverse().forEach(h => {
                         if (h.periodo_tipo === 'semanal') {
                             let dateStr = h.metrics && h.metrics.period_start ? h.metrics.period_start : h.created_at;
                             if (dateStr && dateStr.length === 10) dateStr += 'T12:00:00';
                             const d = new Date(dateStr);
                             if (!Number.isNaN(d.getTime())) {
-                                cti = Math.ceil(d.getDate() / 7);
-                            } else {
-                                cti = '?';
+                                const monthKey = d.getFullYear() + '-' + d.getMonth();
+                                if (!weekCounters[monthKey]) weekCounters[monthKey] = 0;
+                                weekCounters[monthKey]++;
+                                h._week_num = weekCounters[monthKey];
                             }
+                        }
+                    });
+
+                    data.history.forEach((h, i) => {
+                        const btn = document.createElement('a'); btn.href = '#'; btn.className = 'history-item block p-3 rounded-lg mt-2 ' + (aid === h.id ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
+                        let cti = '';
+                        if (h.periodo_tipo === 'semanal') {
+                            cti = h._week_num || '?';
                         } else {
                             cti = data.history.filter((x, j) => x.periodo_tipo === h.periodo_tipo && j >= i).length;
                         }
