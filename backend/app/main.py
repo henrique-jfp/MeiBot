@@ -742,6 +742,44 @@ async def dashboard_page(whatsapp_number: str):
             .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; background-color: #1e293b; color: white; padding: 10px; border-radius: 8px; font-size: 11px; width: 240px; text-align: center; z-index: 100; font-weight: 500; pointer-events: none; }
             .tooltip-container:hover .tooltip { display: block; }
             .history-item { transition: all 0.2s; }
+            .history-month {
+                overflow: hidden;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                background: rgba(255, 255, 255, 0.94);
+                box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+            }
+            .history-month[open] {
+                border-color: rgba(15, 118, 110, 0.24);
+                box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+            }
+            .history-month-toggle {
+                list-style: none;
+                cursor: pointer;
+                padding: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+            }
+            .history-month-toggle::-webkit-details-marker { display: none; }
+            .history-month-chevron { transition: transform 0.2s ease; }
+            .history-month[open] .history-month-chevron { transform: rotate(180deg); }
+            .history-period {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 12px;
+                border-radius: 10px;
+                color: #475569;
+                transition: background 0.2s ease, color 0.2s ease;
+            }
+            .history-period:hover { background: #f8fafc; color: #0f766e; }
+            .history-period-active {
+                background: #f0fdfa;
+                color: #0f766e;
+                box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.28);
+            }
             #sidebar {
                 background: rgba(255, 255, 255, 0.9);
                 box-shadow: 12px 0 32px rgba(15, 23, 42, 0.06);
@@ -1267,6 +1305,157 @@ async def dashboard_page(whatsapp_number: str):
                 return createdAt.toLocaleDateString('pt-BR');
             }
 
+            function parseHistoryDate(value) {
+                if (!value) return null;
+                const text = String(value);
+                const dt = new Date(text.length === 10 ? `${text}T12:00:00` : text);
+                return Number.isNaN(dt.getTime()) ? null : dt;
+            }
+
+            function getHistoryRefDate(item) {
+                const metrics = item.metrics || {};
+                return parseHistoryDate(metrics.period_end || metrics.period_start || item.created_at);
+            }
+
+            function getHistoryMonthKey(item) {
+                const metrics = item.metrics || {};
+                const ref = item.periodo_tipo === 'semanal'
+                    ? (metrics.period_end || metrics.period_start || item.created_at)
+                    : (metrics.period_start || item.created_at);
+                const dt = parseHistoryDate(ref);
+                if (!dt) return 'sem-data';
+                return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+            }
+
+            function formatMonthTitle(monthKey) {
+                if (monthKey === 'sem-data') return 'Sem data';
+                const [year, month] = monthKey.split('-').map(Number);
+                const dt = new Date(year, month - 1, 1, 12);
+                const label = dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                return label.charAt(0).toUpperCase() + label.slice(1);
+            }
+
+            function buildHistoryGroups(history) {
+                const groupsByKey = {};
+                history.forEach((item) => {
+                    const key = getHistoryMonthKey(item);
+                    if (!groupsByKey[key]) groupsByKey[key] = { key, monthlies: [], weeks: [], others: [] };
+                    if (item.periodo_tipo === 'mensal') groupsByKey[key].monthlies.push(item);
+                    else if (item.periodo_tipo === 'semanal') groupsByKey[key].weeks.push(item);
+                    else groupsByKey[key].others.push(item);
+                });
+
+                return Object.values(groupsByKey).sort((a, b) => b.key.localeCompare(a.key)).map((group) => {
+                    group.monthlies.sort((a, b) => (getHistoryRefDate(b)?.getTime() || 0) - (getHistoryRefDate(a)?.getTime() || 0));
+                    group.weeks.sort((a, b) => (getHistoryRefDate(a)?.getTime() || 0) - (getHistoryRefDate(b)?.getTime() || 0));
+                    group.weeks.forEach((week, index) => { week._week_num = index + 1; });
+                    group.weeks.reverse();
+                    group.others.sort((a, b) => (getHistoryRefDate(b)?.getTime() || 0) - (getHistoryRefDate(a)?.getTime() || 0));
+                    return group;
+                });
+            }
+
+            function createHistoryLink(item, title, subtitle, iconClass, isActive) {
+                const link = document.createElement('a');
+                link.href = '#';
+                link.className = `history-period ${isActive ? 'history-period-active' : ''}`;
+                link.innerHTML = `
+                    <span class="w-8 h-8 rounded-lg ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'} flex items-center justify-center shrink-0">
+                        <i class="${iconClass} text-xs"></i>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-xs font-bold uppercase truncate">${title}</span>
+                        <span class="block text-[11px] text-slate-500 truncate">${subtitle}</span>
+                    </span>
+                `;
+                link.onclick = (e) => { e.preventDefault(); loadDashboard(item.id); closeSidebarIfMobile(); };
+                return link;
+            }
+
+            function renderHistoryNav(history, aid) {
+                const hlist = document.getElementById('history-list');
+                hlist.innerHTML = '';
+
+                const live = document.createElement('a');
+                live.href = '#';
+                live.className = 'history-item block p-3 rounded-lg ' + (!aid ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
+                live.innerHTML = `<span class="text-xs font-bold uppercase ${!aid ? 'text-teal-600' : 'text-slate-500'}">AO VIVO</span><span class="block text-xs font-medium ${!aid ? 'text-teal-800':'text-slate-700'}">Dashboard Atual</span>`;
+                live.onclick = (e) => { e.preventDefault(); loadDashboard(); closeSidebarIfMobile(); };
+                hlist.appendChild(live);
+
+                const items = Array.isArray(history) ? [...history] : [];
+                if (items.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'p-3 rounded-lg border border-dashed border-slate-200 text-xs text-slate-500 bg-white';
+                    empty.innerText = 'Nenhuma analise arquivada ainda.';
+                    hlist.appendChild(empty);
+                    return;
+                }
+
+                const groups = buildHistoryGroups(items);
+                groups.forEach((group, index) => {
+                    const isActiveGroup = aid && [...group.monthlies, ...group.weeks, ...group.others].some((item) => item.id === aid);
+                    const details = document.createElement('details');
+                    details.className = 'history-month mt-2';
+                    if (isActiveGroup || (!aid && index === 0)) details.open = true;
+
+                    const totalItems = group.monthlies.length + group.weeks.length + group.others.length;
+                    const summary = document.createElement('summary');
+                    summary.className = 'history-month-toggle';
+                    summary.innerHTML = `
+                        <span class="min-w-0">
+                            <span class="block text-xs font-bold text-slate-800 uppercase truncate">${formatMonthTitle(group.key)}</span>
+                            <span class="block text-[11px] text-slate-500">${totalItems} analises</span>
+                        </span>
+                        <i class="fa-solid fa-chevron-down history-month-chevron text-[11px] text-slate-400"></i>
+                    `;
+                    details.appendChild(summary);
+
+                    const content = document.createElement('div');
+                    content.className = 'px-2 pb-2 space-y-1';
+
+                    if (group.monthlies.length === 0) {
+                        const pending = document.createElement('div');
+                        pending.className = 'px-3 py-2 text-[11px] text-slate-400 border border-dashed border-slate-200 rounded-lg';
+                        pending.innerText = 'Analise mensal ainda nao gerada.';
+                        content.appendChild(pending);
+                    }
+
+                    group.monthlies.forEach((item) => {
+                        content.appendChild(createHistoryLink(
+                            item,
+                            'Geral do mes',
+                            formatPeriodRange(item) || 'Analise mensal',
+                            'fa-solid fa-calendar-days',
+                            aid === item.id
+                        ));
+                    });
+
+                    group.weeks.forEach((item) => {
+                        content.appendChild(createHistoryLink(
+                            item,
+                            `Semana ${item._week_num || ''}`.trim(),
+                            formatPeriodRange(item) || 'Analise semanal',
+                            'fa-solid fa-chart-line',
+                            aid === item.id
+                        ));
+                    });
+
+                    group.others.forEach((item) => {
+                        content.appendChild(createHistoryLink(
+                            item,
+                            item.periodo_tipo || 'Analise',
+                            formatPeriodRange(item) || 'Periodo arquivado',
+                            'fa-solid fa-file-lines',
+                            aid === item.id
+                        ));
+                    });
+
+                    details.appendChild(content);
+                    hlist.appendChild(details);
+                });
+            }
+
             async function loadDashboard(aid = null) {
                 try {
                     const res = await fetch(aid ? `/api/dashboard/${WHATSAPP_ID}?analysis_id=${aid}` : `/api/dashboard/${WHATSAPP_ID}`);
@@ -1419,43 +1608,7 @@ async def dashboard_page(whatsapp_number: str):
                     chartGastos = new Chart(document.getElementById('chartGastos').getContext('2d'), { type: 'doughnut', data: { labels: ['Essenciais', 'Não Essenciais'], datasets: [{ data: [c.gastos_essenciais, c.gastos_nao_essenciais], backgroundColor: [brandTeal, brandRose] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } } });
                     
                     // History Nav
-                    const hlist = document.getElementById('history-list'); hlist.innerHTML = '';
-                    const live = document.createElement('a'); live.href = '#'; live.className = 'history-item block p-3 rounded-lg ' + (!aid ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
-                    live.innerHTML = `<span class="text-xs font-bold uppercase ${!aid ? 'text-teal-600' : 'text-slate-500'}">AO VIVO</span><span class="block text-xs font-medium ${!aid ? 'text-teal-800':'text-slate-700'}">Dashboard Atual</span>`;
-                    live.onclick = (e) => { e.preventDefault(); loadDashboard(); closeSidebarIfMobile(); }; hlist.appendChild(live);
-                    
-                    data.history.sort((a, b) => {
-                        const getRefDate = (h) => h.metrics && h.metrics.period_start ? h.metrics.period_start : h.created_at;
-                        return getRefDate(b).localeCompare(getRefDate(a));
-                    });
-
-                    let weekCounters = {};
-                    [...data.history].reverse().forEach(h => {
-                        if (h.periodo_tipo === 'semanal') {
-                            let dateStr = h.metrics && h.metrics.period_start ? h.metrics.period_start : h.created_at;
-                            if (dateStr && dateStr.length === 10) dateStr += 'T12:00:00';
-                            const d = new Date(dateStr);
-                            if (!Number.isNaN(d.getTime())) {
-                                const monthKey = d.getFullYear() + '-' + d.getMonth();
-                                if (!weekCounters[monthKey]) weekCounters[monthKey] = 0;
-                                weekCounters[monthKey]++;
-                                h._week_num = weekCounters[monthKey];
-                            }
-                        }
-                    });
-
-                    data.history.forEach((h, i) => {
-                        const btn = document.createElement('a'); btn.href = '#'; btn.className = 'history-item block p-3 rounded-lg mt-2 ' + (aid === h.id ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
-                        let cti = '';
-                        if (h.periodo_tipo === 'semanal') {
-                            cti = h._week_num || '?';
-                        } else {
-                            cti = data.history.filter((x, j) => x.periodo_tipo === h.periodo_tipo && j >= i).length;
-                        }
-                        const periodLabel = formatPeriodRange(h) || `Analise de ${new Date(h.created_at).toLocaleDateString('pt-BR')}`;
-                        btn.innerHTML = `<span class="text-xs font-bold uppercase ${aid === h.id ? 'text-teal-600':'text-slate-500'}">${h.periodo_tipo} ${cti}</span><span class="block text-[11px] text-slate-500">${periodLabel}</span>`;
-                        btn.onclick = (e) => { e.preventDefault(); loadDashboard(h.id); closeSidebarIfMobile(); }; hlist.appendChild(btn);
-                    });
+                    renderHistoryNav(data.history, aid);
                     const sectionOpen = !document.getElementById('section-porteiros').classList.contains('hidden');
                     if (sectionOpen) {
                         const existingFilter = document.getElementById('search-porteiros')?.value || '';
