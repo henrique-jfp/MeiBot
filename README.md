@@ -92,6 +92,23 @@ sudo systemctl stop meibot-backend meibot-bot
 sudo systemctl start meibot-backend meibot-bot
 ```
 
+### Relatórios Automáticos
+Os relatórios fechados são gerados por timers `systemd` versionados em `deploy/systemd/`.
+
+```bash
+# Ver próximos disparos
+systemctl list-timers 'meibot-report-*'
+
+# Ver logs dos jobs
+journalctl -u meibot-report-weekly -n 80 --no-pager
+journalctl -u meibot-report-monthly -n 80 --no-pager
+```
+
+Regras de período:
+*   **Semanal:** fecha segunda a sábado e roda no domingo às 00:10.
+*   **Mensal:** fecha o mês anterior e roda no dia 1 às 00:20.
+*   **Backfill manual:** `cd backend && python cron_reports.py mensal 2026-05-01 2026-05-31 --no-notify`.
+
 ---
 
 ## ⚠️ Resolução de Problemas (QR Code)

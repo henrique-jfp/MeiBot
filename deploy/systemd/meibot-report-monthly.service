@@ -1,0 +1,12 @@
+[Unit]
+Description=MeiBot monthly closed report
+Wants=network-online.target
+After=network-online.target meibot-backend.service meibot-bot.service
+
+[Service]
+Type=oneshot
+User=pvserver
+Group=pvserver
+WorkingDirectory=/home/pvserver/MeiBot/backend
+EnvironmentFile=/home/pvserver/MeiBot/backend/.env
+ExecStart=/home/pvserver/MeiBot/backend/venv/bin/python /home/pvserver/MeiBot/backend/cron_reports.py mensal

@@ -119,3 +119,22 @@ Este documento lista exemplos de como o MeiBot deve reagir a diferentes entradas
 *   **Entrada:** "Corrigir horário de início da operação dos Correios de hoje, o horário correto é 15:20"
 *   **Ação Interna:** Backend interpreta `corrigir_registro`, identifica a operação do dia e atualiza o horário do registro compatível, além do horário da operação quando aplicável.
 *   **Resposta:** Confirmação da correção com o campo ajustado.
+
+---
+
+## 8. Relatórios Automáticos
+
+### Fechamento Semanal
+*   **Entrada:** `python cron_reports.py semanal --reference-date 2026-05-31`
+*   **Ação Interna:** Gera análise fechada de segunda a sábado, com `period_start=2026-05-25` e `period_end=2026-05-30`.
+*   **Resposta Esperada:** Registro em `historico_analises` com `periodo_tipo='semanal'`, sem depender do dashboard ao vivo.
+
+### Fechamento Mensal no Dia 1
+*   **Entrada:** `python cron_reports.py mensal --reference-date 2026-06-01`
+*   **Ação Interna:** Gera análise do mês anterior, com `period_start=2026-05-01` e `period_end=2026-05-31`.
+*   **Resposta Esperada:** Registro em `historico_analises` com `periodo_tipo='mensal'`, mesmo com o dashboard ao vivo já zerado para junho.
+
+### Reprocessamento Idempotente
+*   **Entrada:** `python cron_reports.py mensal 2026-05-01 2026-05-31 --no-notify`
+*   **Ação Interna:** Busca análise existente pelo mesmo `user_id`, `periodo_tipo` e `metrics.period_start`.
+*   **Resposta Esperada:** Atualiza a análise existente quando houver uma; cria uma nova apenas se o período ainda não existir.

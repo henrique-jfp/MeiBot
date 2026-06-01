@@ -1,0 +1,10 @@
+[Unit]
+Description=Run MeiBot weekly report after Saturday closes
+
+[Timer]
+OnCalendar=Sun *-*-* 00:10:00
+Persistent=true
+Unit=meibot-report-weekly.service
+
+[Install]
+WantedBy=timers.target
