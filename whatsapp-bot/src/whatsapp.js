@@ -11,6 +11,7 @@ const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const { sendToBackend } = require('./api');
 const routeClaim = require('./routes-claim/handler');
+const { startServer, updateSocket } = require('./server');
 
 // Inicia o monitor de horários para captura de rotas
 routeClaim.startScheduleMonitor();
@@ -69,6 +70,8 @@ async function connectToWhatsApp() {
             console.log('✅ MeiBot conectado com sucesso!');
             console.log('Usuário:', sock.user);
             BOOT_TIME = Date.now(); // Reseta a trava no momento exato em que a conexão é estabelecida
+            updateSocket(sock);
+            startServer();
         }
     });
 

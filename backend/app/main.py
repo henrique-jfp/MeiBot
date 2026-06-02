@@ -1347,25 +1347,28 @@ async def dashboard_page(whatsapp_number: str):
 
                 return Object.values(groupsByKey).sort((a, b) => b.key.localeCompare(a.key)).map((group) => {
                     group.monthlies.sort((a, b) => (getHistoryRefDate(b)?.getTime() || 0) - (getHistoryRefDate(a)?.getTime() || 0));
+                    
+                    // Ordena semanas cronologicamente para numerar corretamente, depois inverte para o mais recente primeiro
                     group.weeks.sort((a, b) => (getHistoryRefDate(a)?.getTime() || 0) - (getHistoryRefDate(b)?.getTime() || 0));
                     group.weeks.forEach((week, index) => { week._week_num = index + 1; });
                     group.weeks.reverse();
+
                     group.others.sort((a, b) => (getHistoryRefDate(b)?.getTime() || 0) - (getHistoryRefDate(a)?.getTime() || 0));
                     return group;
                 });
             }
 
-            function createHistoryLink(item, title, subtitle, iconClass, isActive) {
+            function createHistoryLink(item, title, subtitle, iconClass, isActive, isNested = false) {
                 const link = document.createElement('a');
                 link.href = '#';
-                link.className = `history-period ${isActive ? 'history-period-active' : ''}`;
+                link.className = `history-period ${isActive ? 'history-period-active' : ''} ${isNested ? 'ml-4 border-l-2 border-slate-100 pl-4 my-1' : ''}`;
                 link.innerHTML = `
-                    <span class="w-8 h-8 rounded-lg ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'} flex items-center justify-center shrink-0">
-                        <i class="${iconClass} text-xs"></i>
+                    <span class="w-7 h-7 rounded-lg ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'} flex items-center justify-center shrink-0">
+                        <i class="${iconClass} text-[10px]"></i>
                     </span>
                     <span class="min-w-0">
-                        <span class="block text-xs font-bold uppercase truncate">${title}</span>
-                        <span class="block text-[11px] text-slate-500 truncate">${subtitle}</span>
+                        <span class="block text-[11px] font-bold uppercase truncate">${title}</span>
+                        <span class="block text-[10px] text-slate-500 truncate">${subtitle}</span>
                     </span>
                 `;
                 link.onclick = (e) => { e.preventDefault(); loadDashboard(item.id); closeSidebarIfMobile(); };
@@ -1376,18 +1379,29 @@ async def dashboard_page(whatsapp_number: str):
                 const hlist = document.getElementById('history-list');
                 hlist.innerHTML = '';
 
+                // Link para o Dashboard AO VIVO (Sempre no topo)
                 const live = document.createElement('a');
                 live.href = '#';
-                live.className = 'history-item block p-3 rounded-lg ' + (!aid ? 'bg-teal-50 border-teal-200 border' : 'bg-white');
-                live.innerHTML = `<span class="text-xs font-bold uppercase ${!aid ? 'text-teal-600' : 'text-slate-500'}">AO VIVO</span><span class="block text-xs font-medium ${!aid ? 'text-teal-800':'text-slate-700'}">Dashboard Atual</span>`;
+                live.className = 'history-item block p-3 rounded-xl transition-all ' + (!aid ? 'bg-teal-600 text-white shadow-md shadow-teal-200' : 'bg-white border border-slate-100 text-slate-600 hover:bg-slate-50');
+                live.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg ${!aid ? 'bg-white/20' : 'bg-teal-50 text-teal-600'} flex items-center justify-center">
+                            <i class="fa-solid fa-satellite-dish text-xs ${!aid ? 'animate-pulse' : ''}"></i>
+                        </div>
+                        <div>
+                            <span class="text-[10px] font-bold uppercase opacity-80">Tempo Real</span>
+                            <span class="block text-xs font-bold">Mês Atual</span>
+                        </div>
+                    </div>
+                `;
                 live.onclick = (e) => { e.preventDefault(); loadDashboard(); closeSidebarIfMobile(); };
                 hlist.appendChild(live);
 
                 const items = Array.isArray(history) ? [...history] : [];
                 if (items.length === 0) {
                     const empty = document.createElement('div');
-                    empty.className = 'p-3 rounded-lg border border-dashed border-slate-200 text-xs text-slate-500 bg-white';
-                    empty.innerText = 'Nenhuma analise arquivada ainda.';
+                    empty.className = 'p-4 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400 bg-slate-50/50 text-center mt-4';
+                    empty.innerText = 'Nenhuma análise arquivada.';
                     hlist.appendChild(empty);
                     return;
                 }
@@ -1396,58 +1410,82 @@ async def dashboard_page(whatsapp_number: str):
                 groups.forEach((group, index) => {
                     const isActiveGroup = aid && [...group.monthlies, ...group.weeks, ...group.others].some((item) => item.id === aid);
                     const details = document.createElement('details');
-                    details.className = 'history-month mt-2';
+                    details.className = 'history-month mt-3 transition-all';
                     if (isActiveGroup || (!aid && index === 0)) details.open = true;
 
-                    const totalItems = group.monthlies.length + group.weeks.length + group.others.length;
                     const summary = document.createElement('summary');
-                    summary.className = 'history-month-toggle';
+                    summary.className = 'history-month-toggle group';
                     summary.innerHTML = `
-                        <span class="min-w-0">
-                            <span class="block text-xs font-bold text-slate-800 uppercase truncate">${formatMonthTitle(group.key)}</span>
-                            <span class="block text-[11px] text-slate-500">${totalItems} analises</span>
-                        </span>
-                        <i class="fa-solid fa-chevron-down history-month-chevron text-[11px] text-slate-400"></i>
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 group-hover:bg-teal-50 group-hover:text-teal-600 transition-colors flex items-center justify-center shrink-0">
+                                <i class="fa-solid fa-folder-open text-xs"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <span class="block text-xs font-bold text-slate-800 uppercase truncate">${formatMonthTitle(group.key)}</span>
+                                <span class="block text-[10px] text-slate-400 font-medium">${group.monthlies.length + group.weeks.length + group.others.length} registros</span>
+                            </div>
+                        </div>
+                        <i class="fa-solid fa-chevron-down history-month-chevron text-[10px] text-slate-300 group-hover:text-teal-500 transition-all"></i>
                     `;
                     details.appendChild(summary);
 
                     const content = document.createElement('div');
-                    content.className = 'px-2 pb-2 space-y-1';
+                    content.className = 'px-1 pb-3 space-y-1 mt-1';
 
-                    if (group.monthlies.length === 0) {
-                        const pending = document.createElement('div');
-                        pending.className = 'px-3 py-2 text-[11px] text-slate-400 border border-dashed border-slate-200 rounded-lg';
-                        pending.innerText = 'Analise mensal ainda nao gerada.';
-                        content.appendChild(pending);
+                    // 1. Análise Mensal (Destaque dentro do grupo)
+                    if (group.monthlies.length > 0) {
+                        group.monthlies.forEach((item) => {
+                            content.appendChild(createHistoryLink(
+                                item,
+                                'Geral do Mês',
+                                formatPeriodRange(item) || 'Consolidado',
+                                'fa-solid fa-calendar-check',
+                                aid === item.id
+                            ));
+                        });
+                    } else {
+                        const emptyMonthly = document.createElement('div');
+                        emptyMonthly.className = 'ml-2 p-2 text-[10px] text-slate-400 italic';
+                        emptyMonthly.innerText = 'Mensal ainda não fechado.';
+                        content.appendChild(emptyMonthly);
                     }
 
-                    group.monthlies.forEach((item) => {
-                        content.appendChild(createHistoryLink(
-                            item,
-                            'Geral do mes',
-                            formatPeriodRange(item) || 'Analise mensal',
-                            'fa-solid fa-calendar-days',
-                            aid === item.id
-                        ));
-                    });
+                    // 2. Análises Semanais (Aninhadas)
+                    if (group.weeks.length > 0) {
+                        const weekHeader = document.createElement('div');
+                        weekHeader.className = 'text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-4 mt-3 mb-1';
+                        weekHeader.innerText = 'Semanas';
+                        content.appendChild(weekHeader);
 
-                    group.weeks.forEach((item) => {
-                        content.appendChild(createHistoryLink(
-                            item,
-                            `Semana ${item._week_num || ''}`.trim(),
-                            formatPeriodRange(item) || 'Analise semanal',
-                            'fa-solid fa-chart-line',
-                            aid === item.id
-                        ));
-                    });
+                        group.weeks.forEach((item) => {
+                            content.appendChild(createHistoryLink(
+                                item,
+                                `Semana ${item._week_num}`,
+                                formatPeriodRange(item) || 'Período semanal',
+                                'fa-solid fa-chart-line',
+                                aid === item.id,
+                                true // isNested
+                            ));
+                        });
+                    }
 
-                    group.others.forEach((item) => {
-                        content.appendChild(createHistoryLink(
-                            item,
-                            item.periodo_tipo || 'Analise',
-                            formatPeriodRange(item) || 'Periodo arquivado',
-                            'fa-solid fa-file-lines',
-                            aid === item.id
+                    // 3. Outros registros (se houver)
+                    if (group.others.length > 0) {
+                        group.others.forEach((item) => {
+                            content.appendChild(createHistoryLink(
+                                item,
+                                item.periodo_tipo || 'Análise',
+                                formatPeriodRange(item) || 'Período arquivado',
+                                'fa-solid fa-file-invoice',
+                                aid === item.id
+                            ));
+                        });
+                    }
+
+                    details.appendChild(content);
+                    hlist.appendChild(details);
+                });
+            }
                         ));
                     });
 
