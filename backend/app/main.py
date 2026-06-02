@@ -1486,13 +1486,6 @@ async def dashboard_page(whatsapp_number: str):
                     hlist.appendChild(details);
                 });
             }
-                        ));
-                    });
-
-                    details.appendChild(content);
-                    hlist.appendChild(details);
-                });
-            }
 
             async function loadDashboard(aid = null) {
                 try {
