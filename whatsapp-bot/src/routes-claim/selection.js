@@ -32,45 +32,24 @@ function parseNumber(value) {
 }
 
 /**
- * Atribui um Tier e dados de prioridade para a rota.
- * Tier 1: Principal é Tabajaras
- * Tier 2: Principal é Copacabana E detalhe tem Tabajaras
- * Tier 3: Principal é Copacabana E detalhe NÃO tem Tabajaras
- * Tier 4: Principal é Botafogo/Ipanema
+ * Atribui um Tier para a rota.
+ * Tier 1: Urca
+ * Tier 2: Tabajara / Tabajaras
+ * Tier 3: Copacabana, Copa, Copacabana 1, Copacabana 2
+ * Tier 4: Ipanema
+ * Tier 5: Botafogo 2, Botafogo 1
  */
 function getTierInfo(route) {
     const principal = normalizeText(route.bairro);
-    const dissecacao = route.dissecacao || {};
     const config = ROUTES_CONFIG.tierConfig;
 
-    // Procura por Tabajaras na dissecação para regras de Tier 1 e 2
-    let tabajaraCount = null;
-    for (const [key, val] of Object.entries(dissecacao)) {
-        if (hasAnyAlias(key, config.tier1_primary)) {
-            tabajaraCount = parseNumber(val);
-            break;
-        }
-    }
+    if (hasAnyAlias(principal, config.tier1)) return { tier: 1 };
+    if (hasAnyAlias(principal, config.tier2)) return { tier: 2 };
+    if (hasAnyAlias(principal, config.tier3)) return { tier: 3 };
+    if (hasAnyAlias(principal, config.tier4)) return { tier: 4 };
+    if (hasAnyAlias(principal, config.tier5)) return { tier: 5 };
 
-    // Tier 1: Bairro principal é Tabajaras
-    if (hasAnyAlias(principal, config.tier1_primary)) {
-        return { tier: 1, targetCount: tabajaraCount ?? 0 };
-    }
-
-    // Tier 2 e 3: Base Copacabana
-    if (hasAnyAlias(principal, config.tier_base)) {
-        if (tabajaraCount !== null) {
-            return { tier: 2, targetCount: tabajaraCount };
-        }
-        return { tier: 3, targetCount: 0 };
-    }
-
-    // Tier 4: Fallback (Botafogo/Ipanema)
-    if (hasAnyAlias(principal, config.tier4_fallback)) {
-        return { tier: 4, targetCount: 0 };
-    }
-
-    return { tier: 0, targetCount: 0 };
+    return { tier: 0 };
 }
 
 function buildCandidates(routes) {
@@ -84,14 +63,30 @@ function buildCandidates(routes) {
         const tierInfo = getTierInfo(route);
         if (tierInfo.tier === 0) continue;
 
+        const modal = normalizeText(route.modal || '');
+        if (modal) {
+            if (modal.includes('moto') || modal.includes('fiorino') || modal.includes('volumoso')) {
+                continue;
+            }
+            if (!modal.includes('mista') && !modal.includes('passeio')) {
+                continue;
+            }
+        }
+
         const pacotesTotal = parseNumber(route.pacotes_total) ?? 0;
+        let litragem = null;
+        if (route.litragem !== undefined && route.litragem !== null) {
+            litragem = parseFloat(route.litragem);
+            if (isNaN(litragem)) litragem = null;
+        }
 
         candidates.push({
             gaiola,
             bairro: route.bairro,
             pacotes_total: pacotesTotal,
+            litragem: litragem,
+            is_passeio: modal.includes('passeio'),
             tier: tierInfo.tier,
-            target_count: tierInfo.targetCount,
             raw: route
         });
     }
@@ -108,17 +103,22 @@ function pickCandidate(candidates) {
         const prefDiff = rankPreference(b) - rankPreference(a);
         if (prefDiff !== 0) return prefDiff;
 
-        // 2. Prioridade por Tier (1 > 2 > 3 > 4)
+        // 2. Prioridade por Tier (1 > 2 > 3 > 4 > 5)
         if (a.tier !== b.tier) return a.tier - b.tier;
 
-        // 3. Regras específicas por Tier
-        if (a.tier === 1) {
-            // Tier 1: Menos Tabajaras na dissecação
-            const tabajaraDiff = a.target_count - b.target_count;
-            if (tabajaraDiff !== 0) return tabajaraDiff;
+        // 3. Modal: Passeio tem preferência sobre Rota Mista no mesmo Tier
+        if (a.is_passeio !== b.is_passeio) {
+            return a.is_passeio ? -1 : 1;
         }
 
-        // 4. Critério Geral: Menos pacotes total (SPR)
+        // 4. Litragem (menor primeiro)
+        if (a.litragem !== null || b.litragem !== null) {
+            const litA = a.litragem !== null ? a.litragem : Infinity;
+            const litB = b.litragem !== null ? b.litragem : Infinity;
+            if (litA !== litB) return litA - litB;
+        }
+
+        // 5. Critério de Desempate Geral: Menos pacotes total (SPR)
         return a.pacotes_total - b.pacotes_total;
     });
 

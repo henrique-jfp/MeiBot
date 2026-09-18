@@ -206,13 +206,17 @@ def _parse_routes_from_lines(lines, source):
         if not gaiola:
             continue
 
-        cluster = _extract_cluster(line, gaiola)
+        modal_match = re.search(r"\b(ROTA\s+MISTA|PASSEIO|FIORINO|MOTO|MOTOS)\b", line, flags=re.IGNORECASE)
+        modal = modal_match.group(1).upper() if modal_match else None
+
         routes.append(
             {
                 "gaiola": gaiola,
                 "bairro": cluster,
                 "pacotes_total": _extract_total_packages(line),
                 "dissecacao": {}, # OCR determinístico raramente pega dissecação bem
+                "modal": modal,
+                "litragem": None,
             }
         )
 
@@ -310,6 +314,8 @@ def _normalize_ai_routes(parsed):
                     or item.get("pacotes")
                 ),
                 "dissecacao": normalized_dissecacao,
+                "modal": str(item.get("modal") or item.get("MODAL") or "").strip(),
+                "litragem": _parse_int(item.get("litragem") or item.get("LITRAGEM")),
             }
         )
 
@@ -328,17 +334,19 @@ def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
 
     prompt = (
         "Voce é um especialista em transcrição de planilhas de rotas logísticas. "
-        "O layout tem colunas GAIOLA, SPR (total de pacotes), CLUSTER (bairro principal) e BAIRROS (detalhamento/dissecação). "
+        "O layout tem colunas GAIOLA, SPR (total de pacotes), CLUSTER (bairro principal), BAIRROS (detalhamento/dissecação), MODAL e LITRAGEM. "
         "Extraia TODAS as linhas de rota visíveis. "
         "Regras cruciais: "
-        "1. Seja LITERAL: transcreva os nomes dos bairros exatamente como aparecem. "
+        "1. Seja LITERAL: transcreva os nomes dos bairros e modais exatamente como aparecem. "
         "2. GAIOLA pode ter sufixos (ex: B-41, G-48NS). "
         "3. SPR é o total de pacotes da rota. "
         "4. BAIRROS contém a dissecação por sub-bairro (ex: 'Copacabana: 20, Leme: 5'). "
+        "5. MODAL indica o veículo (ex: 'ROTA MISTA', 'PASSEIO', 'FIORINO'). "
+        "6. LITRAGEM (se houver) é o volume total numérico, extraia o número. "
         "Retorne APENAS um JSON no formato: "
-        '{"routes":[{"gaiola":"B-41","bairro":"Copacabana","pacotes_total":124,'
+        '{"routes":[{"gaiola":"B-41","bairro":"Copacabana","pacotes_total":124,"modal":"ROTA MISTA","litragem":660,'
         '"dissecacao":{"Copacabana":57,"Leme":30,"Tabajaras":37}}]}. '
-        "Use null quando faltar número e {} quando não houver dissecação."
+        "Use null quando faltar número ou texto, e {} quando não houver dissecação."
     )
 
     source = "gemini_ocr_fallback" if ocr_text else "gemini_image_fallback"

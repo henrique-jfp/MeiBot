@@ -493,6 +493,8 @@ let monitorInterval = null;
 function startScheduleMonitor() {
     if (monitorInterval) clearInterval(monitorInterval);
     monitorInterval = setInterval(() => {
+        if (!ROUTES_CONFIG.schedule.enabledInProd) return;
+        
         const { weekday, hour, minute } = getLocalTime();
         const minutesNow = hour * 60 + minute;
         const { startMinutes, endMinutes } = ROUTES_CONFIG.schedule;
