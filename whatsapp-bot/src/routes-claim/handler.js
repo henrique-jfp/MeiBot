@@ -199,6 +199,16 @@ async function sendClaimMessage(sock, groupJid, candidate) {
     const result = await sock.sendMessage(groupJid, { text: claimText });
     const groupState = getGroupState(groupJid);
     groupState.lastClaimId = result?.key?.id || null;
+    groupState.recentClaims.set(candidate.gaiola, Date.now());
+    
+    // Limpa claims antigos (+ de 1 hora) para não inflar a memória
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    for (const [gaiola, timestamp] of groupState.recentClaims.entries()) {
+        if (timestamp < oneHourAgo) {
+            groupState.recentClaims.delete(gaiola);
+        }
+    }
+    
     console.log(`[ROUTE-CLAIM] Mensagem de Claim enviada. ID: ${groupState.lastClaimId}`);
     return result;
 }
@@ -302,14 +312,20 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
             return true;
         }
 
-        const candidates = buildCandidates(parsed.routes);
+        const candidates = buildCandidates(parsed.routes).filter(c => {
+            const lastClaim = groupState.recentClaims.get(c.gaiola);
+            if (!lastClaim) return true;
+            // Ignore if claimed in the last 30 minutes
+            return (Date.now() - lastClaim) > 30 * 60 * 1000;
+        });
+
         if (candidates.length === 0) {
-            console.log(`[DEBUG-ROUTE] Nenhuma rota de interesse (Tiers 1-4) encontrada na lista. Grupo: ${groupName}`);
+            console.log(`[DEBUG-ROUTE] Nenhuma rota de interesse (Tiers 1-5) encontrada ou já pedida recentemente. Grupo: ${groupName}`);
             return true;
         }
 
         const picked = pickCandidate(candidates);
-        const claimSignature = `${picked.selected.gaiola}:T${picked.selected.tier}:${picked.selected.target_count}:${picked.selected.pacotes_total}`;
+        const claimSignature = `${picked.selected.gaiola}:T${picked.selected.tier}:L${picked.selected.litragem}:P${picked.selected.pacotes_total}`;
         const now = Date.now();
         
         if (

@@ -14,7 +14,8 @@ function getGroupState(groupJid) {
             inFlight: false,
             processedMessageIds: new Set(),
             candidates: [],
-            index: 0
+            index: 0,
+            recentClaims: new Map()
         });
     }
 
