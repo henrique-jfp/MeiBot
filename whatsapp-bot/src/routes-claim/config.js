@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const ROUTES_CONFIG = {
     testGroupName: 'Documentos',
-    prodGroupNames: ['SPX Motorista'],
+    prodGroupNames: [''],
     timezone: 'America/Sao_Paulo',
     schedule: {
         enabledInProd: false,
