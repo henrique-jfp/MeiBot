@@ -1,5 +1,6 @@
 const state = {
-    active: true,
+    // O disparo de rotas só inicia com o comando privado "ativar rotas".
+    active: false,
     groups: new Map(),
     groupCache: new Map()
 };

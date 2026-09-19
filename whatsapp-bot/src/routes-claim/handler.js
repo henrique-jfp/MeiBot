@@ -4,50 +4,6 @@ const { parseRouteSheet } = require('./routeApi');
 const { buildCandidates, pickCandidate, normalizeText } = require('./selection');
 const { state, getGroupState } = require('./state');
 
-function getLocalTime() {
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: ROUTES_CONFIG.timezone,
-        hour12: false,
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit'
-    }).formatToParts(new Date());
-
-    const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
-    return {
-        weekday: map.weekday,
-        hour: parseInt(map.hour, 10),
-        minute: parseInt(map.minute, 10)
-    };
-}
-
-function isWithinSchedule() {
-    const { weekday, hour, minute } = getLocalTime();
-    const minutesNow = hour * 60 + minute;
-    const { startMinutes, endMinutes, weekdaysOnly } = ROUTES_CONFIG.schedule;
-
-    if (weekdaysOnly) {
-        // Nova Lógica de Madrugada (Domingo 23h até Sexta 04:30)
-        if (weekday === 'Sun') {
-            return minutesNow >= startMinutes;
-        } else if (['Mon', 'Tue', 'Wed', 'Thu'].includes(weekday)) {
-            // No meio da semana, vale a noite toda (antes das 4:30 ou depois das 23h)
-            return minutesNow >= startMinutes || minutesNow <= endMinutes;
-        } else if (weekday === 'Fri') {
-            return minutesNow <= endMinutes;
-        } else {
-            // Sábado (Não funciona nada)
-            return false;
-        }
-    }
-
-    if (startMinutes <= endMinutes) {
-        return minutesNow >= startMinutes && minutesNow <= endMinutes;
-    }
-
-    return minutesNow >= startMinutes || minutesNow <= endMinutes;
-}
-
 async function getGroupName(sock, jid) {
     if (state.groupCache.has(jid)) {
         return state.groupCache.get(jid);
@@ -111,12 +67,14 @@ async function handleCommand(sock, msg) {
 
     if (command === 'desativar rotas') {
         state.active = false;
+        state.groups.clear();
         await sock.sendMessage(remoteJid, { text: '❌ *Sistema de rotas DESATIVADO.*' });
         return true;
     }
 
     if (command === 'ativar rotas') {
         console.log(`[ROUTE-CLAIM] Comando privado reconhecido: ativar rotas (${remoteJid})`);
+        state.groups.clear();
         state.active = true;
         await sock.sendMessage(remoteJid, { text: '✅ *Sistema de rotas ATIVADO.*' });
         return true;
@@ -275,12 +233,6 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     
     if (!isAuthorizedSender(msg)) {
         console.log(`[DEBUG-ROUTE] Ignorado: Remetente não autorizado. Grupo: ${groupName}`);
-        return true;
-    }
-
-    if (!isTest && ROUTES_CONFIG.schedule.enabledInProd && !isWithinSchedule()) {
-        const { hour, minute } = getLocalTime();
-        console.log(`[DEBUG-ROUTE] Ignorado: Fora do horário (Agora: ${hour}:${minute}). Grupo: ${groupName}`);
         return true;
     }
 
@@ -545,46 +497,9 @@ async function handleIncomingMessage(sock, msg) {
     return handleRouteImage(sock, msg, groupName, isTest);
 }
 
-let monitorInterval = null;
-
-function startScheduleMonitor() {
-    if (monitorInterval) clearInterval(monitorInterval);
-    monitorInterval = setInterval(() => {
-        if (!ROUTES_CONFIG.schedule.enabledInProd) return;
-        
-        const { weekday, hour, minute } = getLocalTime();
-        const minutesNow = hour * 60 + minute;
-        const { startMinutes, endMinutes } = ROUTES_CONFIG.schedule;
-        
-        // At exatamente startMinutes (23:00)
-        if (minutesNow === startMinutes) {
-            // Liga apenas de Domingo a Quinta
-            if (['Sun', 'Mon', 'Tue', 'Wed', 'Thu'].includes(weekday)) {
-                if (!state.active) {
-                    console.log(`[ROUTE-CLAIM] Automático: Iniciando janela de rotas (${weekday}).`);
-                    state.active = true;
-                    state.groups.clear(); // Limpa cache de processamento
-                }
-            }
-        }
-        
-        // At exatamente endMinutes (04:30)
-        if (minutesNow === endMinutes) {
-            // Desliga apenas de Segunda a Sexta
-            if (['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekday)) {
-                if (state.active) {
-                    console.log(`[ROUTE-CLAIM] Automático: Encerrando janela de rotas (${weekday}).`);
-                    state.active = false;
-                }
-            }
-        }
-    }, 60000); // Verifica a cada minuto
-}
-
 module.exports = {
     handleIncomingMessage,
     handleReaction,
     handleTextReply,
-    getGroupName,
-    startScheduleMonitor
+    getGroupName
 };

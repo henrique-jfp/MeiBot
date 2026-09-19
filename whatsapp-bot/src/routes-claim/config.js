@@ -3,13 +3,6 @@ require('dotenv').config();
 const ROUTES_CONFIG = {
     testGroupName: 'Documentos',
     prodGroupNames: ['SPX Motorista'],
-    timezone: 'America/Sao_Paulo',
-    schedule: {
-        enabledInProd: true,
-        startMinutes: 23 * 60,
-        endMinutes: 4 * 60 + 30,
-        weekdaysOnly: true
-    },
     // Identificador estável do grupo de produção; evita falhas quando o nome
     // do grupo recebe emoji, sufixo ou outra variação visual.
     prodGroupIds: ['120363413438458968@g.us'],

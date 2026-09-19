@@ -13,9 +13,6 @@ const { sendToBackend } = require('./api');
 const routeClaim = require('./routes-claim/handler');
 const { startServer, updateSocket } = require('./server');
 
-// Inicia o monitor de horários para captura de rotas
-routeClaim.startScheduleMonitor();
-
 // Cache para evitar processamento de mensagens duplicadas (loops e LID/JID duplication)
 const processedMessages = new Set();
 const CACHE_LIMIT = 100;
@@ -23,8 +20,14 @@ const CACHE_LIMIT = 100;
 // Trava absoluta de tempo de Boot. Rejeita QUALQUER MENSAGEM nos primeiros 60s de vida do Bot.
 let BOOT_TIME = Date.now();
 const BOOT_LOCK_WINDOW_MS = 60000;
+let activeSocket = null;
+let reconnectTimer = null;
+let connecting = false;
 
 async function connectToWhatsApp() {
+    if (connecting || activeSocket) return;
+    connecting = true;
+
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     
     const { version, isLatest } = await fetchLatestBaileysVersion();
@@ -38,11 +41,14 @@ async function connectToWhatsApp() {
         browser: Browsers.macOS('Desktop'),
         syncFullHistory: false,
         connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 120000,
         keepAliveIntervalMs: 30000,
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: false,
     });
+
+    activeSocket = sock;
+    connecting = false;
 
     sock.ev.on('creds.update', saveCreds);
 
@@ -56,6 +62,7 @@ async function connectToWhatsApp() {
         }
 
         if (connection === 'close') {
+            activeSocket = null;
             const statusCode = (lastDisconnect.error instanceof Boom) 
                 ? lastDisconnect.error.output.statusCode 
                 : 0;
@@ -63,8 +70,16 @@ async function connectToWhatsApp() {
             console.log(`[CONN] Conexão fechada. Motivo: ${reason}, Código: ${statusCode}`);
             
             if (statusCode !== DisconnectReason.loggedOut) {
-                console.log('[CONN] Tentando reconectar em 10s...');
-                setTimeout(() => connectToWhatsApp(), 10000);
+                if (!reconnectTimer) {
+                    console.log('[CONN] Tentando reconectar em 10s...');
+                    reconnectTimer = setTimeout(() => {
+                        reconnectTimer = null;
+                        connectToWhatsApp().catch(error => {
+                            connecting = false;
+                            console.error('[CONN] Falha ao reconectar:', error.message);
+                        });
+                    }, 10000);
+                }
             }
         } else if (connection === 'open') {
             console.log('✅ MeiBot conectado com sucesso!');
