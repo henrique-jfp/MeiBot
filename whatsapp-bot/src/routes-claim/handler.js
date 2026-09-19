@@ -71,9 +71,14 @@ function isTestGroup(name) {
 }
 
 function isProdGroup(name) {
+    const normalizedName = normalizeText(name);
     return ROUTES_CONFIG.prodGroupNames
-        .map(n => normalizeText(n))
-        .includes(normalizeText(name));
+        .map(normalizeText)
+        .filter(Boolean)
+        .some(configuredName => (
+            normalizedName === configuredName ||
+            normalizedName.includes(configuredName)
+        ));
 }
 
 async function handleCommand(sock, msg) {
@@ -526,8 +531,10 @@ async function handleIncomingMessage(sock, msg) {
 
     const isTest = isTestGroup(groupName);
     if (!shouldHandleGroup(groupName, isTest)) {
-        // Log silenciado para não poluir, mas disponível para debug se necessário
-        // console.log(`[DEBUG-ROUTE] Ignorado: Grupo não listado na Prod ou Test (${groupName})`);
+        console.log(
+            `[DEBUG-ROUTE] Ignorado: grupo fora da lista. ` +
+            `Nome="${groupName}" JID=${remoteJid}`
+        );
         return false;
     }
 
