@@ -10,6 +10,9 @@ const ROUTES_CONFIG = {
         endMinutes: 4 * 60 + 30,
         weekdaysOnly: true
     },
+    // Identificador estável do grupo de produção; evita falhas quando o nome
+    // do grupo recebe emoji, sufixo ou outra variação visual.
+    prodGroupIds: ['120363413438458968@g.us'],
     minConfidence: 0.75,
     tierConfig: {
         tier1: ['urca'],

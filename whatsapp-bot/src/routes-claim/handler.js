@@ -231,8 +231,9 @@ async function sendClaimMessage(sock, groupJid, candidate) {
     return result;
 }
 
-function shouldHandleGroup(name, isTest) {
+function shouldHandleGroup(name, isTest, jid) {
     if (isTest) return true;
+    if ((ROUTES_CONFIG.prodGroupIds || []).includes(jid)) return true;
     return isProdGroup(name);
 }
 
@@ -530,7 +531,7 @@ async function handleIncomingMessage(sock, msg) {
     }
 
     const isTest = isTestGroup(groupName);
-    if (!shouldHandleGroup(groupName, isTest)) {
+    if (!shouldHandleGroup(groupName, isTest, remoteJid)) {
         console.log(
             `[DEBUG-ROUTE] Ignorado: grupo fora da lista. ` +
             `Nome="${groupName}" JID=${remoteJid}`
