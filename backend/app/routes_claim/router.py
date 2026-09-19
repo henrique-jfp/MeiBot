@@ -30,13 +30,19 @@ async def parse_routes(request: Request):
         return {"error": "invalid_base64"}
 
     try:
-        parsed = parse_route_sheet(file_bytes, mime_type)
+        parsed = parse_route_sheet(
+            file_bytes,
+            mime_type,
+            file_name=data.get("file_name", ""),
+            caption=data.get("caption", ""),
+        )
         print(
             "[ROUTE-CLAIM] parse result "
             f"mime={mime_type} bytes={len(file_bytes)} "
             f"source={parsed.get('source')} "
             f"confidence={parsed.get('confidence')} "
             f"routes={len(parsed.get('routes') or [])} "
+            f"eligible_routes={len(parsed.get('eligible_routes') or [])} "
             f"parser_version={parsed.get('parser_version')} "
             f"vision_available={parsed.get('vision_available')} "
             f"vision_reason={parsed.get('vision_reason')} "

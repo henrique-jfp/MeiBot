@@ -26,6 +26,15 @@ function hasAnyAlias(value, aliases) {
     });
 }
 
+function isAllowedModal(modal) {
+    const normalized = normalizeText(modal);
+    if (!normalized) return false;
+    if (normalized.includes('moto') || normalized.includes('fiorino') || normalized.includes('volumoso')) {
+        return false;
+    }
+    return normalized.includes('mista') || normalized.includes('passeio') || normalized.includes('carro passeio');
+}
+
 function parseNumber(value) {
     const parsed = parseInt(String(value ?? '').replace(/[^\d-]/g, ''), 10);
     return Number.isNaN(parsed) ? null : parsed;
@@ -40,6 +49,12 @@ function parseNumber(value) {
  * Tier 5: Botafogo 2, Botafogo 1
  */
 function getTierInfo(route) {
+    // Quando presente, a classificação calculada pelo backend é a fonte de
+    // verdade: ela também considera os bairros da dissecação da rota.
+    if (Number.isInteger(route.tier) && route.tier >= 1 && route.tier <= 5) {
+        return { tier: route.tier };
+    }
+
     const principal = normalizeText(route.bairro);
     const config = ROUTES_CONFIG.tierConfig;
 
@@ -64,14 +79,7 @@ function buildCandidates(routes) {
         if (tierInfo.tier === 0) continue;
 
         const modal = normalizeText(route.modal || '');
-        if (modal) {
-            if (modal.includes('moto') || modal.includes('fiorino') || modal.includes('volumoso')) {
-                continue;
-            }
-            if (!modal.includes('mista') && !modal.includes('passeio')) {
-                continue;
-            }
-        }
+        if (!isAllowedModal(modal)) continue;
 
         const pacotesTotal = parseNumber(route.pacotes_total) ?? 0;
         let litragem = null;
@@ -95,31 +103,25 @@ function buildCandidates(routes) {
 }
 
 function pickCandidate(candidates) {
-    const preferred = new Set((ROUTES_CONFIG.preferredGaiolas || []).map(normalizeGaiola));
-    const rankPreference = candidate => preferred.has(normalizeGaiola(candidate.gaiola)) ? 1 : 0;
-
     const sorted = candidates.sort((a, b) => {
-        // 1. Preferência manual de gaiola (Gaiolas VIP furam qualquer Tier)
-        const prefDiff = rankPreference(b) - rankPreference(a);
-        if (prefDiff !== 0) return prefDiff;
-
-        // 2. Prioridade por Tier (1 > 2 > 3 > 4 > 5)
+        // 1. Prioridade por bairro (1 > 2 > 3 > 4 > 5)
         if (a.tier !== b.tier) return a.tier - b.tier;
 
-        // 3. Modal: Passeio tem preferência sobre Rota Mista no mesmo Tier
-        if (a.is_passeio !== b.is_passeio) {
-            return a.is_passeio ? -1 : 1;
-        }
-
-        // 4. Litragem (menor primeiro)
+        // 2. Litragem: menor primeiro quando informada
         if (a.litragem !== null || b.litragem !== null) {
             const litA = a.litragem !== null ? a.litragem : Infinity;
             const litB = b.litragem !== null ? b.litragem : Infinity;
             if (litA !== litB) return litA - litB;
         }
 
-        // 5. Critério de Desempate Geral: Menos pacotes total (SPR)
-        return a.pacotes_total - b.pacotes_total;
+        // 3. Menos pacotes quando a litragem não desempatar
+        if (a.pacotes_total !== b.pacotes_total) {
+            return a.pacotes_total - b.pacotes_total;
+        }
+
+        // 4. Passeio vence apenas no empate completo
+        if (a.is_passeio !== b.is_passeio) return a.is_passeio ? -1 : 1;
+        return 0;
     });
 
     return { selected: sorted[0], ordered: sorted };

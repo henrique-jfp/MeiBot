@@ -63,6 +63,12 @@ cp .env.example .env
     ```
     *Escaneie o QR Code que aparecerá no terminal.*
 
+### Captura automática de rotas
+
+Ao receber uma imagem ou PDF de rotas nos grupos configurados, o bot solicita ao backend a leitura da planilha. O anexo é ignorado quando o nome, a legenda ou o texto reconhecido contiver `NS`, `NOSHOW` ou `NO SHOW`.
+
+Somente são elegíveis rotas `ROTA MISTA`, `PASSEIO` ou `CARRO PASSEIO`. A escolha prioriza, nesta ordem, Urca, Tabajara(s), Copacabana/Copa, Ipanema e Botafogo; dentro da mesma prioridade, usa menor litragem e depois menor quantidade de pacotes.
+
 ---
 
 ## 🖥️ Gerenciamento no Servidor (Produção)

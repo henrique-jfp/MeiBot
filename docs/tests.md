@@ -138,3 +138,17 @@ Este documento lista exemplos de como o MeiBot deve reagir a diferentes entradas
 *   **Entrada:** `python cron_reports.py mensal 2026-05-01 2026-05-31 --no-notify`
 *   **Ação Interna:** Busca análise existente pelo mesmo `user_id`, `periodo_tipo` e `metrics.period_start`.
 *   **Resposta Esperada:** Atualiza a análise existente quando houver uma; cria uma nova apenas se o período ainda não existir.
+# Testes de captura de rotas
+
+Execute a partir de `backend`:
+
+```bash
+python -m unittest tests.test_routes_claim
+```
+
+Casos recorrentes cobertos:
+
+- Ignora anexos, nomes de arquivo e texto OCR marcados como `NS`, `NOSHOW` ou `NO SHOW`.
+- Aceita apenas `ROTA MISTA`, `PASSEIO` e `CARRO PASSEIO`; exclui moto, Fiorino e volumoso.
+- Respeita os bairros por prioridade (Urca, Tabajara(s), Copacabana/Copa, Ipanema e Botafogo).
+- Desempata a mesma prioridade por menor litragem e, sem litragem, por menos pacotes.

@@ -34,7 +34,7 @@ load_dotenv()
 
 MIN_DETERMINISTIC_CONFIDENCE = 0.75
 IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-PARSER_VERSION = "routes-claim-2026-05-24-agnostic-v1"
+PARSER_VERSION = "routes-claim-2026-09-19-priorities-v2"
 ROUTES_ENABLE_GEMINI_OCR_FALLBACK = os.getenv("ROUTES_ENABLE_GEMINI_OCR_FALLBACK", "false").lower() == "true"
 ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK = os.getenv("ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK", "false").lower() == "true"
 VISION_STATUS = {
@@ -88,6 +88,13 @@ def _normalize(value):
     text = unicodedata.normalize("NFD", str(value))
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
     return re.sub(r"\s+", " ", text.lower()).strip()
+
+
+def _contains_no_show(value):
+    normalized = _normalize(value)
+    # "NS" tambem pode vir junto ao identificador (por exemplo, B-41NS).
+    # Os limites por letras evitam falsos positivos em palavras comuns.
+    return bool(re.search(r"(?<![a-z])(?:ns|noshow|no\s+show)(?![a-z])", normalized))
 
 
 def _parse_int(value):
@@ -178,21 +185,44 @@ def _extract_total_packages(line):
     return max(numbers) if numbers else None
 
 
-def _extract_cluster(line, gaiola):
-    cleaned = line
-    if gaiola:
-        compact = gaiola.replace("-", r"\s*[-–]?\s*")
-        cleaned = re.sub(rf"\b{compact}\b", " ", cleaned, count=1, flags=re.IGNORECASE)
+def _extract_litragem(line):
+    """Extrai litragem apenas quando ela estiver identificada na propria linha."""
+    normalized = _normalize(line)
+    match = re.search(r"\b(?:litragem|litros?|volume)\s*[:=-]?\s*(\d{1,6})\b", normalized)
+    return _parse_int(match.group(1)) if match else None
 
-    cleaned = re.sub(r"\b\d{1,4}\b", " ", cleaned, count=1)
-    vehicle_split = re.split(r"\b(?:ROTA\s+MISTA|PASSEIO|MOTO)\b", cleaned, flags=re.IGNORECASE)
-    cleaned = vehicle_split[0]
-    pieces = re.split(r"\s{2,}|;", cleaned)
-    for piece in pieces:
-        piece = piece.strip(" :-")
-        if piece and not re.fullmatch(r"\d+", piece):
-            return piece
-    return None
+
+def _extract_cluster(line, gaiola):
+    if not gaiola:
+        return None
+
+    compact = gaiola.replace("-", r"\s*[-–]?\s*")
+    match = re.search(rf"\b{compact}\b", line, flags=re.IGNORECASE)
+    if not match:
+        return None
+
+    cleaned = line[match.end():]
+    cleaned = re.sub(r"^\s*(?:SPR|CLUSTER|BAIRRO|PACOTES|TOTAL|LITRAGEM)?\s*\d{1,4}\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.split(r"\b(?:ROTA\s+MISTA|PASSEIO|FIORINO|MOTO|MOTOS|VOLUMOSO)\b", cleaned, maxsplit=1, flags=re.IGNORECASE)[0]
+
+    known_clusters = (
+        "Lins de Vasconcelos", "Engenho da Rainha", "Engenho Novo", "Engenho de Dentro",
+        "Del Castilho", "Jardim Botânico", "Copacabana 1", "Copacabana 2", "Botafogo 2",
+        "Botafogo 1", "Nova Brasília", "Água de Ouro", "Cinco Bocas", "Cachambi",
+        "Mangueira", "Tabajara", "Tabajaras", "Copacabana", "Ipanema", "Leblon",
+        "Rocinha", "Vidigal", "Gávea", "Lagoa", "Urca", "Inhaúma", "Jacaré",
+        "Méier", "Piedade", "Abolição", "Pilares", "Camarista", "Dendê", "Maré",
+        "Penha", "Ramos", "Cruzeiro", "Barra", "Andaraí", "Cacuia", "Grajaú",
+        "Taquara", "Marechal Hermes", "Portuguesa", "Jardim Carioca", "Aldeia Campista",
+        "Flamengo", "Jockey", "Bonsucesso", "Rocha", "Méier"
+    )
+    for cluster in sorted(known_clusters, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(cluster)}\b", cleaned, flags=re.IGNORECASE):
+            return cluster
+
+    first_cell = re.split(r";|\s{2,}", cleaned, maxsplit=1)[0]
+    first_cell = re.sub(r"[^A-Za-zÀ-ÿ ]+", " ", first_cell)
+    return re.sub(r"\s+", " ", first_cell).strip() or None
 
 
 def _parse_routes_from_text(ocr_text, source="vision_parser"):
@@ -206,7 +236,9 @@ def _parse_routes_from_lines(lines, source):
         if not gaiola:
             continue
 
-        modal_match = re.search(r"\b(ROTA\s+MISTA|PASSEIO|FIORINO|MOTO|MOTOS)\b", line, flags=re.IGNORECASE)
+        cluster = _extract_cluster(line, gaiola)
+
+        modal_match = re.search(r"\b(ROTA\s+MISTA|CARRO\s+PASSEIO|PASSEIO|FIORINO|MOTO|MOTOS|VOLUMOSO)\b", line, flags=re.IGNORECASE)
         modal = modal_match.group(1).upper() if modal_match else None
 
         routes.append(
@@ -216,11 +248,14 @@ def _parse_routes_from_lines(lines, source):
                 "pacotes_total": _extract_total_packages(line),
                 "dissecacao": {}, # OCR determinístico raramente pega dissecação bem
                 "modal": modal,
-                "litragem": None,
+                "litragem": _extract_litragem(line),
             }
         )
 
-    if routes:
+    named_routes = sum(1 for route in routes if route.get("bairro"))
+    if routes and named_routes / len(routes) >= 0.5:
+        confidence = 0.8
+    elif routes:
         confidence = 0.6 # OCR puro é menos confiável que IA para lógica complexa
     else:
         confidence = 0.0
@@ -328,13 +363,102 @@ def _confidence_for_routes(routes, source):
     return 0.0
 
 
+ROUTE_PRIORITY_TIERS = (
+    (1, ("urca",)),
+    (2, ("tabajara", "tabajaras")),
+    (3, ("copacabana 1", "copacabana 2", "copacabana", "copa")),
+    (4, ("ipanema",)),
+    (5, ("botafogo 2", "botafogo 1")),
+)
+
+
+def _has_route_alias(value, aliases):
+    normalized = _normalize(value)
+    for alias in aliases:
+        target = _normalize(alias)
+        if re.search(rf"(?<![a-z]){re.escape(target)}(?![a-z])", normalized):
+            return True
+    return False
+
+
+def _route_tier(route):
+    # O cluster e a dissecação são ambos considerados: uma rota mista que atende
+    # Urca continua sendo preferível mesmo quando o cluster tem outro nome.
+    locations = [route.get("bairro")]
+    dissecacao = route.get("dissecacao")
+    if isinstance(dissecacao, dict):
+        locations.extend(dissecacao.keys())
+
+    for tier, aliases in ROUTE_PRIORITY_TIERS:
+        if any(_has_route_alias(location, aliases) for location in locations if location):
+            return tier
+    return None
+
+
+def _is_allowed_modal(modal):
+    normalized = _normalize(modal)
+    if not normalized:
+        return False
+    if any(blocked in normalized for blocked in ("moto", "fiorino", "volumoso")):
+        return False
+    return "mista" in normalized or "passeio" in normalized
+
+
+def rank_route_candidates(routes):
+    """Retorna somente rotas elegíveis, na ordem determinística de solicitação."""
+    candidates = []
+    for route in routes or []:
+        if not isinstance(route, dict) or not route.get("gaiola"):
+            continue
+        if not _is_allowed_modal(route.get("modal")):
+            continue
+        tier = _route_tier(route)
+        if tier is None:
+            continue
+
+        litragem = _parse_int(route.get("litragem"))
+        pacotes = _parse_int(route.get("pacotes_total"))
+        candidates.append({
+            **route,
+            "tier": tier,
+            "litragem": litragem,
+            "pacotes_total": pacotes,
+        })
+
+    # Bairro é absoluto. Dentro do mesmo bairro, menor litragem prevalece;
+    # sem litragem comparável, a rota com menos pacotes prevalece.
+    return sorted(
+        candidates,
+        key=lambda route: (
+            route["tier"],
+            route["litragem"] is None,
+            route["litragem"] if route["litragem"] is not None else float("inf"),
+            route["pacotes_total"] is None,
+            route["pacotes_total"] if route["pacotes_total"] is not None else float("inf"),
+            0 if "passeio" in _normalize(route.get("modal")) else 1,
+            _normalize(route.get("gaiola")),
+        ),
+    )
+
+
+def _with_selection(parsed):
+    ranked = rank_route_candidates(parsed.get("routes"))
+    parsed["eligible_routes"] = ranked
+    parsed["selected_route"] = ranked[0] if ranked else None
+    return parsed
+
+
 def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
     if not _genai_key or not _gemini_model_names:
         return {"routes": [], "confidence": 0.0, "source": "no_gemini"}
 
     prompt = (
         "Voce é um especialista em transcrição de planilhas de rotas logísticas. "
-        "O layout tem colunas GAIOLA, SPR (total de pacotes), CLUSTER (bairro principal), BAIRROS (detalhamento/dissecação), MODAL e LITRAGEM. "
+        "As imagens podem ter cabeçalho completo, cabeçalho cortado ou nenhum cabeçalho. "
+        "Podem existir colunas extras antes/depois da gaiola e os nomes das colunas podem variar. "
+        "Identifique visualmente cada célula pela posição da tabela. "
+        "As colunas normalmente são GAIOLA, SPR (total de pacotes), CLUSTER (bairro principal), "
+        "BAIRROS (detalhamento/dissecação), MODAL e LITRAGEM. "
         "Extraia TODAS as linhas de rota visíveis. "
         "Regras cruciais: "
         "1. Seja LITERAL: transcreva os nomes dos bairros e modais exatamente como aparecem. "
@@ -384,18 +508,23 @@ def _fallback_with_gemini(file_bytes, mime_type, ocr_text=""):
     }
 
 
-def parse_route_sheet(file_bytes: bytes, mime_type: str):
+def parse_route_sheet(file_bytes: bytes, mime_type: str, file_name: str = "", caption: str = ""):
+    if _contains_no_show(f"{file_name} {caption}"):
+        return {"routes": [], "eligible_routes": [], "selected_route": None, "confidence": 0.0, "source": "ignored_no_show", "no_show": True, "parser_version": PARSER_VERSION}
+
     ocr_text = ""
     ocr_rows = []
 
     # Fluxo Prioritário para PDF: pdfplumber (Direto no texto)
     if mime_type == "application/pdf" and PDFPLUMBER_AVAILABLE:
         pdf_text = _extract_text_with_pdfplumber(file_bytes)
+        if _contains_no_show(pdf_text):
+            return {"routes": [], "eligible_routes": [], "selected_route": None, "confidence": 0.0, "source": "ignored_no_show", "no_show": True, "parser_version": PARSER_VERSION}
         if pdf_text:
             pdf_parsed = _parse_routes_from_text(pdf_text, source="pdfplumber_parser")
             if pdf_parsed["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
                 pdf_parsed["parser_version"] = PARSER_VERSION
-                return pdf_parsed
+                return _with_selection(pdf_parsed)
             print(f"[ROUTE-CLAIM] pdfplumber confidence low ({pdf_parsed['confidence']}), falling back to image/vision")
 
     # Fallback para PDF ou fluxo de Imagem: OCR via Google Vision
@@ -427,6 +556,8 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
 
     if actual_mime in IMAGE_MIME_TYPES:
         ocr_text, ocr_rows = _extract_text_with_vision(img_bytes)
+        if _contains_no_show(ocr_text):
+            return {"routes": [], "eligible_routes": [], "selected_route": None, "confidence": 0.0, "source": "ignored_no_show", "no_show": True, "parser_version": PARSER_VERSION}
         if ocr_rows:
             deterministic = _parse_routes_from_lines(ocr_rows, "vision_geometry_parser")
             deterministic["parser_version"] = PARSER_VERSION
@@ -436,7 +567,7 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
             deterministic["ocr_rows"] = len(ocr_rows)
             
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
-                return deterministic
+                return _with_selection(deterministic)
         if ocr_text:
             deterministic = _parse_routes_from_text(ocr_text, source="vision_parser")
             deterministic["parser_version"] = PARSER_VERSION
@@ -445,13 +576,19 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
             deterministic["ocr_text_len"] = len(ocr_text or "")
             deterministic["ocr_rows"] = len(ocr_rows)
             if deterministic["confidence"] >= MIN_DETERMINISTIC_CONFIDENCE:
-                return deterministic
+                return _with_selection(deterministic)
 
-    should_use_gemini = (
-        (bool(ocr_text) and ROUTES_ENABLE_GEMINI_OCR_FALLBACK) or
-        (not ocr_text and ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK)
-    )
-    if not should_use_gemini:
+    if ROUTES_ENABLE_GEMINI_IMAGE_FALLBACK:
+        fallback = _fallback_with_gemini(img_bytes, actual_mime)
+        fallback["parser_version"] = PARSER_VERSION
+        fallback["vision_available"] = VISION_STATUS["available"]
+        fallback["vision_reason"] = VISION_STATUS["reason"]
+        fallback["ocr_text_len"] = len(ocr_text or "")
+        fallback["ocr_rows"] = len(ocr_rows)
+        if fallback["routes"]:
+            return _with_selection(fallback)
+
+    if not (bool(ocr_text) and ROUTES_ENABLE_GEMINI_OCR_FALLBACK):
         deterministic["source"] = (
             f"ocr_parse_failed_gemini_disabled (source={deterministic.get('source')})"
             if ocr_text or ocr_rows
@@ -459,7 +596,7 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
         )
         deterministic["ocr_text_len"] = len(ocr_text or "")
         deterministic["ocr_rows"] = len(ocr_rows)
-        return deterministic
+        return _with_selection(deterministic)
 
     fallback = _fallback_with_gemini(img_bytes, actual_mime, ocr_text)
     fallback["parser_version"] = PARSER_VERSION
@@ -468,8 +605,8 @@ def parse_route_sheet(file_bytes: bytes, mime_type: str):
     fallback["ocr_text_len"] = len(ocr_text or "")
     fallback["ocr_rows"] = len(ocr_rows)
     if fallback["routes"]:
-        return fallback
+        return _with_selection(fallback)
 
     if fallback.get("source") == "gemini_fallback_failed":
-        return fallback
-    return deterministic
+        return _with_selection(fallback)
+    return _with_selection(deterministic)

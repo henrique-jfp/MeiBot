@@ -1,5 +1,5 @@
 const state = {
-    active: false,
+    active: true,
     groups: new Map(),
     groupCache: new Map()
 };

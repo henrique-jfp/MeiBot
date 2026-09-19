@@ -77,11 +77,16 @@ function isProdGroup(name) {
 }
 
 async function handleCommand(sock, msg) {
-    const text = msg.message?.conversation || 
-                 msg.message?.extendedTextMessage?.text || 
-                 msg.message?.ephemeralMessage?.message?.extendedTextMessage?.text ||
-                 msg.message?.ephemeralMessage?.message?.conversation ||
-                 '';
+    let message = msg.message;
+    let text = '';
+    for (let depth = 0; message && depth < 6; depth += 1) {
+        text = message.conversation || message.extendedTextMessage?.text || '';
+        if (text) break;
+        message = message.ephemeralMessage?.message ||
+            message.viewOnceMessage?.message ||
+            message.viewOnceMessageV2?.message ||
+            message.documentWithCaptionMessage?.message;
+    }
                  
     if (!text) return false;
 
@@ -90,7 +95,7 @@ async function handleCommand(sock, msg) {
         return false;
     }
 
-    const command = normalizeText(text);
+    const command = normalizeText(text).replace(/[.!?]+$/, '').trim();
     const remoteJid = msg.key.remoteJid;
 
     if (command === 'reativar rotas') {
@@ -106,6 +111,7 @@ async function handleCommand(sock, msg) {
     }
 
     if (command === 'ativar rotas') {
+        console.log(`[ROUTE-CLAIM] Comando privado reconhecido: ativar rotas (${remoteJid})`);
         state.active = true;
         await sock.sendMessage(remoteJid, { text: '✅ *Sistema de rotas ATIVADO.*' });
         return true;
@@ -179,6 +185,7 @@ function getRouteMediaInfo(msg) {
         return {
             mimeType: message.imageMessage.mimetype || 'image/jpeg',
             caption: message.imageMessage.caption || '',
+            fileName: '',
             kind: 'image'
         };
     }
@@ -187,11 +194,17 @@ function getRouteMediaInfo(msg) {
         return {
             mimeType: message.documentMessage.mimetype || '',
             caption: message.documentMessage.caption || '',
+            fileName: message.documentMessage.fileName || '',
             kind: 'document'
         };
     }
 
     return null;
+}
+
+function isNoShowMedia(mediaInfo) {
+    const source = normalizeText(`${mediaInfo?.fileName || ''} ${mediaInfo?.caption || ''}`);
+    return /(?<![a-z])(?:ns|noshow|no\s+show)(?![a-z])/i.test(source);
 }
 
 async function sendClaimMessage(sock, groupJid, candidate) {
@@ -268,6 +281,11 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
     const mediaInfo = getRouteMediaInfo(msg);
     const mimeType = mediaInfo?.mimeType || null;
 
+    if (isNoShowMedia(mediaInfo)) {
+        console.log(`[DEBUG-ROUTE] Ignorado: arquivo/legenda marcado como NS/NOSHOW. Grupo: ${groupName}`);
+        return true;
+    }
+
     if (!mediaInfo || !mimeType || !ROUTES_CONFIG.allowedMimeTypes.includes(mimeType)) {
         if (msg.message?.imageMessage || msg.message?.documentMessage) {
             console.log(`[DEBUG-ROUTE] Ignorado: MimeType não permitido (${mimeType}). Grupo: ${groupName}`);
@@ -293,10 +311,16 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
 
         const payload = {
             mime_type: mimeType,
-            content_base64: buffer.toString('base64')
+            content_base64: buffer.toString('base64'),
+            file_name: mediaInfo.fileName,
+            caption: mediaInfo.caption
         };
 
         const parsed = await parseRouteSheet(payload);
+        if (parsed.no_show || parsed.source === 'ignored_no_show') {
+            console.log(`[DEBUG-ROUTE] Ignorado: parser marcou NS/NOSHOW. Grupo: ${groupName}`);
+            return true;
+        }
         if (parsed.error) {
             console.log(`[DEBUG-ROUTE] Erro na API: ${parsed.error}. Grupo: ${groupName}`);
             return true;
@@ -307,12 +331,21 @@ async function handleRouteImage(sock, msg, groupName, isTest) {
             return true;
         }
 
-        if (typeof parsed.confidence === 'number' && parsed.confidence < ROUTES_CONFIG.minConfidence) {
+        if (!isTest && typeof parsed.confidence === 'number' && parsed.confidence < ROUTES_CONFIG.minConfidence) {
             console.log(`[DEBUG-ROUTE] Confiança baixa (${parsed.confidence}). Grupo: ${groupName}`);
             return true;
         }
 
-        const candidates = buildCandidates(parsed.routes).filter(c => {
+        if (isTest && typeof parsed.confidence === 'number' && parsed.confidence < ROUTES_CONFIG.minConfidence) {
+            console.log(`[DEBUG-ROUTE] Teste: aceitando confiança baixa (${parsed.confidence}). Grupo: ${groupName}`);
+        }
+
+        // O backend entrega a lista já filtrada e priorizada. O fallback para
+        // `routes` mantém compatibilidade durante uma atualização gradual.
+        const routesForSelection = Array.isArray(parsed.eligible_routes)
+            ? parsed.eligible_routes
+            : parsed.routes;
+        const candidates = buildCandidates(routesForSelection).filter(c => {
             const lastClaim = groupState.recentClaims.get(c.gaiola);
             if (!lastClaim) return true;
             // Ignore if claimed in the last 30 minutes
